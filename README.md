@@ -153,15 +153,18 @@ Before delivering any asset:
 
 ## 🔧 Custom Instructions for Claude Desktop
 
-Add these to Claude Desktop → Settings → Custom Instructions:[See full custom instructions in project files - too long for README]Key highlights:
+Add these to Claude Desktop → Settings → Custom Instructions:
+```
+[See full custom instructions in project files - too long for README]
 
+Key highlights:
 Always use project_knowledge_search before answering
 Reference 18 files organized in 5 tiers
 Follow decision trees for different scenarios
 Apply frameworks sequentially (Metacognition → Systems → MECE → Tactical)
 Score every asset before delivery
 Maintain specificity (no vague language)
-
+```
 
 **Full instructions**: See conversation history or `/docs/` folder
 
