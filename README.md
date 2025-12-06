@@ -2,7 +2,7 @@
 
 **Automated job application system using AI to generate hyper-personalized assets at scale**
 
-Transform 2 hours of manual work per application → 15 minutes with consistent quality.
+Transform hours of manual work per application → 15 minutes with consistent quality.
 
 ---
 
@@ -20,7 +20,7 @@ Job Hunter OS is a systematized job search automation system designed to help la
 
 ---
 
-## 📁 Repository StructureJob-Hunter/
+## 📁 Repository Structure Job-Hunter/
 ├── CLAUDE.md                          # System specification (for Claude Code)
 ├── README.md                          # This file
 │
@@ -84,7 +84,8 @@ Read in this order:
 ### Step 3: Start Building
 
 Use Claude Code to build the system:
-```bashNavigate to project
+
+Navigate to project
 cd ~/Documents/Jobs/Job-Hunter/Start Claude Code
 claudeUse starter prompts from Implementation Roadmap
 
