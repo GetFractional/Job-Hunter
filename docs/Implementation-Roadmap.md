@@ -158,11 +158,11 @@
 #### Task 2.3: Build Settings UI (popup.html/js)
 - [ ] Create form with inputs:
   - [ ] Airtable Base ID
-  - [ ] Airtable API Token
+  - [ ] Airtable PAT Token
 - [ ] Add "Save" button
 - [ ] Add "Test Connection" button
 - [ ] Implement save to Chrome local storage
-- [ ] Implement test connection (call Airtable API)
+- [ ] Implement test connection (call Airtable PAT)
 - [ ] Show success/error messages
 
 **Validation Criteria:**

@@ -16,7 +16,6 @@
 - ✅ Native n8n integration (simpler than raw SQL)
 - ✅ Automations built-in (trigger n8n webhooks)
 - ✅ Free tier sufficient for MVP (1,200 records/base)
-- ✅ $2,000 credits from HubSpot for Startups program
 
 **Trade-offs accepted:**
 - ⚠️ 1,200 record limit on free tier (sufficient for 1,000+ jobs)
@@ -119,6 +118,11 @@
 - Interview Prep
 - Outreach Message
 - Research Brief (PDF)
+- Image
+- Document
+- Video
+- Presentation
+- Spreadsheet
 
 **Views:**
 1. **All Assets** (Grid): All assets, sorted by Generated At
@@ -139,8 +143,7 @@
 | `Event ID` | Auto Number | Primary key | Yes |
 | `Job` | Link to Record | Links to Jobs Pipeline | Yes |
 | `Event Type` | Single Select | Type of event | Yes |
-| `Event Date` | Date | When this happened | Yes |
-| `Event Time` | Time | Specific time (if relevant) | No |
+| `Event Date` | Date | Specific date and time | No |
 | `Details` | Long Text | Additional context | No |
 | `Attachments` | Attachments | Screenshots, emails, etc. | No |
 | `Next Action` | Single Line Text | What to do next | No |
@@ -186,6 +189,9 @@
 | `Avg Quality Score` | Number | Average asset quality score | Computed |
 | `Top Performing Asset` | Single Select | Which asset type correlated with responses | No |
 | `Lessons Learned` | Long Text | What worked, what didn't | No |
+| `% Application to Response Rate` | Percent | Applications that get responses | No |
+| `% Response to Interview Rate` | Percent | Responses that get interviews | No |
+| `% Interview to Offer RRate` | Percent | Interviews that get offers | No |
 
 **Views:**
 1. **All Months** (Grid): Sorted by Year, then Month
@@ -269,14 +275,14 @@ console.log("n8n triggered:", response.status);
 ## 📥 DATA INPUT SOURCES
 
 ### 1. Chrome Extension → Jobs Pipeline
-- **Method**: POST to Airtable API
+- **Method**: POST to Airtable PAT
 - **Endpoint**: `https://api.airtable.com/v0/{BASE_ID}/Jobs%20Pipeline`
 - **Auth**: Personal Access Token (stored in extension)
 - **Frequency**: Manual (user clicks "Send to Job Hunter")
 - **Fields Populated**: Job Title, Company Name, Job URL, Location, Salary, Source, Job Description, Status="Captured"
 
 ### 2. n8n Workflows → Research Briefs & Generated Assets
-- **Method**: POST to Airtable API
+- **Method**: POST to PAT
 - **Auth**: Airtable credential stored in n8n (`n8n credential ID: TBD`)
 - **Frequency**: Automated (triggered by Airtable automation)
 - **Fields Populated**: All research/asset fields

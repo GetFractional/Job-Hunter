@@ -279,17 +279,17 @@ Each asset prompt includes:
 ```
 /Job Hunter Assets/
   ├── TechCorp/
-  │   ├── 2024-12-06/
+  │   ├── 2024-12-06_[Job-Title]/
   │   │   ├── 01-Research-Brief.md
   │   │   ├── 02-90-Day-Plan.md
   │   │   ├── 03-Resume-Tailored.md
   │   │   ├── 04-Cover-Letter.md
   │   │   ├── 05-Interview-Prep.md
   │   │   └── 06-Outreach-Message.md
-  │   └── 2024-12-15/
+  │   └── 2024-12-15_Job-Title/
   │       └── [assets for second TechCorp role]
   └── SaasCo/
-      └── 2024-12-07/
+      └── 2024-12-07_[Job-Title]/
           └── [assets]
 ```
 
