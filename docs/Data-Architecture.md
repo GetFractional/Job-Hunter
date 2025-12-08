@@ -37,9 +37,11 @@
 | `Job ID` | Auto Number | Primary key | Yes | 1, 2, 3... |
 | `Job Title` | Single Line Text | Role title | Yes | "VP of Growth" |
 | `Company Name` | Single Line Text | Company name | Yes | "TechCorp" |
-| `Company LinkedIn` | URL | Company LinkedIn page | No | https://linkedin.com/company/techcorp |
+| `Company Page` | URL | Company page on the job platform | No | https://linkedin.com/company/techcorp |
 | `Job URL` | URL | Original job posting URL | Yes | https://linkedin.com/jobs/... |
-| `Location` | Single Line Text | Job location | No | "Remote (US)" |
+| `Location` | Single Line Text | Job location | No | "San Francisco, CA" |
+| `Workplace Type` | Single Line Text | Remote, hybrid, on-site work | No | "Remote" |
+| `Employment Type` | Single Line Text | Type of employment being offered | No | "Full-time" |
 | `Salary Min` | Number | Minimum salary | No | 180000 |
 | `Salary Max` | Number | Maximum salary | No | 220000 |
 | `Equity Mentioned` | Checkbox | Does posting mention equity? | No | ✓ |
@@ -48,6 +50,7 @@
 | `Status` | Single Select | Current stage | Yes | Captured, Researched, Applied, Interview, Offer, Rejected |
 | `Research Brief` | Link to Record | Link to Research Briefs table | No | → Research record |
 | `Generated Assets` | Link to Records | Links to Generated Assets table | No | → Multiple asset records |
+| `Application Tracking` | Link to Records | Links to Application Tracking table | No | → Multiple asset records |
 | `Applied Date` | Date | When application was submitted | No | 2024-12-10 |
 | `Interview Date` | Date | When interview is scheduled | No | 2024-12-15 |
 | `Outcome` | Single Select | Final result | No | Offer, No Response, Rejected |
@@ -110,6 +113,9 @@
 | `Reviewed` | Checkbox | Has Matt reviewed this? | No |
 | `Needs Revision` | Checkbox | Flagged for improvement | No |
 | `Revision Notes` | Long Text | What needs to be changed | No |
+| `Version Number` | Long Text | Version of the asset generation prompt being used | No |
+| `Prompt Used` | Long Text | Type of asset generation prompt being used | No |
+
 
 **Asset Type Options:**
 - 90-Day Plan
