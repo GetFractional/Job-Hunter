@@ -200,6 +200,15 @@ function extractLinkedInJobData() {
 
     // Fallback: parse salary from description when top-card insights are empty
     if (data.salaryMin === null && data.salaryMax === null && data.descriptionText) {
+      const parsedFromDesc = findSalaryInText(data.descriptionText);
+      if (parsedFromDesc.min !== null && parsedFromDesc.max !== null) {
+        data.salaryMin = parsedFromDesc.min;
+        data.salaryMax = parsedFromDesc.max;
+      }
+    }
+
+    // Fallback: parse salary from description when top-card insights are empty
+    if (data.salaryMin === null && data.salaryMax === null && data.descriptionText) {
       const descSalary = findSalaryInText(data.descriptionText);
       if (descSalary.min !== null && descSalary.max !== null) {
         data.salaryMin = descSalary.min;
@@ -499,8 +508,10 @@ function parseSalaryRange(text) {
     .replace(/[()]/g, '')
     .trim();
 
-  // Match patterns like "$150,000 - $200,000" or "$150K - $200K" or "$280.5K/yr - $330K/yr"
-  const rangeMatch = cleaned.match(/\$?([\d.,]+)\s*(K|k|M|m)?\s*[-–to]+\s*\$?([\d.,]+)\s*(K|k|M|m)?/);
+  // Match patterns like "$150,000 - $200,000", "$150K–$200K", or "$150K to $200K"
+  const rangeMatch = cleaned.match(
+    /\$?\s*([\d.,]+)\s*(K|k|M|m)?\s*(?:-|–|to)\s*\$?\s*([\d.,]+)\s*(K|k|M|m)?/i
+  );
   if (rangeMatch) {
     let min = parseFloat(rangeMatch[1].replace(/,/g, ''));
     let max = parseFloat(rangeMatch[3].replace(/,/g, ''));
@@ -518,8 +529,8 @@ function parseSalaryRange(text) {
     return result;
   }
 
-  // Match single salary like "$180,000" or "$180K"
-  const singleMatch = cleaned.match(/\$?([\d.,]+)\s*(K|k|M|m)?/);
+  // Match single salary like "$180,000" or "$180K" (guarded by currency and reasonable length)
+  const singleMatch = cleaned.match(/\$\s*([\d.,]{3,})\s*(K|k|M|m)?/);
   if (singleMatch) {
     let salary = parseFloat(singleMatch[1].replace(/,/g, ''));
     const suffix = singleMatch[2]?.toLowerCase();
