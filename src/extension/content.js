@@ -292,9 +292,9 @@ function cleanCompanyUrl(url) {
     urlObj.search = '';
     urlObj.hash = '';
 
-    // Strip trailing /life segment
+    // Strip trailing /life segment (LinkedIn sometimes links to the "Life" subpage)
     let pathname = urlObj.pathname.replace(/\/+$/, '');
-    pathname = pathname.replace(/\/life$/, '');
+    pathname = pathname.replace(/\/life\/?$/i, '');
 
     // Ensure trailing slash for canonical company URL
     urlObj.pathname = pathname.endsWith('/') ? pathname : `${pathname}/`;
