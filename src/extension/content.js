@@ -127,7 +127,7 @@ function extractLinkedInJobData() {
     ];
     const companyLinkEl = document.querySelector(companyLinkSelectors.join(','));
     if (companyLinkEl?.href) {
-      data.companyLinkedInUrl = companyLinkEl.href;
+      data.companyLinkedInUrl = cleanCompanyUrl(companyLinkEl.href);
     }
     if (!data.companyName) {
       // Wider fallbacks: any company link in the top card area
@@ -138,7 +138,7 @@ function extractLinkedInJobData() {
       if (companyLink?.textContent?.trim()) {
         data.companyName = companyLink.textContent.trim();
         if (!data.companyLinkedInUrl && companyLink.href) {
-          data.companyLinkedInUrl = companyLink.href;
+          data.companyLinkedInUrl = cleanCompanyUrl(companyLink.href);
         }
       }
     }
@@ -151,14 +151,14 @@ function extractLinkedInJobData() {
         if (text) {
           data.companyName = text;
           if (!data.companyLinkedInUrl && link.href) {
-            data.companyLinkedInUrl = link.href;
+            data.companyLinkedInUrl = cleanCompanyUrl(link.href);
           }
           break;
         }
         if (!text && aria) {
           data.companyName = aria;
           if (!data.companyLinkedInUrl && link.href) {
-            data.companyLinkedInUrl = link.href;
+            data.companyLinkedInUrl = cleanCompanyUrl(link.href);
           }
           break;
         }
@@ -275,6 +275,31 @@ function cleanLinkedInUrl(url) {
       return `https://www.linkedin.com/jobs/view/${currentJobId}/`;
     }
     return url;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Normalize LinkedIn company URLs by stripping trailing "/life" or tracking params
+ * @param {string} url - Full company URL
+ * @returns {string} Cleaned URL
+ */
+function cleanCompanyUrl(url) {
+  try {
+    const urlObj = new URL(url);
+    // Remove query/hash
+    urlObj.search = '';
+    urlObj.hash = '';
+
+    // Strip trailing /life segment
+    let pathname = urlObj.pathname.replace(/\/+$/, '');
+    pathname = pathname.replace(/\/life$/, '');
+
+    // Ensure trailing slash for canonical company URL
+    urlObj.pathname = pathname.endsWith('/') ? pathname : `${pathname}/`;
+
+    return urlObj.toString();
   } catch {
     return url;
   }
