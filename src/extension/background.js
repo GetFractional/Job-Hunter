@@ -84,6 +84,15 @@ async function handleCreateRecord(jobData) {
   if (jobData.salaryMax !== null && jobData.salaryMax !== undefined) {
     airtablePayload.fields['Salary Max'] = jobData.salaryMax;
   }
+  if (jobData.workplaceType) {
+    airtablePayload.fields['Workplace Type'] = jobData.workplaceType;
+  }
+  if (jobData.employmentType) {
+    airtablePayload.fields['Employment Type'] = jobData.employmentType;
+  }
+  if (jobData.equityMentioned !== undefined) {
+    airtablePayload.fields['Equity Mentioned'] = !!jobData.equityMentioned;
+  }
 
   // Make the API request
   try {

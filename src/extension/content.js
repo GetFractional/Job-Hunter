@@ -87,6 +87,9 @@ function extractLinkedInJobData() {
     location: '',
     salaryMin: null,
     salaryMax: null,
+    workplaceType: '',
+    employmentType: '',
+    equityMentioned: false,
     descriptionText: '',
     jobUrl: window.location.href,
     source: 'LinkedIn'
@@ -110,7 +113,9 @@ function extractLinkedInJobData() {
       '.jobs-unified-top-card__company-name a',
       '.jobs-unified-top-card__company-name',
       '.topcard__org-name-link',
-      '.jobs-details-top-card__company-url'
+      '.jobs-details-top-card__company-url',
+      '.job-details-jobs-unified-top-card__primary-description-container a',
+      '.jobs-unified-top-card__subtitle-1 .app-aware-link'
     ];
     data.companyName = getTextFromSelectors(companySelectors) || '';
 
@@ -120,7 +125,8 @@ function extractLinkedInJobData() {
       '.jobs-unified-top-card__bullet',
       '.jobs-unified-top-card__workplace-type',
       '.topcard__flavor--bullet',
-      '.jobs-details-top-card__bullet'
+      '.jobs-details-top-card__bullet',
+      '.jobs-unified-top-card__primary-description'
     ];
     data.location = getTextFromSelectors(locationSelectors) || '';
 
@@ -128,7 +134,8 @@ function extractLinkedInJobData() {
     const salarySelectors = [
       '.job-details-jobs-unified-top-card__job-insight span',
       '.compensation__salary',
-      '.salary-main-rail__data-item'
+      '.salary-main-rail__data-item',
+      '.job-details-fit-level-preferences button'
     ];
     const salaryText = getTextFromSelectors(salarySelectors) || '';
     const salaryRange = parseSalaryRange(salaryText);
@@ -144,6 +151,52 @@ function extractLinkedInJobData() {
       '#job-details'
     ];
     data.descriptionText = getTextFromSelectors(descriptionSelectors, true) || '';
+
+    // Extract workplace type / job type / salary hints from preference buttons
+    const preferenceButtons = Array.from(document.querySelectorAll('.job-details-fit-level-preferences button'));
+    for (const btn of preferenceButtons) {
+      const text = btn.innerText?.trim() || '';
+      if (!text) continue;
+
+      // Workplace type (Remote / Hybrid / On-site)
+      if (/remote/i.test(text)) {
+        data.workplaceType = 'Remote';
+      } else if (/hybrid/i.test(text)) {
+        data.workplaceType = 'Hybrid';
+      } else if (/on[-\s]?site|onsite/i.test(text)) {
+        data.workplaceType = 'On-site';
+      }
+
+      // Employment type (Full-time / Part-time / Contract)
+      if (/full[-\s]?time/i.test(text)) {
+        data.employmentType = 'Full-time';
+      } else if (/part[-\s]?time/i.test(text)) {
+        data.employmentType = 'Part-time';
+      } else if (/contract/i.test(text)) {
+        data.employmentType = 'Contract';
+      } else if (/intern/i.test(text)) {
+        data.employmentType = 'Internship';
+      }
+
+      // Salary fallback: if main selectors missed, try parsing here
+      if (data.salaryMin === null || data.salaryMax === null) {
+        const prefSalary = parseSalaryRange(text);
+        if (prefSalary.min !== null && prefSalary.max !== null) {
+          data.salaryMin = prefSalary.min;
+          data.salaryMax = prefSalary.max;
+        }
+      }
+    }
+
+    // If no location but we know workplace type, use that (e.g., Remote)
+    if (!data.location && data.workplaceType) {
+      data.location = data.workplaceType;
+    }
+
+    // Flag if equity is mentioned in the description
+    if (/equity|stock options?|rsus?/i.test(data.descriptionText || '')) {
+      data.equityMentioned = true;
+    }
 
     // Clean up the job URL - remove unnecessary parameters
     data.jobUrl = cleanLinkedInUrl(window.location.href);
@@ -281,13 +334,14 @@ function extractIndeedJobData() {
  */
 function getTextFromSelectors(selectors, preserveWhitespace = false) {
   for (const selector of selectors) {
-    const element = document.querySelector(selector);
-    if (element) {
-      if (preserveWhitespace) {
-        // For descriptions, preserve some structure
-        return element.innerText.trim();
+    const elements = document.querySelectorAll(selector);
+    for (const element of elements) {
+      const text = preserveWhitespace
+        ? element.innerText?.trim()
+        : element.textContent?.trim();
+      if (text) {
+        return text;
       }
-      return element.textContent?.trim() || null;
     }
   }
   return null;
@@ -303,17 +357,24 @@ function parseSalaryRange(text) {
 
   if (!text) return result;
 
-  // Match patterns like "$150,000 - $200,000" or "$150K - $200K"
-  const rangeMatch = text.match(/\$?([\d,]+)(?:K|k)?\s*[-–to]+\s*\$?([\d,]+)(?:K|k)?/);
+  const cleaned = text
+    .replace(/\s+/g, ' ')
+    .replace(/\/?yr\.?|per year|a year/gi, '')
+    .trim();
+
+  // Match patterns like "$150,000 - $200,000" or "$150K - $200K" or "$280.5K/yr - $330K/yr"
+  const rangeMatch = cleaned.match(/\$?([\d.,]+)\s*(K|k|M|m)?\s*[-–to]+\s*\$?([\d.,]+)\s*(K|k|M|m)?/);
   if (rangeMatch) {
     let min = parseFloat(rangeMatch[1].replace(/,/g, ''));
-    let max = parseFloat(rangeMatch[2].replace(/,/g, ''));
+    let max = parseFloat(rangeMatch[3].replace(/,/g, ''));
 
-    // Handle K suffix (150K = 150000)
-    if (text.toLowerCase().includes('k') && min < 1000) {
-      min *= 1000;
-      max *= 1000;
-    }
+    const minSuffix = rangeMatch[2]?.toLowerCase();
+    const maxSuffix = rangeMatch[4]?.toLowerCase();
+
+    if (minSuffix === 'k') min *= 1000;
+    if (maxSuffix === 'k') max *= 1000;
+    if (minSuffix === 'm') min *= 1000000;
+    if (maxSuffix === 'm') max *= 1000000;
 
     result.min = min;
     result.max = max;
@@ -321,12 +382,12 @@ function parseSalaryRange(text) {
   }
 
   // Match single salary like "$180,000" or "$180K"
-  const singleMatch = text.match(/\$?([\d,]+)(?:K|k)?/);
+  const singleMatch = cleaned.match(/\$?([\d.,]+)\s*(K|k|M|m)?/);
   if (singleMatch) {
     let salary = parseFloat(singleMatch[1].replace(/,/g, ''));
-    if (text.toLowerCase().includes('k') && salary < 1000) {
-      salary *= 1000;
-    }
+    const suffix = singleMatch[2]?.toLowerCase();
+    if (suffix === 'k') salary *= 1000;
+    if (suffix === 'm') salary *= 1000000;
     result.min = salary;
     result.max = salary;
   }
