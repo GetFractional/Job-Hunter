@@ -93,8 +93,8 @@ async function handleCreateRecord(jobData) {
   if (jobData.equityMentioned !== undefined) {
     airtablePayload.fields['Equity Mentioned'] = !!jobData.equityMentioned;
   }
-  if (jobData.companyLinkedInUrl) {
-    airtablePayload.fields['Company LinkedIn'] = jobData.companyLinkedInUrl;
+  if (jobData.companyPageUrl) {
+    airtablePayload.fields['Company Page'] = jobData.companyPageUrl;
   }
 
   // Make the API request

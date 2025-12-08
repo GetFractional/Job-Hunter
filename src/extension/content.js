@@ -84,7 +84,7 @@ function extractLinkedInJobData() {
   const data = {
     jobTitle: '',
     companyName: '',
-    companyLinkedInUrl: '',
+    companyPageUrl: '',
     location: '',
     salaryMin: null,
     salaryMax: null,
@@ -127,7 +127,7 @@ function extractLinkedInJobData() {
     ];
     const companyLinkEl = document.querySelector(companyLinkSelectors.join(','));
     if (companyLinkEl?.href) {
-      data.companyLinkedInUrl = cleanCompanyUrl(companyLinkEl.href);
+      data.companyPageUrl = cleanCompanyUrl(companyLinkEl.href);
     }
     if (!data.companyName) {
       // Wider fallbacks: any company link in the top card area
@@ -137,8 +137,8 @@ function extractLinkedInJobData() {
       );
       if (companyLink?.textContent?.trim()) {
         data.companyName = companyLink.textContent.trim();
-        if (!data.companyLinkedInUrl && companyLink.href) {
-          data.companyLinkedInUrl = cleanCompanyUrl(companyLink.href);
+        if (!data.companyPageUrl && companyLink.href) {
+          data.companyPageUrl = cleanCompanyUrl(companyLink.href);
         }
       }
     }
@@ -150,15 +150,15 @@ function extractLinkedInJobData() {
         const aria = link.getAttribute('aria-label')?.replace(/ logo$/i, '').trim();
         if (text) {
           data.companyName = text;
-          if (!data.companyLinkedInUrl && link.href) {
-            data.companyLinkedInUrl = cleanCompanyUrl(link.href);
+          if (!data.companyPageUrl && link.href) {
+            data.companyPageUrl = cleanCompanyUrl(link.href);
           }
           break;
         }
         if (!text && aria) {
           data.companyName = aria;
-          if (!data.companyLinkedInUrl && link.href) {
-            data.companyLinkedInUrl = cleanCompanyUrl(link.href);
+          if (!data.companyPageUrl && link.href) {
+            data.companyPageUrl = cleanCompanyUrl(link.href);
           }
           break;
         }
@@ -382,10 +382,14 @@ function extractIndeedJobData() {
   const data = {
     jobTitle: '',
     companyName: '',
+    companyPageUrl: '',
     location: '',
     salaryMin: null,
     salaryMax: null,
     descriptionText: '',
+    workplaceType: '',
+    employmentType: '',
+    equityMentioned: false,
     jobUrl: window.location.href,
     source: 'Indeed'
   };
@@ -410,6 +414,10 @@ function extractIndeedJobData() {
       '.icl-u-lg-mr--sm a'
     ];
     data.companyName = getTextFromSelectors(companySelectors) || '';
+    const companyLinkEl = document.querySelector('div[data-testid="inlineHeader-companyName"] a, div[data-testid="company-name"] a, [data-company-name="true"] a');
+    if (companyLinkEl?.href) {
+      data.companyPageUrl = companyLinkEl.href;
+    }
 
     // Location: data-testid location first, then legacy subtitle items
     const locationSelectors = [
@@ -419,13 +427,25 @@ function extractIndeedJobData() {
       '.jobsearch-JobInfoHeader-subtitle > div:nth-child(2)',
       '.icl-u-xs-mt--xs'
     ];
-    data.location = getTextFromSelectors(locationSelectors) || '';
+    const rawLocation = getTextFromSelectors(locationSelectors) || '';
+    const locationParts = rawLocation.split('•').map(p => p.trim()).filter(Boolean);
+    if (locationParts.length) {
+      data.location = locationParts[0];
+      const trailing = locationParts.slice(1).join(' ');
+      if (/remote/i.test(trailing)) {
+        data.workplaceType = 'Remote';
+      }
+    }
+    if (/remote/i.test(rawLocation) && !data.workplaceType) {
+      data.workplaceType = 'Remote';
+    }
 
     // Salary: data-testid salary first, then legacy metadata items
     const salarySelectors = [
       'div[data-testid="jobDetailSalary"]',
       '[data-testid="attribute_snippet_testid"]',
-      '.jobsearch-JobMetadataHeader-item'
+      '.jobsearch-JobMetadataHeader-item',
+      '#salaryInfoAndJobType span'
     ];
     const salaryText = getTextFromSelectors(salarySelectors) || '';
     const salaryRange = parseSalaryRange(salaryText);
@@ -438,6 +458,35 @@ function extractIndeedJobData() {
       '.jobsearch-jobDescriptionText'
     ];
     data.descriptionText = getTextFromSelectors(descriptionSelectors, true) || '';
+
+    // Employment type: often near salary info
+    const employmentSelectors = [
+      '#salaryInfoAndJobType',
+      'div[data-testid="jobsearch-OtherJobDetailsContainer"]',
+      'div[data-testid="jobsearch-JobInfoHeader-title"] + div'
+    ];
+    const employmentText = getTextFromSelectors(employmentSelectors) || '';
+    if (/full[-\s]?time/i.test(employmentText)) data.employmentType = 'Full-time';
+    else if (/part[-\s]?time/i.test(employmentText)) data.employmentType = 'Part-time';
+    else if (/contract/i.test(employmentText)) data.employmentType = 'Contract';
+    else if (/intern/i.test(employmentText)) data.employmentType = 'Internship';
+
+    // Workspace type from description if not already set
+    if (!data.workplaceType) {
+      if (/remote/i.test(employmentText)) data.workplaceType = 'Remote';
+      else if (/hybrid/i.test(employmentText)) data.workplaceType = 'Hybrid';
+      else if (/on[-\s]?site|onsite/i.test(employmentText)) data.workplaceType = 'On-site';
+    }
+
+    // Equity flag: avoid EEO/DEI boilerplate false positives
+    if (data.descriptionText) {
+      const desc = data.descriptionText.toLowerCase();
+      const mentionsEquity = /equity|stock options?|rsus?/i.test(desc);
+      const isDeiBoilerplate = /diversity[^.]{0,80}equity|equal opportunity employer/i.test(desc);
+      if (mentionsEquity && !isDeiBoilerplate) {
+        data.equityMentioned = true;
+      }
+    }
 
   } catch (error) {
     console.error('[Job Hunter] Error extracting Indeed data:', error);
