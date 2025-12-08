@@ -746,6 +746,37 @@ function removeOverlay() {
 }
 
 /**
+ * Check if the background service worker is alive and responsive
+ * @returns {Promise<boolean>}
+ */
+async function checkServiceWorkerAlive() {
+  try {
+    const response = await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Service worker ping timeout'));
+      }, 2000);
+
+      chrome.runtime.sendMessage(
+        { action: 'jobHunter.ping' },
+        resp => {
+          clearTimeout(timeout);
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+            return;
+          }
+          resolve(resp);
+        }
+      );
+    });
+
+    return response && response.alive === true;
+  } catch (error) {
+    console.error('[Job Hunter] Service worker ping failed:', error);
+    return false;
+  }
+}
+
+/**
  * Handle click on the capture button
  * @param {string} source - 'LinkedIn' or 'Indeed'
  * @param {HTMLButtonElement} button - The button element
@@ -760,6 +791,16 @@ async function handleCaptureClick(source, button) {
   button.querySelector('span').textContent = 'Capturing...';
 
   try {
+    // First, check if the background service worker is alive
+    console.log('[Job Hunter] Checking service worker status...');
+    const isAlive = await checkServiceWorkerAlive();
+
+    if (!isAlive) {
+      throw new Error('Extension service worker is not responding. Try reloading the extension.');
+    }
+
+    console.log('[Job Hunter] Service worker is alive, proceeding...');
+
     // Extract job data based on source
     const jobData = source === 'LinkedIn'
       ? extractLinkedInJobData()
