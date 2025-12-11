@@ -107,8 +107,9 @@
 | `Job` | Link to Record | Links to Jobs Pipeline | Yes |
 | `Asset Type` | Single Select | Type of asset | Yes |
 | `Google Drive Link` | URL | Link to file in Drive | Yes |
-| `Content Preview` | Long Text | First 500 chars of content | No |
+| `Content (Full)` | Long Text | Display the final content for the asset | No |
 | `Quality Score` | Number | Score from asset rubric (0-50) | No |
+| `Score Breakdown` | Long Text | Breakdown of the quality score | No |
 | `Generated At` | Created Time | When asset was created | Yes |
 | `Reviewed` | Checkbox | Has Matt reviewed this? | No |
 | `Needs Revision` | Checkbox | Flagged for improvement | No |

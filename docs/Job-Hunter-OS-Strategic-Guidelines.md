@@ -248,7 +248,7 @@ Below are ALL relevant thinking models, organized by use case and prioritized fo
 - **Horizon 1:** Core growth role (RevOps, Demand Gen) — defend and optimize
 - **Horizon 2:** Adjacent growth (Product, Operations) — explore
 - **Horizon 3:** Future possibilities (CEO, Board seat) — plant seeds
-- **Application:** In your 90-day plan, show understanding of all three horizons
+- **Application:** In your annual plan, show understanding of all three horizons
 
 ---
 
@@ -264,7 +264,7 @@ Below are ALL relevant thinking models, organized by use case and prioritized fo
 - **Blue Hat:** Process control (are we evaluating this correctly?)
 
 #### **3.16 Balanced Scorecard**
-- **When to use:** Tracking progress in a new role (useful for your first 90 days)
+- **When to use:** Tracking progress in a new role
 - **Four perspectives:**
   1. Financial (ARR growth, pipeline)
   2. Customer (NPS, retention)

@@ -100,7 +100,7 @@ Dear [Name/Team],
 I've solved exactly this at [Company]. [Describe similar situation]. [Specific tactic used]: [detailed approach]. [Quantified result with timeframe]. [Why it worked / lesson learned].
 
 **PARAGRAPH 4: SOLUTION (Preview approach)**
-In your first 90 days, I'd [specific initiative from plan]. [Quick win expected in weeks 3-4]. [Month 2-3 focus]. [Expected outcome with metric].
+In my first 90 days, I'd [specific initiative from plan]. [Quick win expected in weeks 3-4]. [Month 2-3 focus]. [Expected outcome with metric].
 
 **PARAGRAPH 5: CTA (Clear next step)**
 I'd love to walk through this diagnosis with you in more detail. Are you available for [20/30] minutes next week?

@@ -67,6 +67,22 @@ Generate comprehensive company intelligence to inform all downstream assets (90-
 - Diagnose: What growth problem are they trying to solve by hiring this role?
 - Formula: Current State → Problem Hypothesis → Evidence → Implication for Role
 
+### Rule 4: Calculate unit economics (CAC/LTV - mandatory attempt)
+- Check it the company discloses CAC or LTV explicitly in earnings, investor decks, or blog posts, If yes, quote the numbers with source and year.
+- If not disclosed, estimate a rnage instead of a single point using:
+  - Revenue, orders, and active customers (to get AOV and rough LTV).
+  - Any disclosed or typical marketing spend % of revenue for that vertical.
+  - Reputable CAC benchmarks for the industry (e.g., ecommerce overall, health/wellness, supplements).
+- Clearly label outputs as either:
+  - reported_cac: “Company-reported CAC: $X (Year, Source)”
+  - estimated_cac_range: “Estimated CAC: $A–$B based on assumptions (list them).”
+- In market_summary and/or key_insights, and when not disclosed by the company, always use patterns like:
+  - “Estimated CAC: $30–80 per customer globally (based on XYZ assumptions; not company-reported).”
+  - “US CAC likely: $60–150+ initially given competitive intensity and low brand awareness.”
+
+### Rule 5: Don't make up information or data
+- You may not invent or interpolate percentage improvements that are not explicitly in the profile. If a % lift or reduction is not stated, do not fabricate it. If you model a hypothetical scenario (e.g., CAC reduction), label it as ‘estimated’ and explain the assumptions.
+
 ---
 
 ## 📋 RESEARCH BRIEF TEMPLATE
