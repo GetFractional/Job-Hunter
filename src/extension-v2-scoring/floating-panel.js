@@ -89,9 +89,15 @@ function updatePanelPosition() {
  * @param {Object} jobData - Job data
  */
 function updatePanelScore(scoreResult, jobData) {
-  const panel = document.getElementById('jh-floating-panel');
+  let panel = document.getElementById('jh-floating-panel');
   if (!panel) {
     createFloatingPanel();
+    panel = document.getElementById('jh-floating-panel');
+  }
+
+  if (!panel) {
+    console.error('[Job Hunter] Failed to create floating panel');
+    return;
   }
 
   panelState.currentScore = scoreResult;
