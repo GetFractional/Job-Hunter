@@ -34,6 +34,7 @@
       "js": [
         "scoring-engine.js",
         "results-dashboard.js",
+        "floating-panel.js",
         "content.js"
       ],
       "run_at": "document_idle"

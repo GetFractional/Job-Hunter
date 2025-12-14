@@ -73,15 +73,26 @@
             <small>Your ideal salary - jobs at or above this score highest</small>
           </div>
 
-          <!-- Equity & Bonus preference -->
+          <!-- Bonus preference -->
           <div class="form-group">
-            <label for="equity-preference">Equity & Bonus Requirement</label>
-            <select id="equity-preference" name="bonus_and_equity_preference">
-              <option value="required">Required - Must have both</option>
+            <label for="bonus-preference">Bonus Requirement</label>
+            <select id="bonus-preference" name="bonus_preference">
+              <option value="required">Required - Must have bonus</option>
               <option value="preferred" selected>Preferred - Nice to have</option>
               <option value="optional">Optional - Not important</option>
             </select>
-            <small>How important is equity and bonus to you?</small>
+            <small>How important is a performance bonus to you?</small>
+          </div>
+
+          <!-- Equity preference -->
+          <div class="form-group">
+            <label for="equity-preference">Equity Requirement</label>
+            <select id="equity-preference" name="equity_preference">
+              <option value="required">Required - Must have equity</option>
+              <option value="preferred">Preferred - Nice to have</option>
+              <option value="optional" selected>Optional - Not important</option>
+            </select>
+            <small>How important is equity/stock options to you?</small>
           </div>
 
           <!-- Workplace type -->

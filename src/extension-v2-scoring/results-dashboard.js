@@ -213,12 +213,29 @@ function renderCriteriaList(containerId, criteria) {
 }
 
 /**
- * Generate star rating HTML (0-5 stars based on 0-50 score)
- * @param {number} score - Score 0-50
+ * Generate star rating HTML based on score percentage
+ * Stars correlate directly with the score: 0-10% = 0-1 star, 10-30% = 1-2 stars, etc.
+ * @param {number} score - Score 0-50 (representing a criterion score)
  * @returns {string} HTML for star rating
  */
 function getStarRating(score) {
-  const filledStars = Math.round(score / 10); // 0-5 stars
+  // Convert 0-50 score to percentage, then to 0-5 stars
+  // Score 0-10 = 0-1 star, 10-20 = 1-2 stars, 20-30 = 2-3 stars, 30-40 = 3-4 stars, 40-50 = 4-5 stars
+  const percentage = (score / 50) * 100;
+  let filledStars;
+
+  if (percentage <= 10) {
+    filledStars = percentage >= 5 ? 1 : 0;
+  } else if (percentage <= 30) {
+    filledStars = percentage >= 20 ? 2 : 1;
+  } else if (percentage <= 50) {
+    filledStars = percentage >= 40 ? 3 : 2;
+  } else if (percentage <= 70) {
+    filledStars = percentage >= 60 ? 4 : 3;
+  } else {
+    filledStars = percentage >= 90 ? 5 : 4;
+  }
+
   const starSVG = `<svg class="jh-star" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>`;
 
   let html = '';

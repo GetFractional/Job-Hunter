@@ -23,11 +23,12 @@ const PROFILE_STORAGE_KEY = 'jh_user_profile';
  * Structure matches the spec in CLAUDE.md
  */
 let profileData = {
-  version: '1.0',
+  version: '1.1',
   preferences: {
     salary_floor: 150000,
     salary_target: 200000,
-    bonus_and_equity_preference: 'preferred',
+    bonus_preference: 'preferred',
+    equity_preference: 'optional',
     remote_requirement: 'remote_first',
     workplace_types_acceptable: ['remote', 'hybrid_4plus_days'],
     workplace_types_unacceptable: ['on_site'],
@@ -94,6 +95,7 @@ function cacheElements() {
     // Tab 1: Preferences
     salaryFloor: document.getElementById('salary-floor'),
     salaryTarget: document.getElementById('salary-target'),
+    bonusPreference: document.getElementById('bonus-preference'),
     equityPreference: document.getElementById('equity-preference'),
     remoteRequirement: document.getElementById('remote-requirement'),
     employmentType: document.getElementById('employment-type'),
@@ -172,6 +174,16 @@ function switchToTab(tabId) {
 // TAG INPUT COMPONENTS
 // ============================================================================
 
+// Maximum tags allowed per category
+const TAG_LIMIT = 30;
+
+// Maps for tracking tag input configurations
+const tagInputConfigs = {
+  skills: { tags: () => skillTags, setTags: (t) => { skillTags = t; }, suggestedAttr: 'data-skill' },
+  industries: { tags: () => industryTags, setTags: (t) => { industryTags = t; }, suggestedAttr: 'data-industry' },
+  roles: { tags: () => roleTags, setTags: (t) => { roleTags = t; }, suggestedAttr: 'data-role' }
+};
+
 /**
  * Set up tag input functionality for skills, industries, and roles
  */
@@ -180,35 +192,121 @@ function setupTagInputs() {
   setupTagInput(
     elements.skillsInput,
     elements.skillsTags,
-    skillTags,
-    (tags) => { skillTags = tags; }
+    () => skillTags,
+    (tags) => { skillTags = tags; syncSuggestedTags('skills'); updateTagCount('skills'); },
+    'skills'
   );
 
   // Industries tag input
   setupTagInput(
     elements.industriesInput,
     elements.industriesTags,
-    industryTags,
-    (tags) => { industryTags = tags; }
+    () => industryTags,
+    (tags) => { industryTags = tags; syncSuggestedTags('industries'); updateTagCount('industries'); },
+    'industries'
   );
 
   // Target roles tag input
   setupTagInput(
     elements.rolesInput,
     elements.rolesTags,
-    roleTags,
-    (tags) => { roleTags = tags; }
+    () => roleTags,
+    (tags) => { roleTags = tags; syncSuggestedTags('roles'); updateTagCount('roles'); },
+    'roles'
   );
+
+  // Initialize tag counts
+  updateTagCount('skills');
+  updateTagCount('industries');
+  updateTagCount('roles');
+}
+
+/**
+ * Update the tag count display for a category
+ * @param {string} category - 'skills', 'industries', or 'roles'
+ */
+function updateTagCount(category) {
+  const config = tagInputConfigs[category];
+  if (!config) return;
+
+  const tags = config.tags();
+  const container = category === 'skills' ? elements.skillsTags :
+                   category === 'industries' ? elements.industriesTags :
+                   elements.rolesTags;
+
+  // Find or create count element
+  const tagInputContainer = container.closest('.tag-input-container');
+  if (!tagInputContainer) return;
+
+  let countEl = tagInputContainer.querySelector('.tag-count');
+  if (!countEl) {
+    countEl = document.createElement('span');
+    countEl.className = 'tag-count';
+    tagInputContainer.appendChild(countEl);
+  }
+
+  countEl.textContent = `${tags.length}/${TAG_LIMIT}`;
+  countEl.classList.toggle('at-limit', tags.length >= TAG_LIMIT);
+}
+
+/**
+ * Show inline validation message near the input
+ * @param {HTMLElement} input - The input element
+ * @param {string} message - Message to show (empty to hide)
+ */
+function showInlineValidation(input, message) {
+  const tagInputContainer = input.closest('.tag-input-container');
+  if (!tagInputContainer) return;
+
+  // Find or create validation element
+  let validationEl = tagInputContainer.querySelector('.inline-validation');
+  if (!validationEl) {
+    validationEl = document.createElement('div');
+    validationEl.className = 'inline-validation';
+    tagInputContainer.after(validationEl);
+  }
+
+  if (message) {
+    validationEl.textContent = message;
+    validationEl.classList.add('show');
+    // Auto-hide after 3 seconds
+    setTimeout(() => {
+      validationEl.classList.remove('show');
+    }, 3000);
+  } else {
+    validationEl.classList.remove('show');
+  }
+}
+
+/**
+ * Normalize a tag value for comparison (case-insensitive, trim)
+ * @param {string} tag - Tag to normalize
+ * @returns {string} Normalized tag
+ */
+function normalizeTagForComparison(tag) {
+  return (tag || '').toLowerCase().trim();
+}
+
+/**
+ * Check if a tag already exists in the array (case-insensitive)
+ * @param {string[]} tags - Existing tags
+ * @param {string} newTag - Tag to check
+ * @returns {boolean} True if exists
+ */
+function tagExists(tags, newTag) {
+  const normalized = normalizeTagForComparison(newTag);
+  return tags.some(t => normalizeTagForComparison(t) === normalized);
 }
 
 /**
  * Set up a single tag input component
  * @param {HTMLInputElement} input - The text input element
  * @param {HTMLElement} container - The container for rendered tags
- * @param {string[]} tags - Current array of tags
+ * @param {Function} getTags - Function to get current tags array
  * @param {Function} updateTags - Callback to update the tags array
+ * @param {string} category - Category name for syncing
  */
-function setupTagInput(input, container, tags, updateTags) {
+function setupTagInput(input, container, getTags, updateTags, category) {
   if (!input || !container) return;
 
   // Handle Enter key to add tag
@@ -216,19 +314,32 @@ function setupTagInput(input, container, tags, updateTags) {
     if (e.key === 'Enter') {
       e.preventDefault();
       const value = input.value.trim();
-      if (value && !tags.includes(value)) {
+      const tags = getTags();
+
+      // Check limit
+      if (tags.length >= TAG_LIMIT) {
+        showInlineValidation(input, `Maximum ${TAG_LIMIT} items reached. Remove some to add more.`);
+        return;
+      }
+
+      // Check for duplicates (case-insensitive)
+      if (value && !tagExists(tags, value)) {
         const newTags = [...tags, value];
         updateTags(newTags);
-        renderTags(container, newTags, updateTags);
+        renderTags(container, newTags, updateTags, category);
         input.value = '';
+        showInlineValidation(input, ''); // Clear any validation message
+      } else if (value && tagExists(tags, value)) {
+        showInlineValidation(input, 'This item already exists.');
       }
     }
 
     // Handle Backspace to remove last tag
-    if (e.key === 'Backspace' && input.value === '' && tags.length > 0) {
+    if (e.key === 'Backspace' && input.value === '' && getTags().length > 0) {
+      const tags = getTags();
       const newTags = tags.slice(0, -1);
       updateTags(newTags);
-      renderTags(container, newTags, updateTags);
+      renderTags(container, newTags, updateTags, category);
     }
   });
 
@@ -237,14 +348,29 @@ function setupTagInput(input, container, tags, updateTags) {
     const value = input.value;
     if (value.includes(',')) {
       const parts = value.split(',').map(p => p.trim()).filter(Boolean);
+      const tags = getTags();
       const newTags = [...tags];
+      let addedCount = 0;
+
       parts.forEach(part => {
-        if (part && !newTags.includes(part)) {
+        if (newTags.length >= TAG_LIMIT) {
+          return; // Skip if at limit
+        }
+        if (part && !tagExists(newTags, part)) {
           newTags.push(part);
+          addedCount++;
         }
       });
-      updateTags(newTags);
-      renderTags(container, newTags, updateTags);
+
+      if (newTags.length > tags.length) {
+        updateTags(newTags);
+        renderTags(container, newTags, updateTags, category);
+      }
+
+      if (newTags.length >= TAG_LIMIT) {
+        showInlineValidation(input, `Maximum ${TAG_LIMIT} items reached.`);
+      }
+
       input.value = '';
     }
   });
@@ -255,10 +381,11 @@ function setupTagInput(input, container, tags, updateTags) {
  * @param {HTMLElement} container - The container element
  * @param {string[]} tags - Array of tags to render
  * @param {Function} updateTags - Callback when tags change
+ * @param {string} category - Category for syncing suggested tags
  */
-function renderTags(container, tags, updateTags) {
+function renderTags(container, tags, updateTags, category) {
   container.innerHTML = tags.map((tag, index) => `
-    <span class="tag">
+    <span class="tag" data-tag-value="${escapeHtml(tag)}">
       ${escapeHtml(formatTagDisplay(tag))}
       <button type="button" class="remove-tag" data-index="${index}" title="Remove">&times;</button>
     </span>
@@ -268,11 +395,18 @@ function renderTags(container, tags, updateTags) {
   container.querySelectorAll('.remove-tag').forEach(btn => {
     btn.addEventListener('click', () => {
       const index = parseInt(btn.dataset.index, 10);
-      const newTags = tags.filter((_, i) => i !== index);
+      const currentTags = category === 'skills' ? skillTags :
+                         category === 'industries' ? industryTags : roleTags;
+      const newTags = currentTags.filter((_, i) => i !== index);
       updateTags(newTags);
-      renderTags(container, newTags, updateTags);
+      renderTags(container, newTags, updateTags, category);
     });
   });
+
+  // Sync suggested tags after render
+  if (category) {
+    syncSuggestedTags(category);
+  }
 }
 
 /**
@@ -302,17 +436,61 @@ function escapeHtml(text) {
 // ============================================================================
 
 /**
+ * Sync suggested tag button states based on current tags
+ * Handles both exact matches and manually typed values that match suggestions
+ * @param {string} category - 'skills', 'industries', or 'roles'
+ */
+function syncSuggestedTags(category) {
+  const config = tagInputConfigs[category];
+  if (!config) return;
+
+  const tags = config.tags();
+  const attrName = config.suggestedAttr;
+
+  // Get all suggested buttons for this category
+  const buttons = document.querySelectorAll(`.suggested-tag[${attrName}]`);
+
+  buttons.forEach(btn => {
+    const suggestedValue = btn.getAttribute(attrName);
+    const displayText = btn.textContent.trim();
+
+    // Check if the suggested value OR its display text is in current tags
+    // Use case-insensitive and exact match only (no partial matching)
+    const isUsed = tags.some(tag => {
+      const normalizedTag = normalizeTagForComparison(tag);
+      const normalizedSuggested = normalizeTagForComparison(suggestedValue);
+      const normalizedDisplay = normalizeTagForComparison(displayText);
+
+      // Exact match only - no partial matching
+      return normalizedTag === normalizedSuggested || normalizedTag === normalizedDisplay;
+    });
+
+    if (isUsed) {
+      btn.classList.add('used');
+    } else {
+      btn.classList.remove('used');
+    }
+  });
+}
+
+/**
  * Set up click handlers for suggested tag buttons
  */
 function setupSuggestedTags() {
   // Skill suggestions
   document.querySelectorAll('.suggested-tag[data-skill]').forEach(btn => {
     btn.addEventListener('click', () => {
+      if (btn.classList.contains('used')) return;
+      if (skillTags.length >= TAG_LIMIT) {
+        showInlineValidation(elements.skillsInput, `Maximum ${TAG_LIMIT} items reached.`);
+        return;
+      }
+
       const skill = btn.dataset.skill;
-      if (!skillTags.includes(skill)) {
+      if (!tagExists(skillTags, skill)) {
         skillTags.push(skill);
-        renderTags(elements.skillsTags, skillTags, (tags) => { skillTags = tags; });
-        btn.classList.add('used');
+        renderTags(elements.skillsTags, skillTags, (tags) => { skillTags = tags; syncSuggestedTags('skills'); updateTagCount('skills'); }, 'skills');
+        updateTagCount('skills');
       }
     });
   });
@@ -320,11 +498,17 @@ function setupSuggestedTags() {
   // Industry suggestions
   document.querySelectorAll('.suggested-tag[data-industry]').forEach(btn => {
     btn.addEventListener('click', () => {
+      if (btn.classList.contains('used')) return;
+      if (industryTags.length >= TAG_LIMIT) {
+        showInlineValidation(elements.industriesInput, `Maximum ${TAG_LIMIT} items reached.`);
+        return;
+      }
+
       const industry = btn.dataset.industry;
-      if (!industryTags.includes(industry)) {
+      if (!tagExists(industryTags, industry)) {
         industryTags.push(industry);
-        renderTags(elements.industriesTags, industryTags, (tags) => { industryTags = tags; });
-        btn.classList.add('used');
+        renderTags(elements.industriesTags, industryTags, (tags) => { industryTags = tags; syncSuggestedTags('industries'); updateTagCount('industries'); }, 'industries');
+        updateTagCount('industries');
       }
     });
   });
@@ -332,11 +516,17 @@ function setupSuggestedTags() {
   // Role suggestions
   document.querySelectorAll('.suggested-tag[data-role]').forEach(btn => {
     btn.addEventListener('click', () => {
+      if (btn.classList.contains('used')) return;
+      if (roleTags.length >= TAG_LIMIT) {
+        showInlineValidation(elements.rolesInput, `Maximum ${TAG_LIMIT} items reached.`);
+        return;
+      }
+
       const role = btn.dataset.role;
-      if (!roleTags.includes(role)) {
+      if (!tagExists(roleTags, role)) {
         roleTags.push(role);
-        renderTags(elements.rolesTags, roleTags, (tags) => { roleTags = tags; });
-        btn.classList.add('used');
+        renderTags(elements.rolesTags, roleTags, (tags) => { roleTags = tags; syncSuggestedTags('roles'); updateTagCount('roles'); }, 'roles');
+        updateTagCount('roles');
       }
     });
   });
@@ -419,7 +609,8 @@ function collectFormData() {
   // Tab 1: Preferences
   profileData.preferences.salary_floor = parseInt(elements.salaryFloor.value, 10) || 150000;
   profileData.preferences.salary_target = parseInt(elements.salaryTarget.value, 10) || 200000;
-  profileData.preferences.bonus_and_equity_preference = elements.equityPreference.value;
+  profileData.preferences.bonus_preference = elements.bonusPreference.value;
+  profileData.preferences.equity_preference = elements.equityPreference.value;
   profileData.preferences.remote_requirement = elements.remoteRequirement.value;
   profileData.preferences.employment_type_preferred = elements.employmentType.value;
 
@@ -509,8 +700,17 @@ function populateFormFromProfile() {
   if (profileData.preferences.salary_target) {
     elements.salaryTarget.value = profileData.preferences.salary_target;
   }
-  if (profileData.preferences.bonus_and_equity_preference) {
-    elements.equityPreference.value = profileData.preferences.bonus_and_equity_preference;
+  if (profileData.preferences.bonus_preference) {
+    elements.bonusPreference.value = profileData.preferences.bonus_preference;
+  }
+  if (profileData.preferences.equity_preference) {
+    elements.equityPreference.value = profileData.preferences.equity_preference;
+  }
+  // Migrate old combined field to new separate fields
+  if (profileData.preferences.bonus_and_equity_preference && !profileData.preferences.bonus_preference) {
+    const oldValue = profileData.preferences.bonus_and_equity_preference;
+    elements.bonusPreference.value = oldValue;
+    elements.equityPreference.value = oldValue === 'required' ? 'preferred' : oldValue;
   }
   if (profileData.preferences.remote_requirement) {
     elements.remoteRequirement.value = profileData.preferences.remote_requirement;

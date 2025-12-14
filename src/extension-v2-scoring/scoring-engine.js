@@ -364,7 +364,8 @@ function scoreSalary(jobPayload, userProfile) {
   // Handle missing salary data
   if (salaryMin === null || salaryMin === undefined) {
     return {
-      criteria: `Salary (vs. floor of $${formatSalary(floor)})`,
+      criteria: 'Base Salary',
+      criteria_description: `Whether the posted salary meets your $${formatSalary(floor)} minimum and $${formatSalary(target)} target`,
       actual_value: 'Not specified',
       score: 25, // Default to middle score when unknown
       rationale: 'Salary not disclosed; assuming moderate alignment',
@@ -398,7 +399,8 @@ function scoreSalary(jobPayload, userProfile) {
     : `$${formatSalary(salaryMin)}`;
 
   return {
-    criteria: `Salary (vs. floor of $${formatSalary(floor)})`,
+    criteria: 'Base Salary',
+    criteria_description: `Whether the posted salary meets your $${formatSalary(floor)} minimum and $${formatSalary(target)} target`,
     actual_value: displaySalary,
     score: Math.round(score),
     rationale
@@ -421,7 +423,8 @@ function scoreWorkplaceType(jobPayload, userProfile) {
   // Handle missing data
   if (!workplaceType) {
     return {
-      criteria: 'Workplace Type',
+      criteria: 'Work Location',
+      criteria_description: 'Whether the job is remote, hybrid, or on-site based on your preferences',
       actual_value: 'Not specified',
       score: 25,
       rationale: 'Workplace type not disclosed; assuming moderate alignment',
@@ -463,7 +466,8 @@ function scoreWorkplaceType(jobPayload, userProfile) {
   }
 
   return {
-    criteria: 'Workplace Type',
+    criteria: 'Work Location',
+    criteria_description: 'Whether the job is remote, hybrid, or on-site based on your preferences',
     actual_value: formatWorkplaceType(workplaceType),
     score: Math.round(score),
     rationale
@@ -471,53 +475,98 @@ function scoreWorkplaceType(jobPayload, userProfile) {
 }
 
 /**
- * Score equity and bonus presence (0-50)
+ * Score bonus and equity presence (0-50)
+ * Scores bonus and equity based on user's separate preferences for each
  * @param {Object} jobPayload - Job data with equity_mentioned, bonus_mentioned
- * @param {Object} userProfile - User preferences with bonus_and_equity_preference
+ * @param {Object} userProfile - User preferences with bonus_preference and equity_preference
  * @returns {Object} Criterion score result
  */
 function scoreEquityBonus(jobPayload, userProfile) {
   const equityMentioned = jobPayload.equityMentioned || jobPayload.equity_mentioned || false;
   const bonusMentioned = jobPayload.bonusMentioned || jobPayload.bonus_mentioned || false;
   const bonusPercent = jobPayload.bonus_estimated_percent;
-  const preference = userProfile?.preferences?.bonus_and_equity_preference || 'preferred';
 
-  let score = 0;
-  let rationale = '';
-  let actualValue = '';
+  // Get separate preferences (with fallback to old combined field for migration)
+  const bonusPref = userProfile?.preferences?.bonus_preference ||
+    userProfile?.preferences?.bonus_and_equity_preference || 'preferred';
+  const equityPref = userProfile?.preferences?.equity_preference ||
+    (userProfile?.preferences?.bonus_and_equity_preference === 'required' ? 'preferred' : 'optional');
 
-  // Build actual value string
-  const parts = [];
-  if (equityMentioned) parts.push('Equity');
+  // Weight for each component (bonus slightly higher based on user preference patterns)
+  const bonusWeight = 0.55;
+  const equityWeight = 0.45;
+
+  // Score bonus (0-50 scale for this component)
+  let bonusScore = 0;
+  let bonusRationale = '';
   if (bonusMentioned) {
-    const bonusStr = bonusPercent ? `${Math.round(bonusPercent * 100)}% bonus` : 'Bonus';
-    parts.push(bonusStr);
-  }
-  actualValue = parts.length > 0 ? parts.join(' + ') : 'Neither mentioned';
-
-  // Score based on what's present
-  if (equityMentioned && bonusMentioned) {
-    score = 50;
-    rationale = 'Both equity and bonus mentioned';
-  } else if (equityMentioned || bonusMentioned) {
-    score = 35;
-    rationale = equityMentioned ? 'Equity mentioned (no bonus)' : 'Bonus mentioned (no equity)';
+    bonusScore = 50;
+    bonusRationale = bonusPercent ? `${Math.round(bonusPercent * 100)}% bonus mentioned` : 'Bonus mentioned';
   } else {
-    // Neither mentioned
-    if (preference === 'required') {
-      score = 0;
-      rationale = 'No equity or bonus mentioned (you require these)';
+    if (bonusPref === 'required') {
+      bonusScore = 0;
+      bonusRationale = 'No bonus (required)';
+    } else if (bonusPref === 'preferred') {
+      bonusScore = 15;
+      bonusRationale = 'No bonus mentioned';
     } else {
-      score = 15;
-      rationale = 'No equity or bonus mentioned';
+      bonusScore = 30;
+      bonusRationale = 'No bonus (not important to you)';
     }
   }
 
+  // Score equity (0-50 scale for this component)
+  let equityScore = 0;
+  let equityRationale = '';
+  if (equityMentioned) {
+    equityScore = 50;
+    equityRationale = 'Equity/stock options mentioned';
+  } else {
+    if (equityPref === 'required') {
+      equityScore = 0;
+      equityRationale = 'No equity (required)';
+    } else if (equityPref === 'preferred') {
+      equityScore = 15;
+      equityRationale = 'No equity mentioned';
+    } else {
+      equityScore = 30;
+      equityRationale = 'No equity (not important to you)';
+    }
+  }
+
+  // Combine scores based on weights
+  const combinedScore = (bonusScore * bonusWeight) + (equityScore * equityWeight);
+
+  // Build actual value string
+  const parts = [];
+  if (bonusMentioned) {
+    parts.push(bonusPercent ? `${Math.round(bonusPercent * 100)}% bonus` : 'Bonus');
+  }
+  if (equityMentioned) {
+    parts.push('Equity');
+  }
+  const actualValue = parts.length > 0 ? parts.join(' + ') : 'Neither mentioned';
+
+  // Build combined rationale
+  let rationale = '';
+  if (bonusMentioned && equityMentioned) {
+    rationale = 'Both bonus and equity mentioned - great total comp potential';
+  } else if (bonusMentioned) {
+    rationale = `Bonus: ${bonusRationale}. Equity: ${equityRationale}`;
+  } else if (equityMentioned) {
+    rationale = `Equity: ${equityRationale}. Bonus: ${bonusRationale}`;
+  } else {
+    rationale = `${bonusRationale}. ${equityRationale}`;
+  }
+
   return {
-    criteria: 'Equity & Bonus',
+    criteria: 'Bonus & Equity',
+    criteria_description: 'Whether the job mentions performance bonuses and/or equity compensation based on your preferences',
     actual_value: actualValue,
-    score: Math.round(score),
-    rationale
+    score: Math.round(combinedScore),
+    rationale,
+    bonus_score: Math.round(bonusScore),
+    equity_score: Math.round(equityScore)
   };
 }
 
@@ -605,7 +654,8 @@ function scoreCompanyStage(jobPayload, userProfile) {
   }
 
   return {
-    criteria: 'Company Stage',
+    criteria: 'Company Maturity',
+    criteria_description: 'The company\'s growth stage and stability (startup vs. established enterprise)',
     actual_value: actualValue,
     score: Math.round(score),
     rationale,
@@ -663,6 +713,7 @@ function scoreHiringUrgency(jobPayload, userProfile) {
 
   return {
     criteria: 'Hiring Urgency',
+    criteria_description: 'How motivated the company appears to fill this role quickly (higher urgency = better chance)',
     actual_value: actualValue,
     score: Math.round(score),
     rationale,
@@ -737,7 +788,8 @@ function scoreRoleType(jobPayload, userProfile) {
   }
 
   return {
-    criteria: 'Role Type vs. Target Roles',
+    criteria: 'Title & Seniority Match',
+    criteria_description: 'How well the job title and level align with your target roles (VP, Director, Head of, etc.)',
     actual_value: jobPayload.jobTitle || jobPayload.job_title || 'Unknown',
     score: Math.round(score),
     rationale
@@ -758,7 +810,8 @@ function scoreRevOpsComponent(jobPayload, userProfile) {
 
   if (!description) {
     return {
-      criteria: 'RevOps Component',
+      criteria: 'Operations & Systems Focus',
+      criteria_description: 'How much of the role involves RevOps, marketing ops, data/CRM systems vs. pure creative/brand work',
       actual_value: 'Cannot assess',
       score: 25,
       rationale: 'No job description available to analyze',
@@ -808,7 +861,8 @@ function scoreRevOpsComponent(jobPayload, userProfile) {
   }
 
   return {
-    criteria: 'RevOps Component',
+    criteria: 'Operations & Systems Focus',
+    criteria_description: 'How much of the role involves RevOps, marketing ops, data/CRM systems vs. pure creative/brand work',
     actual_value: actualValue,
     score: Math.round(score),
     rationale
@@ -829,7 +883,8 @@ function scoreSkillMatch(jobPayload, userProfile) {
 
   if (userSkills.length === 0) {
     return {
-      criteria: 'Skill Match',
+      criteria: 'Skills Overlap',
+      criteria_description: 'How many of your skills are mentioned in the job description requirements',
       actual_value: 'No skills defined',
       score: 25,
       rationale: 'Please configure your core skills in profile',
@@ -884,11 +939,13 @@ function scoreSkillMatch(jobPayload, userProfile) {
   }
 
   return {
-    criteria: 'Skill Match',
+    criteria: 'Skills Overlap',
+    criteria_description: 'How many of your skills are mentioned in the job description requirements',
     actual_value: matchCount > 0 ? `${matchCount}/${totalSkills} skills (${Math.round(matchPercentage)}%)` : 'No matches',
     score: Math.round(score),
     rationale,
-    matched_skills: matchedSkills
+    matched_skills: matchedSkills,
+    match_percentage: Math.round(matchPercentage)
   };
 }
 
@@ -905,7 +962,8 @@ function scoreIndustryAlignment(jobPayload, userProfile) {
 
   if (userIndustries.length === 0) {
     return {
-      criteria: 'Industry Alignment',
+      criteria: 'Industry Experience',
+      criteria_description: 'Whether the company\'s industry matches your background (exact match, adjacent, or new vertical)',
       actual_value: 'No industries defined',
       score: 25,
       rationale: 'Please configure your industry experience in profile',
@@ -983,7 +1041,8 @@ function scoreIndustryAlignment(jobPayload, userProfile) {
   }
 
   return {
-    criteria: 'Industry Alignment',
+    criteria: 'Industry Experience',
+    criteria_description: 'Whether the company\'s industry matches your background (exact match, adjacent, or new vertical)',
     actual_value: detectedIndustry.charAt(0).toUpperCase() + detectedIndustry.slice(1),
     score: Math.round(score),
     rationale
@@ -1049,7 +1108,8 @@ function scoreOrgComplexity(jobPayload, userProfile) {
   }
 
   return {
-    criteria: 'Org Complexity',
+    criteria: 'Organizational Stability',
+    criteria_description: 'How stable/structured the organization appears vs. chaotic/undefined (stable = higher score)',
     actual_value: actualValue,
     score: Math.round(score),
     rationale

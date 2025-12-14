@@ -360,6 +360,39 @@ main {
   font-size: 13px;
 }
 
+/* Tag count display */
+.tag-count {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: #868e96;
+  padding: 2px 6px;
+  background: #f1f3f5;
+  border-radius: 4px;
+  margin-left: auto;
+}
+
+.tag-count.at-limit {
+  background: #ffe3e3;
+  color: #c92a2a;
+}
+
+/* Inline validation message */
+.inline-validation {
+  font-size: 12px;
+  color: #c92a2a;
+  padding: 4px 8px;
+  margin-top: 4px;
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+  transition: opacity 0.2s ease, max-height 0.2s ease;
+}
+
+.inline-validation.show {
+  opacity: 1;
+  max-height: 40px;
+}
+
 /* Suggested tags */
 .suggested-tags {
   display: flex;

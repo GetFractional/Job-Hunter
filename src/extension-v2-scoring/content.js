@@ -814,6 +814,9 @@ function injectOverlay(source) {
   scoreButton.addEventListener('click', () => handleScoreClick(source, scoreButton));
 
   console.log('[Job Hunter] Overlay injected with Score and Send buttons');
+
+  // Trigger auto-scoring via floating panel (if profile exists)
+  triggerAutoScore(source);
 }
 
 // ============================================================================
@@ -1000,13 +1003,92 @@ function openProfileSetup() {
   window.open(profileUrl, '_blank');
 }
 
+// Make functions available globally for floating panel
+window.openProfileSetup = openProfileSetup;
+
+// ============================================================================
+// AUTO-SCORING FUNCTIONALITY
+// ============================================================================
+
+// Debounce timer for auto-scoring
+let autoScoreDebounceTimer = null;
+let lastScoredUrl = '';
+
+/**
+ * Trigger auto-scoring for the current job page
+ * Uses a debounce to avoid scoring too frequently
+ * @param {string} source - 'LinkedIn' or 'Indeed'
+ */
+async function triggerAutoScore(source) {
+  const currentUrl = window.location.href;
+
+  // Don't re-score the same job
+  if (currentUrl === lastScoredUrl) {
+    console.log('[Job Hunter] Already scored this job, skipping');
+    return;
+  }
+
+  // Clear any pending auto-score
+  if (autoScoreDebounceTimer) {
+    clearTimeout(autoScoreDebounceTimer);
+  }
+
+  // Debounce to avoid scoring during rapid navigation
+  autoScoreDebounceTimer = setTimeout(async () => {
+    try {
+      console.log('[Job Hunter] Auto-scoring job...');
+
+      // Extract job data
+      const jobData = source === 'LinkedIn'
+        ? extractLinkedInJobData()
+        : extractIndeedJobData();
+
+      // Validate we got essential data
+      if (!jobData.jobTitle || !jobData.companyName) {
+        console.log('[Job Hunter] Not enough data to auto-score');
+        return;
+      }
+
+      // Get user profile
+      const userProfile = await getUserProfile();
+
+      // If no profile, don't auto-score (user needs to set up profile first)
+      if (!userProfile || !userProfile.preferences) {
+        console.log('[Job Hunter] No profile found, skipping auto-score');
+        return;
+      }
+
+      // Check if scoring engine is available
+      if (typeof window.JobHunterScoring === 'undefined') {
+        console.error('[Job Hunter] Scoring engine not loaded');
+        return;
+      }
+
+      // Calculate score
+      const scoreResult = window.JobHunterScoring.calculateJobFitScore(jobData, userProfile);
+      console.log('[Job Hunter] Auto-score result:', scoreResult);
+
+      // Update floating panel
+      if (typeof window.JobHunterFloatingPanel !== 'undefined') {
+        window.JobHunterFloatingPanel.updateScore(scoreResult, jobData);
+      }
+
+      // Remember this URL was scored
+      lastScoredUrl = currentUrl;
+
+    } catch (error) {
+      console.error('[Job Hunter] Auto-score error:', error);
+    }
+  }, 800); // 800ms debounce
+}
+
 /**
  * Send job data to Airtable (used by both direct send and from results modal)
  * @param {Object} jobData - Extracted job data
  * @param {Object} scoreResult - Optional score result to include
  * @returns {Promise<Object>} Response from background script
  */
-async function sendJobToAirtable(jobData, scoreResult = null) {
+window.sendJobToAirtable = async function sendJobToAirtable(jobData, scoreResult = null) {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       reject(new Error('Timed out talking to background script'));
