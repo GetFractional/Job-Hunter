@@ -163,85 +163,101 @@ function updateJobHighlights(panel, jobData, scoreResult) {
   const bonusEl = panel.querySelector('.jh-fp-bonus');
   const equityEl = panel.querySelector('.jh-fp-equity');
 
-  // Salary
+  // Salary - check multiple possible fields
   if (salaryEl) {
-    const salary = jobData.salary || jobData.salaryRange;
-    if (salary && salary !== 'Not specified') {
+    const salary = jobData.salary || jobData.salaryRange || jobData.compensation ||
+                   jobData.salary_range || jobData.pay || jobData.salaryText;
+    if (salary && salary !== 'Not specified' && salary !== '--') {
       salaryEl.textContent = salary;
       salaryEl.classList.add('jh-fp-has-value');
+      salaryEl.title = 'Salary Range';
     } else {
-      salaryEl.textContent = '💰 --';
+      salaryEl.textContent = 'Salary N/A';
       salaryEl.classList.remove('jh-fp-has-value');
+      salaryEl.title = 'Salary not specified';
     }
   }
 
   // Workplace type
   if (workplaceEl) {
-    const workplace = jobData.workplaceType || jobData.locationType;
+    const workplace = jobData.workplaceType || jobData.locationType || jobData.workplace_type;
+    workplaceEl.classList.remove('jh-fp-good', 'jh-fp-neutral', 'jh-fp-bad');
     if (workplace) {
-      const isRemote = workplace.toLowerCase().includes('remote');
-      const isHybrid = workplace.toLowerCase().includes('hybrid');
-      if (isRemote) {
-        workplaceEl.textContent = '🏠 Remote';
+      const wpLower = workplace.toLowerCase();
+      if (wpLower.includes('remote')) {
+        workplaceEl.textContent = 'Remote';
         workplaceEl.classList.add('jh-fp-good');
-      } else if (isHybrid) {
-        workplaceEl.textContent = '🏢 Hybrid';
+      } else if (wpLower.includes('hybrid')) {
+        workplaceEl.textContent = 'Hybrid';
         workplaceEl.classList.add('jh-fp-neutral');
-      } else {
-        workplaceEl.textContent = '🏢 On-site';
+      } else if (wpLower.includes('on-site') || wpLower.includes('onsite')) {
+        workplaceEl.textContent = 'On-site';
         workplaceEl.classList.add('jh-fp-bad');
+      } else {
+        workplaceEl.textContent = workplace;
       }
     } else {
-      workplaceEl.textContent = '📍 --';
+      workplaceEl.textContent = 'Location N/A';
     }
   }
 
-  // Bonus - check score breakdown
+  // Bonus - check score breakdown for detection
   if (bonusEl) {
-    const bonusInfo = findCriteriaInfo(scoreResult, 'bonus');
-    if (bonusInfo && bonusInfo.detected) {
-      bonusEl.innerHTML = '👍 <span>Bonus</span>';
+    const bonusDetected = checkBonusEquityDetected(scoreResult, 'bonus');
+    bonusEl.classList.remove('jh-fp-good', 'jh-fp-bad');
+    if (bonusDetected) {
+      bonusEl.innerHTML = '<span class="jh-fp-thumb jh-fp-thumb-up">▲</span> Bonus';
       bonusEl.classList.add('jh-fp-good');
+      bonusEl.title = 'Bonus mentioned in job posting';
     } else {
-      bonusEl.textContent = '💵 --';
-      bonusEl.classList.remove('jh-fp-good');
+      bonusEl.innerHTML = '<span class="jh-fp-thumb jh-fp-thumb-down">▼</span> Bonus';
+      bonusEl.classList.add('jh-fp-bad');
+      bonusEl.title = 'No bonus mentioned';
     }
   }
 
-  // Equity - check score breakdown
+  // Equity - check score breakdown for detection
   if (equityEl) {
-    const equityInfo = findCriteriaInfo(scoreResult, 'equity');
-    if (equityInfo && equityInfo.detected) {
-      equityEl.innerHTML = '👍 <span>Equity</span>';
+    const equityDetected = checkBonusEquityDetected(scoreResult, 'equity');
+    equityEl.classList.remove('jh-fp-good', 'jh-fp-bad');
+    if (equityDetected) {
+      equityEl.innerHTML = '<span class="jh-fp-thumb jh-fp-thumb-up">▲</span> Equity';
       equityEl.classList.add('jh-fp-good');
+      equityEl.title = 'Equity/stock mentioned in job posting';
     } else {
-      equityEl.textContent = '📈 --';
-      equityEl.classList.remove('jh-fp-good');
+      equityEl.innerHTML = '<span class="jh-fp-thumb jh-fp-thumb-down">▼</span> Equity';
+      equityEl.classList.add('jh-fp-bad');
+      equityEl.title = 'No equity mentioned';
     }
   }
 }
 
 /**
- * Find criteria info in score breakdown
+ * Check if bonus or equity was detected in the job posting
  */
-function findCriteriaInfo(scoreResult, keyword) {
+function checkBonusEquityDetected(scoreResult, keyword) {
   const allBreakdown = [
     ...(scoreResult.job_to_user_fit?.breakdown || []),
     ...(scoreResult.user_to_job_fit?.breakdown || [])
   ];
 
   for (const item of allBreakdown) {
-    if (item.criteria?.toLowerCase().includes(keyword)) {
-      return {
-        detected: item.score > 0 || item.details?.toLowerCase().includes('detected') ||
-                  item.details?.toLowerCase().includes('mentioned') ||
-                  item.details?.toLowerCase().includes('offers'),
-        score: item.score,
-        details: item.details
-      };
+    const criteriaLower = (item.criteria || '').toLowerCase();
+    const detailsLower = (item.details || item.rationale || '').toLowerCase();
+
+    if (criteriaLower.includes(keyword) || detailsLower.includes(keyword)) {
+      // Check if it was actually detected/mentioned
+      if (detailsLower.includes('detected') ||
+          detailsLower.includes('mentioned') ||
+          detailsLower.includes('offers') ||
+          detailsLower.includes('includes') ||
+          detailsLower.includes('provides') ||
+          (item.score && item.score > 0)) {
+        return true;
+      }
     }
   }
-  return null;
+  return false;
 }
 
 function updateExpandedContent(scoreResult) {
@@ -268,19 +284,23 @@ function updateExpandedContent(scoreResult) {
   // Render top criteria (limiting to key ones for compact view)
   if (criteriaList) {
     const allCriteria = [
-      ...scoreResult.job_to_user_fit.breakdown,
-      ...scoreResult.user_to_job_fit.breakdown
-    ].sort((a, b) => b.score - a.score);
+      ...(scoreResult.job_to_user_fit?.breakdown || []),
+      ...(scoreResult.user_to_job_fit?.breakdown || [])
+    ].sort((a, b) => (b.score || 0) - (a.score || 0));
 
     // Show top 4 most relevant criteria
     const topCriteria = allCriteria.slice(0, 4);
 
     criteriaList.innerHTML = topCriteria.map(c => {
-      const percentage = Math.round((c.score / c.max_score) * 100);
+      const maxScore = c.max_score || 50;
+      const score = c.score || 0;
+      const percentage = Math.round((score / maxScore) * 100);
+      const scoreClass = percentage >= 70 ? 'jh-fp-criterion-high' :
+                         percentage >= 40 ? 'jh-fp-criterion-mid' : 'jh-fp-criterion-low';
       return `
-        <div class="jh-fp-criterion">
+        <div class="jh-fp-criterion ${scoreClass}">
           <span class="jh-fp-criterion-name">${escapeHtml(c.criteria)}</span>
-          <span class="jh-fp-criterion-score ${getScoreClass(percentage)}">${c.score}/${c.max_score}</span>
+          <span class="jh-fp-criterion-score">${score}/${maxScore}</span>
         </div>
       `;
     }).join('');
@@ -324,6 +344,14 @@ function setupPanelEventHandlers(panel) {
     header.addEventListener('click', (e) => {
       // Don't toggle if clicking on buttons
       if (e.target.closest('button')) return;
+      togglePanelExpanded();
+    });
+  }
+
+  // Expand hint click to expand
+  const expandHint = panel.querySelector('.jh-fp-expand-hint');
+  if (expandHint) {
+    expandHint.addEventListener('click', () => {
       togglePanelExpanded();
     });
   }
@@ -657,8 +685,8 @@ function getPanelStyles() {
     }
 
     .jh-fp-score-ring {
-      width: 44px;
-      height: 44px;
+      width: 48px;
+      height: 48px;
       border-radius: 50%;
       background: #fff;
       display: flex;
@@ -666,6 +694,7 @@ function getPanelStyles() {
       justify-content: center;
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
       flex-shrink: 0;
+      border: 3px solid #e9ecef;
     }
 
     .jh-fp-score-number {
@@ -673,6 +702,18 @@ function getPanelStyles() {
       font-weight: 700;
       color: #1a1a2e;
     }
+
+    /* Score ring colors based on overall score */
+    #jh-floating-panel.jh-fp-score-strong .jh-fp-score-ring { border-color: #2b8a3e; }
+    #jh-floating-panel.jh-fp-score-strong .jh-fp-score-number { color: #2b8a3e; }
+    #jh-floating-panel.jh-fp-score-good .jh-fp-score-ring { border-color: #087f5b; }
+    #jh-floating-panel.jh-fp-score-good .jh-fp-score-number { color: #087f5b; }
+    #jh-floating-panel.jh-fp-score-moderate .jh-fp-score-ring { border-color: #e67700; }
+    #jh-floating-panel.jh-fp-score-moderate .jh-fp-score-number { color: #e67700; }
+    #jh-floating-panel.jh-fp-score-weak .jh-fp-score-ring { border-color: #d9480f; }
+    #jh-floating-panel.jh-fp-score-weak .jh-fp-score-number { color: #d9480f; }
+    #jh-floating-panel.jh-fp-score-poor .jh-fp-score-ring { border-color: #c92a2a; }
+    #jh-floating-panel.jh-fp-score-poor .jh-fp-score-number { color: #c92a2a; }
 
     .jh-fp-info {
       flex: 1;
@@ -787,13 +828,22 @@ function getPanelStyles() {
     }
 
     .jh-fp-highlight.jh-fp-bad {
-      background: #ffe3e3;
-      border-color: #ffa8a8;
-      color: #c92a2a;
+      background: #fff;
+      border-color: #dee2e6;
+      color: #868e96;
     }
 
-    .jh-fp-highlight span {
-      font-weight: 600;
+    .jh-fp-thumb {
+      font-size: 9px;
+      margin-right: 2px;
+    }
+
+    .jh-fp-thumb-up {
+      color: #2b8a3e;
+    }
+
+    .jh-fp-thumb-down {
+      color: #868e96;
     }
 
     /* Expand hint */
@@ -801,8 +851,14 @@ function getPanelStyles() {
       text-align: center;
       font-size: 10px;
       color: #868e96;
-      padding: 6px;
+      padding: 8px;
       cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .jh-fp-expand-hint:hover {
+      background: #f1f3f5;
+      color: #495057;
     }
 
     #jh-floating-panel.jh-fp-expanded .jh-fp-expand-hint {
@@ -878,18 +934,32 @@ function getPanelStyles() {
     .jh-fp-criterion-name {
       font-size: 11px;
       color: #495057;
+      flex: 1;
     }
 
     .jh-fp-criterion-score {
       font-size: 11px;
-      letter-spacing: -1px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: #f1f3f5;
+      color: #495057;
     }
 
-    .jh-fp-criterion-score.jh-fp-score-strong,
-    .jh-fp-criterion-score.jh-fp-score-good { color: #2b8a3e; }
-    .jh-fp-criterion-score.jh-fp-score-moderate { color: #e67700; }
-    .jh-fp-criterion-score.jh-fp-score-weak,
-    .jh-fp-criterion-score.jh-fp-score-poor { color: #c92a2a; }
+    .jh-fp-criterion.jh-fp-criterion-high .jh-fp-criterion-score {
+      background: #d3f9d8;
+      color: #2b8a3e;
+    }
+
+    .jh-fp-criterion.jh-fp-criterion-mid .jh-fp-criterion-score {
+      background: #fff3bf;
+      color: #e67700;
+    }
+
+    .jh-fp-criterion.jh-fp-criterion-low .jh-fp-criterion-score {
+      background: #ffe3e3;
+      color: #c92a2a;
+    }
 
     .jh-fp-action-row {
       background: #f8f9fa;
