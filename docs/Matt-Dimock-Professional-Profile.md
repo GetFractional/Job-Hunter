@@ -22,7 +22,7 @@
 > 
 > **Core Identity:** Growth Systems Architect | "The Mechanic" (Wealth Dynamics)
 > **Primary Value Proposition:** Building the infrastructure that makes revenue growth inevitable.
-> **Key Metric:** $170M+ in aggregate revenue growth driven across D2C, Telecom, Insurance, and Home Services.
+> **Key Metric:** 8-figure revenue growth driven across D2C, Telecom, Insurance, and Home Services.
 > **Career Pattern (Since 2007):** Clarify the offer → Architect the funnel & tech stack → Build the team & OS → Scale without chaos
 
 ---
@@ -51,7 +51,6 @@ Based on the **Wealth Dynamics Mechanic Profile**, I operate fundamentally diffe
 - I come in when growth is needed and operations are breaking.
 - I architect the infrastructure (CRM, workflows, dashboards, playbooks) that allows revenue to scale 3-10x without headcount scaling at the same pace.
 - I focus on *leverage*: every dollar spent, every hour invested should produce value across 1,000 customers, not just 10.
-- My track record: $170M+ in aggregate revenue growth, consistently delivered in <2 years per role.
 
 ---
 
@@ -157,7 +156,7 @@ sequences and multi-channel campaigns
 **Bob's Watches** | *Jan 2017 – Dec 2018 (Orange County, CA; 2 years)*
 
 **The Problem:**
-- Luxury marketplace ($20.5M ARR) heavily dependent on organic traffic
+- Luxury ecommerce store ($20.5M ARR) heavily dependent on organic traffic
 - Conversion optimization weak across channels
 - No unified marketing operations system or cross-functional team structure
 
@@ -714,11 +713,11 @@ WRONG (not ATS-friendly):
 "I am a passionate marketer who loves helping companies grow."
 
 RIGHT (ATS-optimized + voice):
-"I architect growth systems that replace chaos with structure, manual effort with automation, and guesswork with data. In my last 4 roles, I've driven $170M+ in aggregate revenue growth by building RevOps infrastructure, implementing marketing automation platforms (Braze, Dynamics 365, Keap), and deploying data-driven frameworks that enable sustainable growth."
+"I architect growth systems that replace chaos with structure, manual effort with automation, and guesswork with data. In my last 4 roles, I've driven growth by building RevOps infrastructure, implementing marketing automation platforms (Braze, Dynamics 365, Keap), and deploying data-driven frameworks that make it sustainable."
 
 Why this works for ATS:
 - Includes job-relevant keywords (RevOps, marketing automation, Braze, Dynamics 365)
-- Specific metrics ($170M+)
+- Specific metrics
 - Natural integration of required skills
 - No AI-detection keywords ("passionate," "love")
 ```
@@ -874,7 +873,7 @@ When wrapping up a cover letter or positioning statement:
 ## SECTION 10: QUICK REFERENCE (For AI Implementation)
 
 ### Key Metrics (Use These When Positioning)
-- $170M+ aggregate revenue driven
+- Eight figure revenue growth
 - 600k+ customers activated (Prosper)
 - 120% revenue growth (Bob's Watches, Affordable Insurance)
 - 6.8x revenue scaling (Affordable Insurance)
@@ -904,7 +903,7 @@ When wrapping up a cover letter or positioning statement:
 - Experimentation & Data-Driven Decision Making
 
 ### The Pitch (Elevator Version, 30 Seconds - ATS Notes Included)
-> "I architect growth systems that replace chaos with structure, manual effort with automation, and guesswork with data. I specialize in RevOps infrastructure, marketing automation (Braze, Dynamics 365, Zoho), and AI-powered workflow orchestration. In my last 4 roles, I've driven $170M+ in revenue growth by building the systems that enable teams to scale predictably—without constant dependency on me. I'm best when companies have product-market fit but systems are breaking."
+> "I architect growth systems that replace chaos with structure, manual effort with automation, and guesswork with data. I specialize in RevOps infrastructure, marketing automation (Braze, Dynamics 365, Zoho), and AI-powered workflow orchestration. In my last 4 roles, I've driven eight figure revenue growth by building the systems that enable teams to scale predictably—without constant dependency on me. I'm best when companies have product-market fit but systems are breaking."
 
 ---
 
