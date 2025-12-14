@@ -13,6 +13,10 @@
 // Storage key for user profile (must match profile-setup.js)
 const PROFILE_STORAGE_KEY = 'jh_user_profile';
 
+// Auto-scoring state (declared at top to avoid hoisting issues)
+let autoScoreDebounceTimer = null;
+let lastScoredUrl = '';
+
 // Prevent multiple injections
 if (window.jobHunterInjected) {
   console.log('[Job Hunter] Already injected, skipping');
@@ -1009,10 +1013,6 @@ window.openProfileSetup = openProfileSetup;
 // ============================================================================
 // AUTO-SCORING FUNCTIONALITY
 // ============================================================================
-
-// Debounce timer for auto-scoring
-let autoScoreDebounceTimer = null;
-let lastScoredUrl = '';
 
 /**
  * Trigger auto-scoring for the current job page

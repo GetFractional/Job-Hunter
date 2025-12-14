@@ -386,6 +386,7 @@ main {
   max-height: 0;
   overflow: hidden;
   transition: opacity 0.2s ease, max-height 0.2s ease;
+  pointer-events: none;
 }
 
 .inline-validation.show {
