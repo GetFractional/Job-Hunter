@@ -693,131 +693,17 @@ function normalizeIndeedLocation(rawLocation) {
 // ============================================================================
 
 /**
- * Inject the "Send to Job Hunter" and "Score This Job" overlay buttons
+ * Initialize auto-scoring for a job page
+ * The floating panel handles all UI - no overlay buttons needed
  * @param {string} source - 'LinkedIn' or 'Indeed'
  */
 function injectOverlay(source) {
-  // Don't inject if already present
-  if (document.getElementById('job-hunter-overlay')) {
+  // Don't inject if already initialized
+  if (document.getElementById('jh-floating-panel')) {
     return;
   }
 
-  // Create overlay container with both buttons
-  const overlay = document.createElement('div');
-  overlay.id = 'job-hunter-overlay';
-  overlay.innerHTML = `
-    <style>
-      #job-hunter-overlay {
-        position: fixed;
-        bottom: 24px;
-        right: 24px;
-        z-index: 999999;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        align-items: flex-end;
-      }
-
-      .jh-overlay-btn {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 12px 20px;
-        font-size: 14px;
-        font-weight: 600;
-        color: #fff;
-        border: none;
-        border-radius: 50px;
-        cursor: pointer;
-        transition: all 0.2s ease;
-      }
-
-      .jh-overlay-btn:hover {
-        transform: translateY(-2px);
-      }
-
-      .jh-overlay-btn:active {
-        transform: translateY(0);
-      }
-
-      .jh-overlay-btn:disabled {
-        background: #6c757d !important;
-        cursor: not-allowed;
-        transform: none;
-        box-shadow: none !important;
-      }
-
-      .jh-overlay-btn svg {
-        width: 18px;
-        height: 18px;
-        fill: currentColor;
-      }
-
-      /* Score button - primary action */
-      #job-hunter-score-btn {
-        background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
-        box-shadow: 0 4px 12px rgba(124, 58, 237, 0.4);
-      }
-
-      #job-hunter-score-btn:hover {
-        box-shadow: 0 6px 20px rgba(124, 58, 237, 0.5);
-      }
-
-      /* Send button - secondary action */
-      #job-hunter-btn {
-        background: linear-gradient(135deg, #4361ee 0%, #3a56d4 100%);
-        box-shadow: 0 4px 12px rgba(67, 97, 238, 0.4);
-      }
-
-      #job-hunter-btn:hover {
-        box-shadow: 0 6px 20px rgba(67, 97, 238, 0.5);
-      }
-
-      .jh-overlay-btn.success {
-        background: linear-gradient(135deg, #2b8a3e 0%, #228b22 100%) !important;
-      }
-
-      .jh-overlay-btn.error {
-        background: linear-gradient(135deg, #c92a2a 0%, #a51d1d 100%) !important;
-      }
-
-      @keyframes jh-spin {
-        to { transform: rotate(360deg); }
-      }
-
-      .jh-overlay-btn.loading svg {
-        animation: jh-spin 1s linear infinite;
-      }
-    </style>
-
-    <!-- Score This Job button (primary) -->
-    <button id="job-hunter-score-btn" class="jh-overlay-btn" title="Score this job against your profile">
-      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-      </svg>
-      <span>Score This Job</span>
-    </button>
-
-    <!-- Send to Job Hunter button (secondary) -->
-    <button id="job-hunter-btn" class="jh-overlay-btn" title="Send this job to Job Hunter OS">
-      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
-      </svg>
-      <span>Send to Job Hunter</span>
-    </button>
-  `;
-
-  document.body.appendChild(overlay);
-
-  // Add click handlers
-  const sendButton = document.getElementById('job-hunter-btn');
-  sendButton.addEventListener('click', () => handleCaptureClick(source, sendButton));
-
-  const scoreButton = document.getElementById('job-hunter-score-btn');
-  scoreButton.addEventListener('click', () => handleScoreClick(source, scoreButton));
-
-  console.log('[Job Hunter] Overlay injected with Score and Send buttons');
+  console.log('[Job Hunter] Initializing auto-scoring...');
 
   // Trigger auto-scoring via floating panel (if profile exists)
   triggerAutoScore(source);

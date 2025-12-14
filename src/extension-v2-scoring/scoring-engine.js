@@ -410,14 +410,13 @@ function scoreSalary(jobPayload, userProfile) {
 /**
  * Score workplace type alignment (0-50)
  * @param {Object} jobPayload - Job data with workplace_type
- * @param {Object} userProfile - User preferences with remote_requirement, workplace_types_acceptable
+ * @param {Object} userProfile - User preferences with workplace_types_acceptable
  * @returns {Object} Criterion score result
  */
 function scoreWorkplaceType(jobPayload, userProfile) {
   const rawWorkplaceType = jobPayload.workplaceType || jobPayload.workplace_type || '';
   const workplaceType = normalizeWorkplaceType(rawWorkplaceType);
-  const remoteRequirement = userProfile?.preferences?.remote_requirement || 'remote_first';
-  const acceptableTypes = userProfile?.preferences?.workplace_types_acceptable || ['remote', 'hybrid_4plus_days'];
+  const acceptableTypes = userProfile?.preferences?.workplace_types_acceptable || ['remote'];
   const unacceptableTypes = userProfile?.preferences?.workplace_types_unacceptable || ['on_site'];
 
   // Handle missing data
@@ -440,20 +439,15 @@ function scoreWorkplaceType(jobPayload, userProfile) {
     score = 0;
     rationale = `${formatWorkplaceType(workplaceType)} is in your unacceptable list`;
   }
-  // Check if it matches remote_first preference exactly
-  else if (remoteRequirement === 'remote_first' && workplaceType === 'remote') {
-    score = 50;
-    rationale = '100% remote matches your preference';
-  }
   // Check if it's in acceptable types
   else if (acceptableTypes.includes(workplaceType)) {
     // Remote gets higher score than hybrid
     if (workplaceType === 'remote') {
       score = 50;
       rationale = 'Remote position matches your preference';
-    } else if (workplaceType.includes('hybrid')) {
+    } else if (workplaceType === 'hybrid') {
       score = 35;
-      rationale = 'Hybrid is acceptable but not preferred';
+      rationale = 'Hybrid is acceptable';
     } else {
       score = 25;
       rationale = `${formatWorkplaceType(workplaceType)} is acceptable`;
@@ -1229,12 +1223,7 @@ function normalizeWorkplaceType(workplaceType) {
   const type = (workplaceType || '').toLowerCase().trim();
 
   if (type.includes('remote')) return 'remote';
-  if (type.includes('hybrid')) {
-    // Check for specific hybrid days
-    if (/4\+|four|4 plus/.test(type)) return 'hybrid_4plus_days';
-    if (/3|three/.test(type)) return 'hybrid_3_days';
-    return 'hybrid';
-  }
+  if (type.includes('hybrid')) return 'hybrid';
   if (type.includes('on-site') || type.includes('onsite') || type.includes('on site')) return 'on_site';
 
   return type;
@@ -1249,8 +1238,6 @@ function formatWorkplaceType(type) {
   const formats = {
     'remote': 'Remote',
     'hybrid': 'Hybrid',
-    'hybrid_4plus_days': 'Hybrid (4+ days remote)',
-    'hybrid_3_days': 'Hybrid (3 days)',
     'on_site': 'On-site'
   };
   return formats[type] || type;

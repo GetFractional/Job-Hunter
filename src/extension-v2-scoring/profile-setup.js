@@ -23,14 +23,13 @@ const PROFILE_STORAGE_KEY = 'jh_user_profile';
  * Structure matches the spec in CLAUDE.md
  */
 let profileData = {
-  version: '1.1',
+  version: '1.2',
   preferences: {
     salary_floor: 150000,
     salary_target: 200000,
     bonus_preference: 'preferred',
     equity_preference: 'optional',
-    remote_requirement: 'remote_first',
-    workplace_types_acceptable: ['remote', 'hybrid_4plus_days'],
+    workplace_types_acceptable: ['remote'],
     workplace_types_unacceptable: ['on_site'],
     employment_type_preferred: 'full_time',
     employment_types_acceptable: ['full_time'],
@@ -100,7 +99,6 @@ function cacheElements() {
     salaryTarget: document.getElementById('salary-target'),
     bonusPreference: document.getElementById('bonus-preference'),
     equityPreference: document.getElementById('equity-preference'),
-    remoteRequirement: document.getElementById('remote-requirement'),
     employmentType: document.getElementById('employment-type'),
     // Tab 2: Background
     currentTitle: document.getElementById('current-title'),
@@ -334,24 +332,7 @@ function setupTagInput(input, container, getTags, updateTags, category) {
         showInlineValidation(input, ''); // Clear any validation message
       } else if (value && tagExists(tags, value)) {
         showInlineValidation(input, 'This item already exists.');
-      if (!value) return;
-
-      // Split on commas to allow bulk add in one go
-      const parts = value.split(',').map(p => p.trim()).filter(Boolean);
-      let newTags = [...tags];
-      for (const part of parts) {
-        if (!newTags.includes(part)) {
-          if (newTags.length >= MAX_TAGS_PER_FIELD) {
-            showStatus(`You can add up to ${MAX_TAGS_PER_FIELD} entries here.`, 'error');
-            break;
-          }
-          newTags = [...newTags, part];
-        }
       }
-      updateTags(newTags);
-      tags = newTags;
-      renderTags(container, newTags, updateTags);
-      input.value = '';
     }
 
     // Handle Backspace to remove last tag
@@ -631,7 +612,6 @@ function collectFormData() {
   profileData.preferences.salary_target = parseInt(elements.salaryTarget.value, 10) || 200000;
   profileData.preferences.bonus_preference = elements.bonusPreference.value;
   profileData.preferences.equity_preference = elements.equityPreference.value;
-  profileData.preferences.remote_requirement = elements.remoteRequirement.value;
   profileData.preferences.employment_type_preferred = elements.employmentType.value;
 
   // Workplace types (from checkboxes)
@@ -639,7 +619,7 @@ function collectFormData() {
   profileData.preferences.workplace_types_acceptable = Array.from(workplaceCheckboxes).map(cb => cb.value);
 
   // Set unacceptable types (opposite of acceptable)
-  const allWorkplaceTypes = ['remote', 'hybrid_4plus_days', 'hybrid', 'on_site'];
+  const allWorkplaceTypes = ['remote', 'hybrid', 'on_site'];
   profileData.preferences.workplace_types_unacceptable = allWorkplaceTypes.filter(
     t => !profileData.preferences.workplace_types_acceptable.includes(t)
   );
@@ -731,9 +711,6 @@ function populateFormFromProfile() {
     const oldValue = profileData.preferences.bonus_and_equity_preference;
     elements.bonusPreference.value = oldValue;
     elements.equityPreference.value = oldValue === 'required' ? 'preferred' : oldValue;
-  }
-  if (profileData.preferences.remote_requirement) {
-    elements.remoteRequirement.value = profileData.preferences.remote_requirement;
   }
   if (profileData.preferences.employment_type_preferred) {
     elements.employmentType.value = profileData.preferences.employment_type_preferred;

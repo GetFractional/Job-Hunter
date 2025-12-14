@@ -191,21 +191,38 @@ function renderCriteriaList(containerId, criteria) {
   const container = document.getElementById(containerId);
   if (!container || !criteria) return;
 
-  container.innerHTML = criteria.map(criterion => {
-    const stars = getStarRating(criterion.score);
+  // Filter out Hiring Urgency - it doesn't provide value
+  const filteredCriteria = criteria.filter(c =>
+    !c.criteria?.toLowerCase().includes('hiring urgency')
+  );
+
+  container.innerHTML = filteredCriteria.map(criterion => {
+    const scorePercentage = Math.round((criterion.score / (criterion.max_score || 50)) * 100);
     const scoreClass = criterion.score >= 40 ? 'jh-score-high' : criterion.score <= 20 ? 'jh-score-low' : '';
+
+    // For Skills Overlap, show matching skills as tags
+    let skillTagsHtml = '';
+    if (criterion.criteria?.toLowerCase().includes('skill') && criterion.matched_skills && criterion.matched_skills.length > 0) {
+      skillTagsHtml = `
+        <div class="jh-skill-tags">
+          ${criterion.matched_skills.map(skill => `<span class="jh-skill-tag">${escapeHtml(skill)}</span>`).join('')}
+        </div>
+      `;
+    }
 
     return `
       <div class="jh-criterion ${scoreClass}">
-        <div class="jh-criterion-stars">
-          ${stars}
+        <div class="jh-criterion-score-badge">
+          <span class="jh-score-number">${criterion.score}</span>
+          <span class="jh-score-max">/${criterion.max_score || 50}</span>
         </div>
         <div class="jh-criterion-content">
           <div class="jh-criterion-header">
             <span class="jh-criterion-name">${escapeHtml(criterion.criteria)}</span>
-            <span class="jh-criterion-value">${escapeHtml(criterion.actual_value)}</span>
+            <span class="jh-criterion-value">${escapeHtml(criterion.actual_value || '')}</span>
           </div>
           <p class="jh-criterion-rationale">${escapeHtml(criterion.rationale)}</p>
+          ${skillTagsHtml}
         </div>
       </div>
     `;
@@ -603,10 +620,30 @@ function getModalStyles() {
   background: #f8f9fa;
   border-radius: 8px;
 }
-.jh-criterion-stars { display: flex; gap: 2px; flex-shrink: 0; }
-.jh-star { width: 14px; height: 14px; fill: #dee2e6; }
-.jh-star.jh-filled { fill: #fab005; }
+.jh-criterion-score-badge {
+  display: flex;
+  align-items: baseline;
+  padding: 4px 8px;
+  background: #e9ecef;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.jh-criterion-score-badge .jh-score-number { font-size: 14px; font-weight: 700; color: #1a1a2e; }
+.jh-criterion-score-badge .jh-score-max { font-size: 11px; color: #868e96; }
+.jh-criterion.jh-score-high .jh-criterion-score-badge { background: #d3f9d8; }
+.jh-criterion.jh-score-high .jh-criterion-score-badge .jh-score-number { color: #2b8a3e; }
+.jh-criterion.jh-score-low .jh-criterion-score-badge { background: #ffe3e3; }
+.jh-criterion.jh-score-low .jh-criterion-score-badge .jh-score-number { color: #c92a2a; }
 .jh-criterion-content { flex: 1; min-width: 0; }
+.jh-skill-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.jh-skill-tag {
+  font-size: 10px;
+  padding: 2px 6px;
+  background: #e7f5ff;
+  color: #1971c2;
+  border-radius: 10px;
+  border: 1px solid #a5d8ff;
+}
 .jh-criterion-header {
   display: flex;
   justify-content: space-between;

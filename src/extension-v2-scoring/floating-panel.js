@@ -132,6 +132,9 @@ function updatePanelScore(scoreResult, jobData) {
     jobTitle.textContent = truncateText(jobData.jobTitle || 'Unknown Role', 40);
   }
 
+  // Update job highlights
+  updateJobHighlights(panel, jobData, scoreResult);
+
   // Update expanded content
   updateExpandedContent(scoreResult);
 
@@ -148,6 +151,99 @@ function updatePanelScore(scoreResult, jobData) {
  * Update the expanded content with score breakdown
  * @param {Object} scoreResult - Score result
  */
+/**
+ * Update job highlights (salary, workplace, bonus, equity)
+ * @param {HTMLElement} panel - The panel element
+ * @param {Object} jobData - Job data
+ * @param {Object} scoreResult - Score result
+ */
+function updateJobHighlights(panel, jobData, scoreResult) {
+  const salaryEl = panel.querySelector('.jh-fp-salary');
+  const workplaceEl = panel.querySelector('.jh-fp-workplace');
+  const bonusEl = panel.querySelector('.jh-fp-bonus');
+  const equityEl = panel.querySelector('.jh-fp-equity');
+
+  // Salary
+  if (salaryEl) {
+    const salary = jobData.salary || jobData.salaryRange;
+    if (salary && salary !== 'Not specified') {
+      salaryEl.textContent = salary;
+      salaryEl.classList.add('jh-fp-has-value');
+    } else {
+      salaryEl.textContent = '💰 --';
+      salaryEl.classList.remove('jh-fp-has-value');
+    }
+  }
+
+  // Workplace type
+  if (workplaceEl) {
+    const workplace = jobData.workplaceType || jobData.locationType;
+    if (workplace) {
+      const isRemote = workplace.toLowerCase().includes('remote');
+      const isHybrid = workplace.toLowerCase().includes('hybrid');
+      if (isRemote) {
+        workplaceEl.textContent = '🏠 Remote';
+        workplaceEl.classList.add('jh-fp-good');
+      } else if (isHybrid) {
+        workplaceEl.textContent = '🏢 Hybrid';
+        workplaceEl.classList.add('jh-fp-neutral');
+      } else {
+        workplaceEl.textContent = '🏢 On-site';
+        workplaceEl.classList.add('jh-fp-bad');
+      }
+    } else {
+      workplaceEl.textContent = '📍 --';
+    }
+  }
+
+  // Bonus - check score breakdown
+  if (bonusEl) {
+    const bonusInfo = findCriteriaInfo(scoreResult, 'bonus');
+    if (bonusInfo && bonusInfo.detected) {
+      bonusEl.innerHTML = '👍 <span>Bonus</span>';
+      bonusEl.classList.add('jh-fp-good');
+    } else {
+      bonusEl.textContent = '💵 --';
+      bonusEl.classList.remove('jh-fp-good');
+    }
+  }
+
+  // Equity - check score breakdown
+  if (equityEl) {
+    const equityInfo = findCriteriaInfo(scoreResult, 'equity');
+    if (equityInfo && equityInfo.detected) {
+      equityEl.innerHTML = '👍 <span>Equity</span>';
+      equityEl.classList.add('jh-fp-good');
+    } else {
+      equityEl.textContent = '📈 --';
+      equityEl.classList.remove('jh-fp-good');
+    }
+  }
+}
+
+/**
+ * Find criteria info in score breakdown
+ */
+function findCriteriaInfo(scoreResult, keyword) {
+  const allBreakdown = [
+    ...(scoreResult.job_to_user_fit?.breakdown || []),
+    ...(scoreResult.user_to_job_fit?.breakdown || [])
+  ];
+
+  for (const item of allBreakdown) {
+    if (item.criteria?.toLowerCase().includes(keyword)) {
+      return {
+        detected: item.score > 0 || item.details?.toLowerCase().includes('detected') ||
+                  item.details?.toLowerCase().includes('mentioned') ||
+                  item.details?.toLowerCase().includes('offers'),
+        score: item.score,
+        details: item.details
+      };
+    }
+  }
+  return null;
+}
+
 function updateExpandedContent(scoreResult) {
   const panel = document.getElementById('jh-floating-panel');
   if (!panel) return;
@@ -179,12 +275,15 @@ function updateExpandedContent(scoreResult) {
     // Show top 4 most relevant criteria
     const topCriteria = allCriteria.slice(0, 4);
 
-    criteriaList.innerHTML = topCriteria.map(c => `
-      <div class="jh-fp-criterion">
-        <span class="jh-fp-criterion-name">${escapeHtml(c.criteria)}</span>
-        <span class="jh-fp-criterion-score ${getScoreClass(c.score * 2)}">${getStarDisplay(c.score)}</span>
-      </div>
-    `).join('');
+    criteriaList.innerHTML = topCriteria.map(c => {
+      const percentage = Math.round((c.score / c.max_score) * 100);
+      return `
+        <div class="jh-fp-criterion">
+          <span class="jh-fp-criterion-name">${escapeHtml(c.criteria)}</span>
+          <span class="jh-fp-criterion-score ${getScoreClass(percentage)}">${c.score}/${c.max_score}</span>
+        </div>
+      `;
+    }).join('');
   }
 }
 
@@ -280,7 +379,7 @@ function setupPanelEventHandlers(panel) {
         sendBtn.classList.add('jh-fp-success');
 
         setTimeout(() => {
-          sendBtn.textContent = 'Send to Job Hunter';
+          sendBtn.textContent = 'Hunt Job';
           sendBtn.classList.remove('jh-fp-success');
           sendBtn.disabled = false;
         }, 2000);
@@ -442,6 +541,13 @@ function getPanelHTML() {
         </div>
       </div>
 
+      <div class="jh-fp-job-highlights">
+        <span class="jh-fp-highlight jh-fp-salary" title="Salary Range">--</span>
+        <span class="jh-fp-highlight jh-fp-workplace" title="Work Location">--</span>
+        <span class="jh-fp-highlight jh-fp-bonus" title="Bonus">--</span>
+        <span class="jh-fp-highlight jh-fp-equity" title="Equity">--</span>
+      </div>
+
       <div class="jh-fp-meter">
         <div class="jh-fp-meter-fill"></div>
       </div>
@@ -472,7 +578,7 @@ function getPanelHTML() {
 
         <div class="jh-fp-buttons">
           <button class="jh-fp-btn jh-fp-details-btn">View Details</button>
-          <button class="jh-fp-btn jh-fp-send-btn jh-fp-primary">Send to Job Hunter</button>
+          <button class="jh-fp-btn jh-fp-send-btn jh-fp-primary">Hunt Job</button>
         </div>
       </div>
 
@@ -642,6 +748,53 @@ function getPanelStyles() {
     .jh-fp-meter-fill.jh-fp-moderate { background: #e67700; }
     .jh-fp-meter-fill.jh-fp-weak { background: #d9480f; }
     .jh-fp-meter-fill.jh-fp-poor { background: #c92a2a; }
+
+    /* Job highlights row */
+    .jh-fp-job-highlights {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 8px 12px;
+      background: #f8f9fa;
+      border-bottom: 1px solid #e9ecef;
+    }
+
+    .jh-fp-highlight {
+      font-size: 11px;
+      padding: 3px 8px;
+      background: #fff;
+      border: 1px solid #dee2e6;
+      border-radius: 12px;
+      color: #495057;
+      white-space: nowrap;
+    }
+
+    .jh-fp-highlight.jh-fp-has-value {
+      font-weight: 600;
+      color: #1a1a2e;
+    }
+
+    .jh-fp-highlight.jh-fp-good {
+      background: #d3f9d8;
+      border-color: #8ce99a;
+      color: #2b8a3e;
+    }
+
+    .jh-fp-highlight.jh-fp-neutral {
+      background: #fff3bf;
+      border-color: #ffd43b;
+      color: #e67700;
+    }
+
+    .jh-fp-highlight.jh-fp-bad {
+      background: #ffe3e3;
+      border-color: #ffa8a8;
+      color: #c92a2a;
+    }
+
+    .jh-fp-highlight span {
+      font-weight: 600;
+    }
 
     /* Expand hint */
     .jh-fp-expand-hint {
