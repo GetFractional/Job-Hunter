@@ -163,14 +163,49 @@ function updateJobHighlights(panel, jobData, scoreResult) {
   const bonusEl = panel.querySelector('.jh-fp-bonus');
   const equityEl = panel.querySelector('.jh-fp-equity');
 
-  // Salary - check multiple possible fields
+  // Salary - format from min/max values or check string fields
   if (salaryEl) {
-    const salary = jobData.salary || jobData.salaryRange || jobData.compensation ||
-                   jobData.salary_range || jobData.pay || jobData.salaryText;
-    if (salary && salary !== 'Not specified' && salary !== '--') {
-      salaryEl.textContent = salary;
+    let salaryDisplay = '';
+    let salaryConfidence = jobData.salaryConfidence || 'NONE';
+
+    // Build salary display from min/max if available
+    if (jobData.salaryMin !== null && jobData.salaryMin !== undefined) {
+      const formatNum = (n) => {
+        if (n >= 1000000) return `$${(n / 1000000).toFixed(1)}M`;
+        if (n >= 1000) return `$${Math.round(n / 1000)}K`;
+        return `$${n}`;
+      };
+      if (jobData.salaryMax && jobData.salaryMax !== jobData.salaryMin) {
+        salaryDisplay = `${formatNum(jobData.salaryMin)}-${formatNum(jobData.salaryMax)}`;
+      } else {
+        salaryDisplay = formatNum(jobData.salaryMin);
+      }
+    } else {
+      // Fallback to string fields
+      const salary = jobData.salary || jobData.salaryRange || jobData.compensation ||
+                     jobData.salary_range || jobData.pay || jobData.salaryText;
+      if (salary && salary !== 'Not specified' && salary !== '--') {
+        salaryDisplay = salary;
+      }
+    }
+
+    if (salaryDisplay) {
+      salaryEl.textContent = salaryDisplay;
       salaryEl.classList.add('jh-fp-has-value');
-      salaryEl.title = 'Salary Range';
+      // Add confidence indicator to title
+      const confidenceTitles = {
+        'HIGH': 'Salary from job posting',
+        'MEDIUM': 'Salary from description (keyword match)',
+        'LOW': 'Salary inferred from description',
+        'NONE': 'Salary'
+      };
+      salaryEl.title = confidenceTitles[salaryConfidence] || 'Salary Range';
+
+      // Visual confidence indicator - slightly dim if low confidence
+      salaryEl.classList.remove('jh-fp-confidence-low');
+      if (salaryConfidence === 'LOW') {
+        salaryEl.classList.add('jh-fp-confidence-low');
+      }
     } else {
       salaryEl.textContent = 'Salary N/A';
       salaryEl.classList.remove('jh-fp-has-value');
@@ -264,47 +299,91 @@ function updateExpandedContent(scoreResult) {
   const panel = document.getElementById('jh-floating-panel');
   if (!panel) return;
 
-  const j2uSection = panel.querySelector('.jh-fp-j2u-score');
-  const u2jSection = panel.querySelector('.jh-fp-u2j-score');
-  const criteriaList = panel.querySelector('.jh-fp-criteria-list');
+  const j2uScoreEl = panel.querySelector('.jh-fp-j2u-score');
+  const u2jScoreEl = panel.querySelector('.jh-fp-u2j-score');
+  const j2uCriteriaList = panel.querySelector('.jh-fp-j2u-criteria');
+  const u2jCriteriaList = panel.querySelector('.jh-fp-u2j-criteria');
   const actionText = panel.querySelector('.jh-fp-action');
 
-  if (j2uSection) {
-    j2uSection.textContent = `${scoreResult.job_to_user_fit.score}/50`;
+  // Update Job→You score
+  if (j2uScoreEl) {
+    const j2uScore = scoreResult.job_to_user_fit?.score || 0;
+    j2uScoreEl.textContent = `${j2uScore}/50`;
+    j2uScoreEl.className = 'jh-fp-j2u-score ' + getSubScoreClass(j2uScore);
   }
 
-  if (u2jSection) {
-    u2jSection.textContent = `${scoreResult.user_to_job_fit.score}/50`;
+  // Update You→Job score
+  if (u2jScoreEl) {
+    const u2jScore = scoreResult.user_to_job_fit?.score || 0;
+    u2jScoreEl.textContent = `${u2jScore}/50`;
+    u2jScoreEl.className = 'jh-fp-u2j-score ' + getSubScoreClass(u2jScore);
   }
 
+  // Update action text
   if (actionText && scoreResult.interpretation) {
     actionText.textContent = scoreResult.interpretation.action || 'Review details';
   }
 
-  // Render top criteria (limiting to key ones for compact view)
-  if (criteriaList) {
-    const allCriteria = [
-      ...(scoreResult.job_to_user_fit?.breakdown || []),
-      ...(scoreResult.user_to_job_fit?.breakdown || [])
-    ].sort((a, b) => (b.score || 0) - (a.score || 0));
+  // Render Job→You criteria (left column)
+  if (j2uCriteriaList) {
+    const j2uCriteria = (scoreResult.job_to_user_fit?.breakdown || [])
+      .filter(c => !c.criteria?.toLowerCase().includes('hiring urgency'));
+    j2uCriteriaList.innerHTML = renderCriteriaItems(j2uCriteria);
+  }
 
-    // Show top 4 most relevant criteria
-    const topCriteria = allCriteria.slice(0, 4);
+  // Render You→Job criteria (right column)
+  if (u2jCriteriaList) {
+    const u2jCriteria = scoreResult.user_to_job_fit?.breakdown || [];
+    u2jCriteriaList.innerHTML = renderCriteriaItems(u2jCriteria);
+  }
+}
 
-    criteriaList.innerHTML = topCriteria.map(c => {
-      const maxScore = c.max_score || 50;
-      const score = c.score || 0;
-      const percentage = Math.round((score / maxScore) * 100);
-      const scoreClass = percentage >= 70 ? 'jh-fp-criterion-high' :
-                         percentage >= 40 ? 'jh-fp-criterion-mid' : 'jh-fp-criterion-low';
-      return `
-        <div class="jh-fp-criterion ${scoreClass}">
-          <span class="jh-fp-criterion-name">${escapeHtml(c.criteria)}</span>
-          <span class="jh-fp-criterion-score">${score}/${maxScore}</span>
+/**
+ * Render criteria items as HTML
+ * @param {Array} criteria - Array of criterion objects
+ * @returns {string} HTML string
+ */
+function renderCriteriaItems(criteria) {
+  return criteria.map(c => {
+    const maxScore = c.max_score || 50;
+    const score = c.score || 0;
+    const percentage = Math.round((score / maxScore) * 100);
+    const scoreClass = percentage >= 70 ? 'jh-fp-criterion-high' :
+                       percentage >= 40 ? 'jh-fp-criterion-mid' : 'jh-fp-criterion-low';
+
+    // Show matched skills as tags if available
+    let skillTagsHtml = '';
+    if (c.matched_skills && c.matched_skills.length > 0) {
+      skillTagsHtml = `
+        <div class="jh-fp-skill-tags">
+          ${c.matched_skills.slice(0, 3).map(skill =>
+            `<span class="jh-fp-skill-tag">${escapeHtml(skill)}</span>`
+          ).join('')}
+          ${c.matched_skills.length > 3 ? `<span class="jh-fp-skill-more">+${c.matched_skills.length - 3}</span>` : ''}
         </div>
       `;
-    }).join('');
-  }
+    }
+
+    return `
+      <div class="jh-fp-criterion ${scoreClass}" title="${escapeHtml(c.rationale || '')}">
+        <div class="jh-fp-criterion-row">
+          <span class="jh-fp-criterion-name">${escapeHtml(c.criteria)}</span>
+          <span class="jh-fp-criterion-score">${score}</span>
+        </div>
+        ${c.actual_value ? `<span class="jh-fp-criterion-value">${escapeHtml(c.actual_value)}</span>` : ''}
+        ${skillTagsHtml}
+      </div>
+    `;
+  }).join('');
+}
+
+/**
+ * Get CSS class based on sub-score (0-50 scale)
+ */
+function getSubScoreClass(score) {
+  if (score >= 40) return 'jh-fp-subscore-high';
+  if (score >= 25) return 'jh-fp-subscore-mid';
+  return 'jh-fp-subscore-low';
 }
 
 /**
@@ -585,19 +664,29 @@ function getPanelHTML() {
           <span class="jh-fp-title">Loading role...</span>
         </div>
 
-        <div class="jh-fp-scores-row">
-          <div class="jh-fp-score-col">
-            <span class="jh-fp-score-type">Job Fit</span>
-            <span class="jh-fp-j2u-score">--/50</span>
+        <!-- Side-by-side columns for expanded view -->
+        <div class="jh-fp-columns">
+          <!-- Left Column: Job → You -->
+          <div class="jh-fp-column jh-fp-column-left">
+            <div class="jh-fp-column-header">
+              <span class="jh-fp-column-title">Job → You</span>
+              <span class="jh-fp-j2u-score">--/50</span>
+            </div>
+            <div class="jh-fp-criteria-list jh-fp-j2u-criteria">
+              <!-- Populated dynamically -->
+            </div>
           </div>
-          <div class="jh-fp-score-col">
-            <span class="jh-fp-score-type">Your Match</span>
-            <span class="jh-fp-u2j-score">--/50</span>
-          </div>
-        </div>
 
-        <div class="jh-fp-criteria-list">
-          <!-- Populated dynamically -->
+          <!-- Right Column: You → Job -->
+          <div class="jh-fp-column jh-fp-column-right">
+            <div class="jh-fp-column-header">
+              <span class="jh-fp-column-title">You → Job</span>
+              <span class="jh-fp-u2j-score">--/50</span>
+            </div>
+            <div class="jh-fp-criteria-list jh-fp-u2j-criteria">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
         </div>
 
         <div class="jh-fp-action-row">
@@ -652,9 +741,14 @@ function getPanelStyles() {
       background: #fff;
       border-radius: 12px;
       box-shadow: 0 4px 20px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05);
-      min-width: 260px;
-      max-width: 320px;
+      min-width: 280px;
+      max-width: 300px;
       overflow: hidden;
+      transition: max-width 0.25s ease;
+    }
+
+    #jh-floating-panel.jh-fp-expanded .jh-fp-container {
+      max-width: 600px;
     }
 
     /* Drag handle */
@@ -815,6 +909,11 @@ function getPanelStyles() {
       color: #1a1a2e;
     }
 
+    .jh-fp-highlight.jh-fp-confidence-low {
+      font-style: italic;
+      opacity: 0.8;
+    }
+
     .jh-fp-highlight.jh-fp-good {
       background: #d3f9d8;
       border-color: #8ce99a;
@@ -886,64 +985,105 @@ function getPanelStyles() {
       color: #1a1a2e;
     }
 
-    .jh-fp-scores-row {
+    /* Side-by-side columns */
+    .jh-fp-columns {
       display: flex;
-      gap: 12px;
+      gap: 16px;
       margin-bottom: 12px;
     }
 
-    .jh-fp-score-col {
+    .jh-fp-column {
       flex: 1;
-      background: #f8f9fa;
-      padding: 8px;
-      border-radius: 6px;
-      text-align: center;
+      min-width: 0;
     }
 
-    .jh-fp-score-type {
-      display: block;
-      font-size: 10px;
-      color: #868e96;
-      text-transform: uppercase;
-      margin-bottom: 2px;
+    .jh-fp-column-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 8px;
+      background: #f1f3f5;
+      border-radius: 6px 6px 0 0;
+      margin-bottom: 0;
     }
+
+    .jh-fp-column-title {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #495057;
+    }
+
+    .jh-fp-column-left .jh-fp-column-header {
+      background: linear-gradient(135deg, #e7f5ff 0%, #d0ebff 100%);
+    }
+
+    .jh-fp-column-right .jh-fp-column-header {
+      background: linear-gradient(135deg, #fff3bf 0%, #ffe066 100%);
+    }
+
+    .jh-fp-column-left .jh-fp-column-title { color: #1971c2; }
+    .jh-fp-column-right .jh-fp-column-title { color: #e67700; }
 
     .jh-fp-j2u-score,
     .jh-fp-u2j-score {
-      font-size: 14px;
-      font-weight: 600;
-      color: #1a1a2e;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.6);
     }
 
-    .jh-fp-criteria-list {
-      margin-bottom: 10px;
+    .jh-fp-subscore-high { color: #2b8a3e; }
+    .jh-fp-subscore-mid { color: #e67700; }
+    .jh-fp-subscore-low { color: #c92a2a; }
+
+    .jh-fp-column .jh-fp-criteria-list {
+      background: #f8f9fa;
+      border-radius: 0 0 6px 6px;
+      padding: 6px;
+      margin-bottom: 0;
     }
 
     .jh-fp-criterion {
       display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 4px 0;
-      border-bottom: 1px solid #f1f3f5;
+      flex-direction: column;
+      padding: 6px 8px;
+      background: #fff;
+      border-radius: 4px;
+      margin-bottom: 4px;
+      cursor: help;
     }
 
     .jh-fp-criterion:last-child {
-      border-bottom: none;
+      margin-bottom: 0;
+    }
+
+    .jh-fp-criterion-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
 
     .jh-fp-criterion-name {
       font-size: 11px;
-      color: #495057;
+      font-weight: 500;
+      color: #1a1a2e;
       flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .jh-fp-criterion-score {
-      font-size: 11px;
-      font-weight: 600;
-      padding: 2px 6px;
-      border-radius: 4px;
-      background: #f1f3f5;
-      color: #495057;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 1px 4px;
+      border-radius: 3px;
+      margin-left: 6px;
+      flex-shrink: 0;
     }
 
     .jh-fp-criterion.jh-fp-criterion-high .jh-fp-criterion-score {
@@ -959,6 +1099,38 @@ function getPanelStyles() {
     .jh-fp-criterion.jh-fp-criterion-low .jh-fp-criterion-score {
       background: #ffe3e3;
       color: #c92a2a;
+    }
+
+    .jh-fp-criterion-value {
+      font-size: 10px;
+      color: #868e96;
+      margin-top: 2px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Skill tags in criteria */
+    .jh-fp-skill-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3px;
+      margin-top: 4px;
+    }
+
+    .jh-fp-skill-tag {
+      font-size: 9px;
+      padding: 1px 5px;
+      background: #e7f5ff;
+      color: #1971c2;
+      border-radius: 8px;
+      border: 1px solid #a5d8ff;
+    }
+
+    .jh-fp-skill-more {
+      font-size: 9px;
+      padding: 1px 5px;
+      color: #868e96;
     }
 
     .jh-fp-action-row {
