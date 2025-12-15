@@ -319,7 +319,8 @@ function checkDealBreakers(jobPayload, userProfile) {
 
   // Check: No equity when required
   if (dealBreakers.includes('no_equity')) {
-    const equityRequired = userProfile?.preferences?.bonus_and_equity_preference === 'required';
+    const equityRequired = userProfile?.preferences?.equity_preference === 'required' ||
+                           userProfile?.preferences?.bonus_and_equity_preference === 'required';
     const equityMentioned = jobPayload.equityMentioned || jobPayload.equity_mentioned;
     if (equityRequired && equityMentioned === false) {
       return { triggered: true, reason: 'No equity mentioned (you require equity)' };

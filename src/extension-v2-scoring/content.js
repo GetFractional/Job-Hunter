@@ -192,10 +192,7 @@ function extractLinkedInJobData() {
       '.salary-main-rail__data-item',
       '.job-details-fit-level-preferences button'
     ];
-    const salaryText = getTextFromSelectors(salarySelectors) || '';
-    const salaryRange = parseSalaryRange(salaryText);
-    data.salaryMin = salaryRange.min;
-    data.salaryMax = salaryRange.max;
+    const structuredSalaryText = getTextFromSelectors(salarySelectors) || '';
 
     // Job Description - the main description content
     const descriptionSelectors = [
@@ -207,23 +204,15 @@ function extractLinkedInJobData() {
     ];
     data.descriptionText = getTextFromSelectors(descriptionSelectors, true) || '';
 
-    // Fallback: parse salary from description when top-card insights are empty
-    if (data.salaryMin === null && data.salaryMax === null && data.descriptionText) {
-      const parsedFromDesc = findSalaryInText(data.descriptionText);
-      if (parsedFromDesc.min !== null && parsedFromDesc.max !== null) {
-        data.salaryMin = parsedFromDesc.min;
-        data.salaryMax = parsedFromDesc.max;
-      }
-    }
-
-    // Fallback: parse salary from description when top-card insights are empty
-    if (data.salaryMin === null && data.salaryMax === null && data.descriptionText) {
-      const descSalary = findSalaryInText(data.descriptionText);
-      if (descSalary.min !== null && descSalary.max !== null) {
-        data.salaryMin = descSalary.min;
-        data.salaryMax = descSalary.max;
-      }
-    }
+    // Multi-pass salary extraction with confidence levels
+    const salaryResult = extractSalaryWithConfidence({
+      structuredSalary: structuredSalaryText,
+      descriptionText: data.descriptionText
+    });
+    data.salaryMin = salaryResult.min;
+    data.salaryMax = salaryResult.max;
+    data.salaryConfidence = salaryResult.confidence;
+    data.salarySource = salaryResult.source;
 
     // Extract workplace type / job type / salary hints from preference buttons
     const preferenceButtons = Array.from(document.querySelectorAll('.job-details-fit-level-preferences button'));
@@ -251,12 +240,14 @@ function extractLinkedInJobData() {
         data.employmentType = 'Internship';
       }
 
-      // Salary fallback: if main selectors missed, try parsing here
-      if (data.salaryMin === null || data.salaryMax === null) {
+      // Salary from preference button (HIGH confidence - structured field)
+      if (data.salaryConfidence !== SALARY_CONFIDENCE.HIGH) {
         const prefSalary = parseSalaryRange(text);
         if (prefSalary.min !== null && prefSalary.max !== null) {
           data.salaryMin = prefSalary.min;
           data.salaryMax = prefSalary.max;
+          data.salaryConfidence = SALARY_CONFIDENCE.HIGH;
+          data.salarySource = 'preference_button';
         }
       }
     }
@@ -452,10 +443,7 @@ function extractIndeedJobData() {
       '.jobsearch-JobMetadataHeader-item',
       '#salaryInfoAndJobType span'
     ];
-    const salaryText = getTextFromSelectors(salarySelectors) || '';
-    const salaryRange = parseSalaryRange(salaryText);
-    data.salaryMin = salaryRange.min;
-    data.salaryMax = salaryRange.max;
+    const structuredSalaryText = getTextFromSelectors(salarySelectors) || '';
 
     // Job Description
     const descriptionSelectors = [
@@ -464,14 +452,15 @@ function extractIndeedJobData() {
     ];
     data.descriptionText = getTextFromSelectors(descriptionSelectors, true) || '';
 
-    // Salary fallback from description if primary fields are empty
-    if (data.salaryMin === null && data.salaryMax === null && data.descriptionText) {
-      const descSalary = findSalaryInText(data.descriptionText);
-      if (descSalary.min !== null && descSalary.max !== null) {
-        data.salaryMin = descSalary.min;
-        data.salaryMax = descSalary.max;
-      }
-    }
+    // Multi-pass salary extraction with confidence levels
+    const salaryResult = extractSalaryWithConfidence({
+      structuredSalary: structuredSalaryText,
+      descriptionText: data.descriptionText
+    });
+    data.salaryMin = salaryResult.min;
+    data.salaryMax = salaryResult.max;
+    data.salaryConfidence = salaryResult.confidence;
+    data.salarySource = salaryResult.source;
 
     // Employment type: often near salary info
     const employmentSelectors = [
@@ -535,15 +524,82 @@ function getTextFromSelectors(selectors, preserveWhitespace = false) {
 }
 
 /**
- * Find salary information in descriptive text, gated by salary-related keywords to avoid false positives
+ * Salary extraction confidence levels
+ */
+const SALARY_CONFIDENCE = {
+  HIGH: 'HIGH',       // Explicit structured field from job site
+  MEDIUM: 'MEDIUM',   // Salary keyword + $ in description
+  LOW: 'LOW',         // Inferred from description without keyword
+  NONE: 'NONE'        // No salary data found
+};
+
+/**
+ * Multi-pass salary extraction with confidence levels
+ * Tries multiple sources in priority order and returns best match
+ * @param {Object} options - Extraction options
+ * @param {string} options.structuredSalary - Salary from structured UI elements (highest priority)
+ * @param {string} options.descriptionText - Full job description text
+ * @returns {{min: number|null, max: number|null, confidence: string, source: string}}
+ */
+function extractSalaryWithConfidence(options) {
+  const { structuredSalary, descriptionText } = options;
+
+  // Pass 1: Structured salary field (HIGH confidence)
+  if (structuredSalary) {
+    const parsed = parseSalaryRange(structuredSalary);
+    if (parsed.min !== null && parsed.max !== null) {
+      return {
+        ...parsed,
+        confidence: SALARY_CONFIDENCE.HIGH,
+        source: 'structured_field'
+      };
+    }
+  }
+
+  // Pass 2: Keyword-gated search in description (MEDIUM confidence)
+  if (descriptionText) {
+    const mediumResult = findSalaryWithKeyword(descriptionText);
+    if (mediumResult.min !== null && mediumResult.max !== null) {
+      return {
+        ...mediumResult,
+        confidence: SALARY_CONFIDENCE.MEDIUM,
+        source: 'description_keyword'
+      };
+    }
+  }
+
+  // Pass 3: Any salary-like pattern in description (LOW confidence)
+  if (descriptionText) {
+    const lowResult = findAnySalaryPattern(descriptionText);
+    if (lowResult.min !== null && lowResult.max !== null) {
+      return {
+        ...lowResult,
+        confidence: SALARY_CONFIDENCE.LOW,
+        source: 'description_pattern'
+      };
+    }
+  }
+
+  // No salary found
+  return {
+    min: null,
+    max: null,
+    confidence: SALARY_CONFIDENCE.NONE,
+    source: 'none'
+  };
+}
+
+/**
+ * Find salary information using keyword-gated search (MEDIUM confidence)
+ * Requires salary-related keyword near the dollar amount
  * @param {string} text - Full description text
  * @returns {{min: number|null, max: number|null}}
  */
-function findSalaryInText(text) {
+function findSalaryWithKeyword(text) {
   const result = { min: null, max: null };
   if (!text) return result;
 
-  const keywordRegex = /(salary|compensation|pay|base|range|total rewards)/i;
+  const keywordRegex = /(salary|compensation|pay|base|range|total rewards|total comp|annual|per year|\/yr)/i;
   const currencyRegex = /\$|usd/i;
 
   const lines = text
@@ -555,7 +611,10 @@ function findSalaryInText(text) {
     if (!raw || !currencyRegex.test(raw)) return null;
     const parsed = parseSalaryRange(raw);
     if (parsed.min !== null && parsed.max !== null) {
-      return parsed;
+      // Validate it's a reasonable annual salary (>$40K, <$2M)
+      if (parsed.min >= 40000 && parsed.max <= 2000000) {
+        return parsed;
+      }
     }
     return null;
   };
@@ -566,7 +625,7 @@ function findSalaryInText(text) {
     const block = [lines[i]];
     if (lines[i + 1]) block.push(lines[i + 1]);
     if (lines[i + 2]) block.push(lines[i + 2]);
-    if (lines[i + 3]) block.push(lines[i + 3]); // allow two lines after header in case of blank separators
+    if (lines[i + 3]) block.push(lines[i + 3]);
     const parsed = tryParse(block.join(' '));
     if (parsed) return parsed;
   }
@@ -587,6 +646,58 @@ function findSalaryInText(text) {
   }
 
   return result;
+}
+
+/**
+ * Find any salary-like pattern (LOW confidence)
+ * More permissive - finds $XXX,XXX patterns without requiring keywords
+ * @param {string} text - Full description text
+ * @returns {{min: number|null, max: number|null}}
+ */
+function findAnySalaryPattern(text) {
+  const result = { min: null, max: null };
+  if (!text) return result;
+
+  // Look for dollar amounts that look like annual salaries
+  // Match: $150,000 - $200,000, $150K-$200K, $150,000/year
+  const patterns = [
+    // Range pattern: $150,000 - $200,000
+    /\$\s*([\d,]+(?:\.\d{2})?)\s*(?:k|K)?\s*[-–to]+\s*\$?\s*([\d,]+(?:\.\d{2})?)\s*(?:k|K)?/g,
+    // Single value with /yr or /year: $180,000/yr
+    /\$\s*([\d,]+(?:\.\d{2})?)\s*(?:k|K)?\s*(?:\/\s*(?:yr|year|annually))/gi
+  ];
+
+  for (const pattern of patterns) {
+    const matches = text.matchAll(pattern);
+    for (const match of matches) {
+      let min = parseFloat(match[1].replace(/,/g, ''));
+      let max = match[2] ? parseFloat(match[2].replace(/,/g, '')) : min;
+
+      // Handle K suffix
+      if (match[0].toLowerCase().includes('k')) {
+        if (min < 1000) min *= 1000;
+        if (max < 1000) max *= 1000;
+      }
+
+      // Validate reasonable annual salary range
+      if (min >= 40000 && max <= 2000000 && max >= min) {
+        return { min, max };
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Find salary information in descriptive text, gated by salary-related keywords to avoid false positives
+ * @param {string} text - Full description text
+ * @returns {{min: number|null, max: number|null}}
+ * @deprecated Use extractSalaryWithConfidence for better results
+ */
+function findSalaryInText(text) {
+  const result = extractSalaryWithConfidence({ descriptionText: text });
+  return { min: result.min, max: result.max };
 }
 
 /**
