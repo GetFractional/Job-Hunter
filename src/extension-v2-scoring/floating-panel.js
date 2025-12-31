@@ -162,6 +162,9 @@ function updateJobHighlights(panel, jobData, scoreResult) {
   const workplaceEl = panel.querySelector('.jh-fp-workplace');
   const bonusEl = panel.querySelector('.jh-fp-bonus');
   const equityEl = panel.querySelector('.jh-fp-equity');
+  const postedEl = panel.querySelector('.jh-fp-posted');
+  const applicantsEl = panel.querySelector('.jh-fp-applicants');
+  const hiringManagerEl = panel.querySelector('.jh-fp-hiring-manager');
 
   // Salary - format from min/max values or check string fields
   if (salaryEl) {
@@ -270,102 +273,133 @@ function updateJobHighlights(panel, jobData, scoreResult) {
       equityEl.setAttribute('data-tooltip', 'No equity/stock options mentioned in posting');
     }
   }
+
+  // Posted Date
+  if (postedEl) {
+    const posted = jobData.postedDate;
+    if (posted) {
+      postedEl.textContent = `📅 ${posted}`;
+      postedEl.classList.add('jh-fp-has-value');
+      postedEl.setAttribute('data-tooltip', `Posted: ${posted}`);
+    } else {
+      postedEl.textContent = '';
+      postedEl.style.display = 'none';
+    }
+  }
+
+  // Applicant Count
+  if (applicantsEl) {
+    const count = jobData.applicantCount;
+    if (count !== null && count !== undefined) {
+      applicantsEl.textContent = `👥 ${count} applicants`;
+      applicantsEl.classList.add('jh-fp-has-value');
+      // Color code based on competition level
+      applicantsEl.classList.remove('jh-fp-good', 'jh-fp-neutral', 'jh-fp-bad');
+      if (count < 25) {
+        applicantsEl.classList.add('jh-fp-good');
+        applicantsEl.setAttribute('data-tooltip', `Low competition: ${count} applicants`);
+      } else if (count < 100) {
+        applicantsEl.classList.add('jh-fp-neutral');
+        applicantsEl.setAttribute('data-tooltip', `Moderate competition: ${count} applicants`);
+      } else {
+        applicantsEl.classList.add('jh-fp-bad');
+        applicantsEl.setAttribute('data-tooltip', `High competition: ${count} applicants`);
+      }
+    } else {
+      applicantsEl.textContent = '';
+      applicantsEl.style.display = 'none';
+    }
+  }
+
+  // Hiring Manager
+  if (hiringManagerEl) {
+    const manager = jobData.hiringManager;
+    if (manager) {
+      hiringManagerEl.textContent = `👤 ${manager}`;
+      hiringManagerEl.classList.add('jh-fp-has-value');
+      hiringManagerEl.setAttribute('data-tooltip', `Hiring Manager: ${manager}`);
+    } else {
+      hiringManagerEl.textContent = '';
+      hiringManagerEl.style.display = 'none';
+    }
+  }
 }
 
 /**
  * Detect if bonus is mentioned in the job posting
- * Uses 15-word proximity rule and score threshold to avoid false positives
- * Badge only shows as positive if bonus_score > 15 (threshold out of 50)
+ * Uses strict criteria: only positive patterns count, no generic "bonus" matching
+ * Badge only shows as positive if clear performance/annual bonus indicators found
  */
 function detectBonusInJob(jobData, scoreResult) {
   const description = (jobData.descriptionText || jobData.job_description_text || '').toLowerCase();
 
-  // First check: score threshold from scoring engine (bonus_score > 15 out of 50)
-  const bonusScoreThreshold = 15;
-  const bonusEquityCriterion = scoreResult?.job_to_user_fit?.breakdown?.find(
-    b => b.criteria === 'Bonus & Equity'
-  );
-  const bonusScore = bonusEquityCriterion?.bonus_score || 0;
-
-  // If score is above threshold, trust the scoring engine
-  if (bonusScore > bonusScoreThreshold) {
-    return {
-      found: true,
-      tooltip: `Bonus detected (score: ${bonusScore}/50)`
-    };
-  }
-
-  // Skip text detection if no description
+  // Skip if no description
   if (!description) {
     return { found: false };
   }
 
-  // Positive patterns for performance/annual bonus
+  // STRICT positive patterns - must match one of these specific patterns
   const positivePatterns = [
-    /performance\s+bonus/i,
-    /annual\s+bonus/i,
-    /yearly\s+bonus/i,
-    /target\s+bonus/i,
-    /discretionary\s+bonus/i,
-    /quarterly\s+bonus/i,
-    /bonus\s+(of|up\s+to|target|structure|plan|program|eligibility|eligible)/i,
-    /(\d+%|\d+\s*percent)\s+bonus/i,
-    /bonus\s+(\d+%|\d+\s*percent)/i,
-    /variable\s+(compensation|pay|bonus)/i,
-    /incentive\s+(bonus|compensation|pay)/i
+    { regex: /performance\s+bonus/i, label: 'performance bonus' },
+    { regex: /annual\s+bonus/i, label: 'annual bonus' },
+    { regex: /yearly\s+bonus/i, label: 'yearly bonus' },
+    { regex: /target\s+bonus/i, label: 'target bonus' },
+    { regex: /discretionary\s+bonus/i, label: 'discretionary bonus' },
+    { regex: /quarterly\s+bonus/i, label: 'quarterly bonus' },
+    { regex: /bonus\s+(of|up\s+to)\s+\d+%/i, label: 'bonus percentage' },
+    { regex: /bonus\s+(target|structure|plan|program)/i, label: 'bonus program' },
+    { regex: /\d+%\s+bonus/i, label: 'bonus percentage' },
+    { regex: /bonus\s+\d+%/i, label: 'bonus percentage' },
+    { regex: /variable\s+compensation/i, label: 'variable compensation' },
+    { regex: /variable\s+pay/i, label: 'variable pay' },
+    { regex: /incentive\s+bonus/i, label: 'incentive bonus' },
+    { regex: /incentive\s+compensation/i, label: 'incentive compensation' },
+    { regex: /bonus\s+eligib/i, label: 'bonus eligibility' }
   ];
 
-  // Check for positive pattern matches
-  let hasPositiveMatch = false;
-  let matchedPattern = '';
-  for (const pattern of positivePatterns) {
+  // Negative patterns - if these appear, don't count as positive even with pattern match
+  const negativePatterns = [
+    /sign[-\s]?on\s+bonus/i,
+    /signing\s+bonus/i,
+    /referral\s+bonus/i,
+    /hiring\s+bonus/i,
+    /relocation\s+bonus/i,
+    /retention\s+bonus/i,
+    /spot\s+bonus/i,
+    /new\s+hire\s+bonus/i,
+    /joining\s+bonus/i
+  ];
+
+  // Check for negative patterns first
+  let hasNegativeMatch = false;
+  for (const pattern of negativePatterns) {
     if (pattern.test(description)) {
-      hasPositiveMatch = true;
-      const match = description.match(pattern);
-      if (match) matchedPattern = match[0];
+      hasNegativeMatch = true;
       break;
     }
   }
 
-  if (hasPositiveMatch) {
-    return {
-      found: true,
-      tooltip: `Bonus found: "${matchedPattern}"`
-    };
-  }
-
-  // Apply 15-word proximity rule for generic "bonus" mentions
-  const bonusMatches = [...description.matchAll(/\bbonus\b/gi)];
-  if (bonusMatches.length > 0) {
-    const exclusionWords = ['sign-on', 'signon', 'sign on', 'signing', 'referral', 'hiring', 'relocation', 'retention', 'spot', 'new hire', 'joining'];
-
-    for (const match of bonusMatches) {
-      const bonusIndex = match.index;
-      // Extract up to 15 words before the bonus mention
-      const textBefore = description.substring(Math.max(0, bonusIndex - 150), bonusIndex);
-      const wordsBefore = textBefore.split(/\s+/).slice(-15).join(' ');
-
-      // Check if any exclusion word appears within 15 words before "bonus"
-      let isExcluded = false;
-      for (const exclusion of exclusionWords) {
-        if (wordsBefore.includes(exclusion)) {
-          isExcluded = true;
-          break;
-        }
-      }
-
-      if (!isExcluded) {
-        return {
-          found: true,
-          tooltip: 'Performance bonus mentioned'
-        };
-      }
+  // Check for positive pattern matches
+  for (const { regex, label } of positivePatterns) {
+    if (regex.test(description)) {
+      // Found a positive pattern
+      // If there's also a negative pattern, check if the positive is in a different context
+      // For now, if positive pattern exists and it's not a sign-on type, return true
+      return {
+        found: true,
+        tooltip: `Bonus found: ${label}`
+      };
     }
   }
 
-  // Also check if jobData has bonus flag set
-  if (jobData.bonusMentioned === true) {
-    return { found: true, tooltip: 'Bonus mentioned in job posting' };
+  // Only trust jobData.bonusMentioned if content.js used the strict proximity rule
+  // and we verified it's not just a generic mention
+  if (jobData.bonusMentioned === true && !hasNegativeMatch) {
+    // Double-check by looking for compensation context
+    const compContext = /compensation|salary|pay|total\s+rewards|benefits/i.test(description);
+    if (compContext) {
+      return { found: true, tooltip: 'Bonus mentioned in compensation section' };
+    }
   }
 
   return { found: false };
@@ -404,18 +438,18 @@ function detectEquityInJob(jobData, scoreResult) {
     return { found: false };
   }
 
-  // Positive patterns for compensation equity
+  // Positive patterns for compensation equity (with word boundaries to avoid false positives)
   const positivePatterns = [
     /stock\s+options?/i,
     /equity\s+(grant|package|compensation|awards?|incentive)/i,
-    /rsus?(\s|,|$)/i,
+    /\brsus?\b/i,
     /restricted\s+stock/i,
     /equity\s+in\s+the\s+company/i,
     /shares?\s+(of|in)\s+(the\s+)?company/i,
     /ownership\s+(stake|interest)/i,
     /stock\s+(grant|award|compensation)/i,
     /employee\s+stock\s+purchase/i,
-    /espp/i
+    /\bespp\b/i
   ];
 
   // Negative patterns (DEI/EEO mentions, not compensation)
@@ -997,6 +1031,12 @@ function getPanelHTML() {
         <span class="jh-fp-highlight jh-fp-equity" data-tooltip="Stock options or equity compensation">--</span>
       </div>
 
+      <div class="jh-fp-job-meta">
+        <span class="jh-fp-meta-item jh-fp-posted" data-tooltip="When job was posted">--</span>
+        <span class="jh-fp-meta-item jh-fp-applicants" data-tooltip="Number of applicants">--</span>
+        <span class="jh-fp-meta-item jh-fp-hiring-manager" data-tooltip="Hiring manager">--</span>
+      </div>
+
       <div class="jh-fp-meter">
         <div class="jh-fp-meter-fill"></div>
       </div>
@@ -1271,6 +1311,41 @@ function getPanelStyles() {
     .jh-fp-highlight.jh-fp-has-value {
       font-weight: 600;
       color: #1a1a2e;
+    }
+
+    /* Job meta row - posted date, applicants, hiring manager */
+    .jh-fp-job-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 6px 10px;
+      background: #fff;
+      border-bottom: 1px solid #e9ecef;
+      font-size: 11px;
+      color: #6c757d;
+    }
+
+    .jh-fp-meta-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      cursor: help;
+    }
+
+    .jh-fp-meta-item.jh-fp-has-value {
+      color: #495057;
+    }
+
+    .jh-fp-meta-item.jh-fp-good {
+      color: #2b8a3e;
+    }
+
+    .jh-fp-meta-item.jh-fp-neutral {
+      color: #e67700;
+    }
+
+    .jh-fp-meta-item.jh-fp-bad {
+      color: #c92a2a;
     }
 
     .jh-fp-highlight.jh-fp-confidence-low {
