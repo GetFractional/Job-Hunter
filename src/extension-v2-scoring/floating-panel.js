@@ -274,12 +274,28 @@ function updateJobHighlights(panel, jobData, scoreResult) {
 
 /**
  * Detect if bonus is mentioned in the job posting
- * Uses stricter criteria to avoid false positives
+ * Uses 15-word proximity rule and score threshold to avoid false positives
+ * Badge only shows as positive if bonus_score > 15 (threshold out of 50)
  */
 function detectBonusInJob(jobData, scoreResult) {
   const description = (jobData.descriptionText || jobData.job_description_text || '').toLowerCase();
 
-  // Skip if no description
+  // First check: score threshold from scoring engine (bonus_score > 15 out of 50)
+  const bonusScoreThreshold = 15;
+  const bonusEquityCriterion = scoreResult?.job_to_user_fit?.breakdown?.find(
+    b => b.criteria === 'Bonus & Equity'
+  );
+  const bonusScore = bonusEquityCriterion?.bonus_score || 0;
+
+  // If score is above threshold, trust the scoring engine
+  if (bonusScore > bonusScoreThreshold) {
+    return {
+      found: true,
+      tooltip: `Bonus detected (score: ${bonusScore}/50)`
+    };
+  }
+
+  // Skip text detection if no description
   if (!description) {
     return { found: false };
   }
@@ -291,6 +307,7 @@ function detectBonusInJob(jobData, scoreResult) {
     /yearly\s+bonus/i,
     /target\s+bonus/i,
     /discretionary\s+bonus/i,
+    /quarterly\s+bonus/i,
     /bonus\s+(of|up\s+to|target|structure|plan|program|eligibility|eligible)/i,
     /(\d+%|\d+\s*percent)\s+bonus/i,
     /bonus\s+(\d+%|\d+\s*percent)/i,
@@ -298,18 +315,7 @@ function detectBonusInJob(jobData, scoreResult) {
     /incentive\s+(bonus|compensation|pay)/i
   ];
 
-  // Negative patterns to exclude (false positives)
-  const negativePatterns = [
-    /sign[-\s]?on\s+bonus/i,
-    /signing\s+bonus/i,
-    /referral\s+bonus/i,
-    /hiring\s+bonus/i,
-    /relocation\s+bonus/i,
-    /retention\s+bonus/i,
-    /spot\s+bonus/i
-  ];
-
-  // Check for positive matches
+  // Check for positive pattern matches
   let hasPositiveMatch = false;
   let matchedPattern = '';
   for (const pattern of positivePatterns) {
@@ -321,24 +327,45 @@ function detectBonusInJob(jobData, scoreResult) {
     }
   }
 
-  // Check for negative patterns - these reduce confidence but don't eliminate
-  let hasNegativeMatch = false;
-  for (const pattern of negativePatterns) {
-    if (pattern.test(description)) {
-      hasNegativeMatch = true;
-      break;
+  if (hasPositiveMatch) {
+    return {
+      found: true,
+      tooltip: `Bonus found: "${matchedPattern}"`
+    };
+  }
+
+  // Apply 15-word proximity rule for generic "bonus" mentions
+  const bonusMatches = [...description.matchAll(/\bbonus\b/gi)];
+  if (bonusMatches.length > 0) {
+    const exclusionWords = ['sign-on', 'signon', 'sign on', 'signing', 'referral', 'hiring', 'relocation', 'retention', 'spot', 'new hire', 'joining'];
+
+    for (const match of bonusMatches) {
+      const bonusIndex = match.index;
+      // Extract up to 15 words before the bonus mention
+      const textBefore = description.substring(Math.max(0, bonusIndex - 150), bonusIndex);
+      const wordsBefore = textBefore.split(/\s+/).slice(-15).join(' ');
+
+      // Check if any exclusion word appears within 15 words before "bonus"
+      let isExcluded = false;
+      for (const exclusion of exclusionWords) {
+        if (wordsBefore.includes(exclusion)) {
+          isExcluded = true;
+          break;
+        }
+      }
+
+      if (!isExcluded) {
+        return {
+          found: true,
+          tooltip: 'Performance bonus mentioned'
+        };
+      }
     }
   }
 
-  // Also check score result for bonus detection
-  const bonusFromScore = checkBonusEquityFromScore(scoreResult, 'bonus');
-
-  // Return result
-  if (hasPositiveMatch || (bonusFromScore && !hasNegativeMatch)) {
-    return {
-      found: true,
-      tooltip: matchedPattern ? `Bonus found: "${matchedPattern}"` : 'Performance bonus mentioned'
-    };
+  // Also check if jobData has bonus flag set
+  if (jobData.bonusMentioned === true) {
+    return { found: true, tooltip: 'Bonus mentioned in job posting' };
   }
 
   return { found: false };
@@ -346,12 +373,33 @@ function detectBonusInJob(jobData, scoreResult) {
 
 /**
  * Detect if equity is mentioned in the job posting
- * Uses stricter criteria to avoid DEI/EEO false positives
+ * Uses score threshold and stricter criteria to avoid DEI/EEO false positives
+ * Badge only shows as positive if equity_score > 15 (threshold out of 50)
  */
 function detectEquityInJob(jobData, scoreResult) {
   const description = (jobData.descriptionText || jobData.job_description_text || '').toLowerCase();
 
-  // Skip if no description
+  // First check: score threshold from scoring engine (equity_score > 15 out of 50)
+  const equityScoreThreshold = 15;
+  const bonusEquityCriterion = scoreResult?.job_to_user_fit?.breakdown?.find(
+    b => b.criteria === 'Bonus & Equity'
+  );
+  const equityScore = bonusEquityCriterion?.equity_score || 0;
+
+  // If score is above threshold, trust the scoring engine
+  if (equityScore > equityScoreThreshold) {
+    return {
+      found: true,
+      tooltip: `Equity detected (score: ${equityScore}/50)`
+    };
+  }
+
+  // Also check if explicitly mentioned in jobData (from content.js detection)
+  if (jobData.equityMentioned === true) {
+    return { found: true, tooltip: 'Equity/stock options mentioned' };
+  }
+
+  // Skip text detection if no description
   if (!description) {
     return { found: false };
   }
@@ -379,11 +427,6 @@ function detectEquityInJob(jobData, scoreResult) {
     /commitment\s+to\s+equity/i
   ];
 
-  // Also check if explicitly mentioned in jobData
-  if (jobData.equityMentioned === true) {
-    return { found: true, tooltip: 'Equity/stock options mentioned' };
-  }
-
   // Check for positive matches
   let hasPositiveMatch = false;
   let matchedPattern = '';
@@ -405,9 +448,6 @@ function detectEquityInJob(jobData, scoreResult) {
     }
   }
 
-  // Also check score result for equity detection
-  const equityFromScore = checkBonusEquityFromScore(scoreResult, 'equity');
-
   // If we have a strong positive pattern, trust it even with DEI mentions
   if (hasPositiveMatch && matchedPattern.match(/stock|rsu|espp|ownership/i)) {
     return {
@@ -422,11 +462,6 @@ function detectEquityInJob(jobData, scoreResult) {
       found: true,
       tooltip: matchedPattern ? `Equity found: "${matchedPattern}"` : 'Equity compensation mentioned'
     };
-  }
-
-  // Fall back to score result
-  if (equityFromScore && !hasNegativeMatch) {
-    return { found: true, tooltip: 'Equity compensation mentioned' };
   }
 
   return { found: false };

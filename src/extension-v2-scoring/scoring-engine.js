@@ -23,10 +23,11 @@
  */
 const JOB_TO_USER_WEIGHTS = {
   salary: 0.25,           // How well the salary meets user's floor/target
-  workplaceType: 0.25,    // Remote/Hybrid/On-site alignment
+  workplaceType: 0.20,    // Remote/Hybrid/On-site alignment
   equityBonus: 0.20,      // Whether equity/bonus is present
-  companyStage: 0.15,     // Company maturity level
-  hiringUrgency: 0.15     // Urgency signals from job posting
+  benefits: 0.15,         // Benefits package (health, 401k, PTO, etc.)
+  companyStage: 0.10,     // Company maturity level
+  hiringUrgency: 0.10     // Urgency signals from job posting
 };
 
 /**
@@ -172,6 +173,7 @@ function calculateJobToUserFit(jobPayload, userProfile) {
     scoreSalary(jobPayload, userProfile),
     scoreWorkplaceType(jobPayload, userProfile),
     scoreEquityBonus(jobPayload, userProfile),
+    scoreBenefits(jobPayload, userProfile),
     scoreCompanyStage(jobPayload, userProfile),
     scoreHiringUrgency(jobPayload, userProfile)
   ];
@@ -181,6 +183,7 @@ function calculateJobToUserFit(jobPayload, userProfile) {
     JOB_TO_USER_WEIGHTS.salary,
     JOB_TO_USER_WEIGHTS.workplaceType,
     JOB_TO_USER_WEIGHTS.equityBonus,
+    JOB_TO_USER_WEIGHTS.benefits,
     JOB_TO_USER_WEIGHTS.companyStage,
     JOB_TO_USER_WEIGHTS.hiringUrgency
   ];
@@ -567,6 +570,89 @@ function scoreEquityBonus(jobPayload, userProfile) {
 }
 
 /**
+ * Score benefits package (0-50)
+ * Detects mentions of health, 401k, PTO, and other common benefits
+ * @param {Object} jobPayload - Job data with job_description_text
+ * @param {Object} userProfile - User preferences
+ * @returns {Object} Criterion score result
+ */
+function scoreBenefits(jobPayload, userProfile) {
+  const description = (jobPayload.descriptionText || jobPayload.job_description_text || '').toLowerCase();
+
+  // Benefits categories and their patterns
+  const benefitCategories = {
+    health: {
+      patterns: [/health\s*(insurance|care|coverage|benefits)/i, /medical\s*(insurance|coverage|benefits)/i, /dental/i, /vision/i],
+      weight: 0.30,
+      label: 'Health/Medical'
+    },
+    retirement: {
+      patterns: [/401\s*\(?\s*k\)?/i, /retirement\s*(plan|benefits)/i, /pension/i, /matching\s+contribution/i],
+      weight: 0.20,
+      label: '401k/Retirement'
+    },
+    pto: {
+      patterns: [/pto/i, /paid\s+time\s+off/i, /unlimited\s+pto/i, /vacation\s+(days?|time|policy)/i, /flexible\s+pto/i],
+      weight: 0.20,
+      label: 'PTO/Vacation'
+    },
+    parental: {
+      patterns: [/parental\s+leave/i, /maternity\s+leave/i, /paternity\s+leave/i, /family\s+leave/i],
+      weight: 0.15,
+      label: 'Parental Leave'
+    },
+    other: {
+      patterns: [/life\s+insurance/i, /disability\s+insurance/i, /wellness/i, /gym\s+(membership|reimbursement)/i, /professional\s+development/i, /tuition\s+reimbursement/i, /stipend/i],
+      weight: 0.15,
+      label: 'Other Benefits'
+    }
+  };
+
+  // Count matched benefits
+  const matchedBenefits = [];
+  let totalScore = 0;
+
+  for (const [category, config] of Object.entries(benefitCategories)) {
+    const hasMatch = config.patterns.some(pattern => pattern.test(description));
+    if (hasMatch) {
+      matchedBenefits.push(config.label);
+      totalScore += 50 * config.weight; // Each category contributes proportionally
+    }
+  }
+
+  // Scale score based on how many categories matched
+  const normalizedScore = Math.min(50, Math.round(totalScore));
+
+  // Build actual value
+  let actualValue = 'Not specified';
+  if (matchedBenefits.length > 0) {
+    actualValue = matchedBenefits.join(', ');
+  }
+
+  // Build rationale
+  let rationale = '';
+  if (matchedBenefits.length >= 4) {
+    rationale = 'Comprehensive benefits package mentioned';
+  } else if (matchedBenefits.length >= 2) {
+    rationale = `Some benefits mentioned: ${matchedBenefits.join(', ')}`;
+  } else if (matchedBenefits.length === 1) {
+    rationale = `Only ${matchedBenefits[0]} mentioned`;
+  } else {
+    rationale = 'No benefits information provided (common for job listings)';
+  }
+
+  return {
+    criteria: 'Benefits Package',
+    criteria_description: 'Health insurance, 401k, PTO, parental leave, and other benefits',
+    actual_value: actualValue,
+    score: normalizedScore,
+    rationale,
+    matched_benefits: matchedBenefits,
+    missing_data: matchedBenefits.length === 0
+  };
+}
+
+/**
  * Score company stage/maturity (0-50)
  * Uses headcount as proxy when revenue/funding data unavailable
  * @param {Object} jobPayload - Job data with company_stage, company_headcount, company_revenue
@@ -934,6 +1020,9 @@ function scoreSkillMatch(jobPayload, userProfile) {
     rationale = 'No clear skill overlap detected';
   }
 
+  // Calculate unmatched skills (user's skills not found in the job)
+  const unmatchedSkills = normalizedUserSkills.filter(skill => !matchedSkills.includes(skill));
+
   return {
     criteria: 'Skills Overlap',
     criteria_description: 'How many of your skills are mentioned in the job description requirements',
@@ -941,6 +1030,7 @@ function scoreSkillMatch(jobPayload, userProfile) {
     score: Math.round(score),
     rationale,
     matched_skills: matchedSkills,
+    unmatched_skills: unmatchedSkills,
     match_percentage: Math.round(matchPercentage)
   };
 }

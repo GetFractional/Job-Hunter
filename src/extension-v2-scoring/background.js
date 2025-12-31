@@ -135,10 +135,13 @@ async function handleCreateRecord(jobData, scoreData = null) {
     if (scoreData.user_to_job_fit?.score !== undefined) {
       airtablePayload.fields['Role Fit Score'] = scoreData.user_to_job_fit.score;
     }
-    // Extract matched skills from breakdown
+    // Extract matched and missing skills from breakdown
     const skillsBreakdown = scoreData.user_to_job_fit?.breakdown?.find(b => b.criteria === 'Skills Overlap');
     if (skillsBreakdown?.matched_skills && skillsBreakdown.matched_skills.length > 0) {
       airtablePayload.fields['Matched Skills'] = skillsBreakdown.matched_skills.join(', ');
+    }
+    if (skillsBreakdown?.unmatched_skills && skillsBreakdown.unmatched_skills.length > 0) {
+      airtablePayload.fields['Missing Skills'] = skillsBreakdown.unmatched_skills.join(', ');
     }
     // Store interpretation summary in a notes field if available
     if (scoreData.interpretation?.summary) {

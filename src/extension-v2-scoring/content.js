@@ -80,7 +80,17 @@ function handleLinkedIn() {
     }
   });
 
-  urlObserver.observe(document.body, { childList: true, subtree: true });
+  // Safely observe document.body with validation
+  try {
+    if (document.body && document.body instanceof Node) {
+      urlObserver.observe(document.body, { childList: true, subtree: true });
+      console.log('[Job Hunter] URL observer attached to document.body');
+    } else {
+      console.warn('[Job Hunter] document.body not available for URL observer');
+    }
+  } catch (err) {
+    console.error('[Job Hunter] Failed to attach URL observer:', err);
+  }
 
   // Watch for job card clicks - LinkedIn loads job details in-place
   document.addEventListener('click', (e) => {
@@ -105,44 +115,67 @@ function handleLinkedIn() {
     '.jobs-description'
   ];
 
+  // Track if we already have a detail observer attached
+  let detailObserverActive = false;
+
   const setupDetailObserver = () => {
+    // Don't set up multiple observers
+    if (detailObserverActive) return;
+
     const detailContainer = document.querySelector(jobDetailSelectors.join(', '));
-    if (!detailContainer) return;
 
-    const detailObserver = new MutationObserver((mutations) => {
-      // Check if meaningful content changed (not just minor DOM updates)
-      const hasSignificantChange = mutations.some(m =>
-        m.addedNodes.length > 0 ||
-        m.removedNodes.length > 0 ||
-        (m.type === 'characterData' && m.target.textContent?.length > 20)
-      );
+    // Validate the element exists and is a proper Node before observing
+    if (!detailContainer) {
+      console.log('[Job Hunter] Detail container not found, will retry');
+      return;
+    }
 
-      if (hasSignificantChange) {
-        // Debounce to avoid excessive re-scoring
-        if (contentChangeDebounce) clearTimeout(contentChangeDebounce);
-        contentChangeDebounce = setTimeout(() => {
-          const currentJobId = extractLinkedInJobId(location.href);
-          if (currentJobId && currentJobId !== lastJobId) {
-            lastJobId = currentJobId;
-            lastScoredUrl = '';
-            triggerAutoScore('LinkedIn');
-          }
-        }, 600);
-      }
-    });
+    if (!(detailContainer instanceof Node)) {
+      console.warn('[Job Hunter] Detail container is not a valid Node:', typeof detailContainer);
+      return;
+    }
 
-    detailObserver.observe(detailContainer, {
-      childList: true,
-      subtree: true,
-      characterData: true
-    });
+    try {
+      const detailObserver = new MutationObserver((mutations) => {
+        // Check if meaningful content changed (not just minor DOM updates)
+        const hasSignificantChange = mutations.some(m =>
+          m.addedNodes.length > 0 ||
+          m.removedNodes.length > 0 ||
+          (m.type === 'characterData' && m.target.textContent?.length > 20)
+        );
+
+        if (hasSignificantChange) {
+          // Debounce to avoid excessive re-scoring
+          if (contentChangeDebounce) clearTimeout(contentChangeDebounce);
+          contentChangeDebounce = setTimeout(() => {
+            const currentJobId = extractLinkedInJobId(location.href);
+            if (currentJobId && currentJobId !== lastJobId) {
+              lastJobId = currentJobId;
+              lastScoredUrl = '';
+              triggerAutoScore('LinkedIn');
+            }
+          }, 600);
+        }
+      });
+
+      detailObserver.observe(detailContainer, {
+        childList: true,
+        subtree: true,
+        characterData: true
+      });
+
+      detailObserverActive = true;
+      console.log('[Job Hunter] Detail observer attached successfully');
+    } catch (err) {
+      console.error('[Job Hunter] Failed to attach detail observer:', err);
+    }
   };
 
   // Try to set up detail observer after a delay
   setTimeout(setupDetailObserver, 1000);
-  // Also retry when URL changes
+  // Also retry when URL changes (but only if not already active)
   setInterval(() => {
-    if (!document.querySelector('.jobs-details-observer-active')) {
+    if (!detailObserverActive) {
       setupDetailObserver();
     }
   }, 3000);
@@ -192,9 +225,14 @@ function extractLinkedInJobData() {
     workplaceType: '',
     employmentType: '',
     equityMentioned: false,
+    bonusMentioned: false,
     descriptionText: '',
     jobUrl: window.location.href,
-    source: 'LinkedIn'
+    source: 'LinkedIn',
+    // New extraction fields
+    hiringManager: null,
+    postedDate: null,
+    applicantCount: null
   };
 
   try {
@@ -361,16 +399,66 @@ function extractLinkedInJobData() {
       }
     }
 
-    // Flag if bonus is mentioned in the description (avoid sign-on/referral false positives)
+    // Flag if bonus is mentioned in the description using 15-word proximity rule
     if (data.descriptionText) {
-      const desc = data.descriptionText.toLowerCase();
-      // Positive bonus patterns
-      const bonusPatterns = /performance\s+bonus|annual\s+bonus|yearly\s+bonus|target\s+bonus|discretionary\s+bonus|bonus\s+(of|up\s+to|target|structure|plan|program|eligibility)|(\d+%|\d+\s*percent)\s+bonus|variable\s+(compensation|pay)/i;
-      // Negative patterns to exclude
-      const excludePatterns = /sign[-\s]?on\s+bonus|signing\s+bonus|referral\s+bonus|hiring\s+bonus|relocation\s+bonus/i;
-      if (bonusPatterns.test(desc) && !excludePatterns.test(desc)) {
-        data.bonusMentioned = true;
+      data.bonusMentioned = detectBonusWithProximityRule(data.descriptionText);
+    }
+
+    // Extract Hiring Manager from "Meet the hiring team" section
+    const hiringTeamSelectors = [
+      '.hirer-card__hirer-information a',
+      '.jobs-poster__name',
+      '.hiring-team__title a',
+      '[data-test-hiring-team-card] a',
+      '.job-details-jobs-unified-top-card__hiring-team-member-name'
+    ];
+    const hiringManagerEl = document.querySelector(hiringTeamSelectors.join(', '));
+    if (hiringManagerEl?.textContent?.trim()) {
+      data.hiringManager = hiringManagerEl.textContent.trim();
+    }
+
+    // Extract Posted Date from job card metadata
+    const postedSelectors = [
+      '.job-details-jobs-unified-top-card__primary-description-container time',
+      '.jobs-unified-top-card__posted-date',
+      '.posted-time-ago__text',
+      '.jobs-details-top-card__time-badge',
+      '.job-details-jobs-unified-top-card__job-insight span'
+    ];
+    for (const selector of postedSelectors) {
+      const elements = document.querySelectorAll(selector);
+      for (const el of elements) {
+        const text = el.textContent?.trim() || '';
+        // Match patterns like "Posted 2 days ago", "Reposted 1 week ago", "3 hours ago"
+        const postedMatch = text.match(/(?:posted|reposted)?\s*(\d+)\s+(hour|day|week|month)s?\s+ago/i);
+        if (postedMatch) {
+          data.postedDate = text;
+          break;
+        }
       }
+      if (data.postedDate) break;
+    }
+
+    // Extract Applicant Count (often Premium-only)
+    const applicantSelectors = [
+      '.jobs-unified-top-card__applicant-count',
+      '.job-details-jobs-unified-top-card__job-insight span',
+      '.jobs-details-top-card__bullet',
+      '[data-test-job-applicant-count]'
+    ];
+    for (const selector of applicantSelectors) {
+      const elements = document.querySelectorAll(selector);
+      for (const el of elements) {
+        const text = el.textContent?.trim() || '';
+        // Match patterns like "25 applicants", "Over 100 applicants", "Be among the first 25 applicants"
+        const applicantMatch = text.match(/(?:over\s+)?(\d+)\s+applicants?|be\s+among\s+the\s+first\s+(\d+)/i);
+        if (applicantMatch) {
+          const count = applicantMatch[1] || applicantMatch[2];
+          data.applicantCount = parseInt(count, 10);
+          break;
+        }
+      }
+      if (data.applicantCount) break;
     }
 
     // Clean up the job URL - remove unnecessary parameters
@@ -501,8 +589,13 @@ function extractIndeedJobData() {
     workplaceType: '',
     employmentType: '',
     equityMentioned: false,
+    bonusMentioned: false,
     jobUrl: window.location.href,
-    source: 'Indeed'
+    source: 'Indeed',
+    // New extraction fields
+    hiringManager: null,
+    postedDate: null,
+    applicantCount: null
   };
 
   try {
@@ -604,16 +697,46 @@ function extractIndeedJobData() {
       }
     }
 
-    // Bonus flag: avoid sign-on/referral false positives
+    // Flag if bonus is mentioned in the description using 15-word proximity rule
     if (data.descriptionText) {
-      const desc = data.descriptionText.toLowerCase();
-      // Positive bonus patterns
-      const bonusPatterns = /performance\s+bonus|annual\s+bonus|yearly\s+bonus|target\s+bonus|discretionary\s+bonus|bonus\s+(of|up\s+to|target|structure|plan|program|eligibility)|(\d+%|\d+\s*percent)\s+bonus|variable\s+(compensation|pay)/i;
-      // Negative patterns to exclude
-      const excludePatterns = /sign[-\s]?on\s+bonus|signing\s+bonus|referral\s+bonus|hiring\s+bonus|relocation\s+bonus/i;
-      if (bonusPatterns.test(desc) && !excludePatterns.test(desc)) {
-        data.bonusMentioned = true;
+      data.bonusMentioned = detectBonusWithProximityRule(data.descriptionText);
+    }
+
+    // Extract Posted Date from Indeed job metadata
+    const postedSelectors = [
+      '[data-testid="posted-date"]',
+      '.jobsearch-JobMetadataFooter .date-span',
+      '.date'
+    ];
+    for (const selector of postedSelectors) {
+      const el = document.querySelector(selector);
+      if (el?.textContent?.trim()) {
+        const text = el.textContent.trim();
+        // Match patterns like "Posted 2 days ago", "Today", "Just posted"
+        if (/posted|ago|today|just/i.test(text)) {
+          data.postedDate = text;
+          break;
+        }
       }
+    }
+
+    // Indeed doesn't typically show hiring manager or applicant count prominently
+    // But we can check for any available metadata
+    const applicantSelectors = [
+      '[data-testid="applicants-count"]',
+      '.jobsearch-JobMetadataHeader-item'
+    ];
+    for (const selector of applicantSelectors) {
+      const elements = document.querySelectorAll(selector);
+      for (const el of elements) {
+        const text = el.textContent?.trim() || '';
+        const applicantMatch = text.match(/(\d+)\s+applicants?/i);
+        if (applicantMatch) {
+          data.applicantCount = parseInt(applicantMatch[1], 10);
+          break;
+        }
+      }
+      if (data.applicantCount) break;
     }
 
   } catch (error) {
@@ -646,6 +769,72 @@ function getTextFromSelectors(selectors, preserveWhitespace = false) {
     }
   }
   return null;
+}
+
+/**
+ * Detect if bonus is mentioned in text using 15-word proximity rule
+ * Excludes sign-on, referral, signing, hiring, and relocation bonuses
+ * @param {string} text - Job description text
+ * @returns {boolean} True if performance/annual bonus is mentioned
+ */
+function detectBonusWithProximityRule(text) {
+  if (!text) return false;
+
+  const lowerText = text.toLowerCase();
+
+  // Positive patterns that strongly indicate performance/annual bonus
+  const positivePatterns = [
+    /performance\s+bonus/i,
+    /annual\s+bonus/i,
+    /yearly\s+bonus/i,
+    /target\s+bonus/i,
+    /discretionary\s+bonus/i,
+    /quarterly\s+bonus/i,
+    /bonus\s+(of|up\s+to|target|structure|plan|program|eligibility)/i,
+    /(\d+%|\d+\s*percent)\s+bonus/i,
+    /bonus\s+(\d+%|\d+\s*percent)/i,
+    /variable\s+(compensation|pay)/i,
+    /incentive\s+bonus/i,
+    /bonus\s+incentive/i,
+    /bonus\s+compensation/i
+  ];
+
+  // Check for positive patterns first
+  for (const pattern of positivePatterns) {
+    if (pattern.test(lowerText)) {
+      return true;
+    }
+  }
+
+  // If no clear positive match, look for "bonus" and apply 15-word proximity rule
+  const bonusMatches = [...lowerText.matchAll(/\bbonus\b/gi)];
+  if (bonusMatches.length === 0) return false;
+
+  // Exclusionary words that invalidate a bonus mention if within 15 words
+  const exclusionWords = ['sign-on', 'signon', 'sign on', 'signing', 'referral', 'hiring', 'relocation', 'new hire', 'joining'];
+
+  for (const match of bonusMatches) {
+    const bonusIndex = match.index;
+    // Extract up to 15 words before the bonus mention
+    const textBefore = lowerText.substring(Math.max(0, bonusIndex - 150), bonusIndex);
+    const wordsBefore = textBefore.split(/\s+/).slice(-15).join(' ');
+
+    // Check if any exclusion word appears within the 15 words before "bonus"
+    let isExcluded = false;
+    for (const exclusion of exclusionWords) {
+      if (wordsBefore.includes(exclusion)) {
+        isExcluded = true;
+        break;
+      }
+    }
+
+    // If this "bonus" instance is not excluded by proximity, it's valid
+    if (!isExcluded) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /**
