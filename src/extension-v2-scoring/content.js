@@ -391,7 +391,7 @@ function extractLinkedInJobData() {
     if (data.descriptionText) {
       const desc = data.descriptionText.toLowerCase();
       // Check for compensation equity patterns
-      const equityPatterns = /stock\s+options?|rsus?|restricted\s+stock|equity\s+(grant|package|compensation)|employee\s+stock|espp/i;
+      const equityPatterns = /stock\s+options?|\brsus?\b|restricted\s+stock|equity\s+(grant|package|compensation)|employee\s+stock|\bespp\b/i;
       // Check for DEI patterns to exclude
       const deiPatterns = /diversity[^.]{0,40}equity[^.]{0,40}inclusion|equal\s+opportunity|equity\s+in\s+(hiring|employment|workplace)/i;
       if (equityPatterns.test(desc) || (/\bequity\b/i.test(desc) && !deiPatterns.test(desc))) {
@@ -689,7 +689,7 @@ function extractIndeedJobData() {
     if (data.descriptionText) {
       const desc = data.descriptionText.toLowerCase();
       // Check for compensation equity patterns
-      const equityPatterns = /stock\s+options?|rsus?|restricted\s+stock|equity\s+(grant|package|compensation)|employee\s+stock|espp/i;
+      const equityPatterns = /stock\s+options?|\brsus?\b|restricted\s+stock|equity\s+(grant|package|compensation)|employee\s+stock|\bespp\b/i;
       // Check for DEI patterns to exclude
       const deiPatterns = /diversity[^.]{0,40}equity[^.]{0,40}inclusion|equal\s+opportunity|equity\s+in\s+(hiring|employment|workplace)/i;
       if (equityPatterns.test(desc) || (/\bequity\b/i.test(desc) && !deiPatterns.test(desc))) {
