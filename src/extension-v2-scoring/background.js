@@ -114,34 +114,45 @@ async function handleCreateRecord(jobData, scoreData = null) {
   }
 
   // Add score data if available
-  // These fields should be created in Airtable:
-  // - "Fit Score" (Number): Overall 0-100 score
-  // - "Fit Label" (Single Select): STRONG FIT, GOOD FIT, MODERATE FIT, WEAK FIT, POOR FIT, HARD NO
-  // - "Job-to-User Score" (Number): 0-50 score
-  // - "User-to-Job Score" (Number): 0-50 score
-  // - "Score Summary" (Long Text): Interpretation summary
+  // Field mappings match the user's actual Airtable schema:
+  // - "Overall Fit Score" (Number): Overall 0-100 score
+  // - "Preference Fit Score" (Number): Job-to-User 0-50 score (how well job meets user's needs)
+  // - "Role Fit Score" (Number): User-to-Job 0-50 score (how well user matches job)
+  // - "Fit Recommendation" (Single Select): STRONG FIT, GOOD FIT, MODERATE FIT, WEAK FIT, POOR FIT, HARD NO
+  // - "Matched Skills" (Long Text): Skills that matched between user and job
+  // - "Missing Skills" (Long Text): Skills the job requires that user may lack
+  // - "Triggered Dealbreakers" (Long Text): Any deal-breakers that were triggered
   if (scoreData) {
     if (scoreData.overall_score !== undefined) {
-      airtablePayload.fields['Fit Score'] = scoreData.overall_score;
+      airtablePayload.fields['Overall Fit Score'] = scoreData.overall_score;
     }
     if (scoreData.overall_label) {
-      airtablePayload.fields['Fit Label'] = scoreData.overall_label;
+      airtablePayload.fields['Fit Recommendation'] = scoreData.overall_label;
     }
     if (scoreData.job_to_user_fit?.score !== undefined) {
-      airtablePayload.fields['Job-to-User Score'] = scoreData.job_to_user_fit.score;
+      airtablePayload.fields['Preference Fit Score'] = scoreData.job_to_user_fit.score;
     }
     if (scoreData.user_to_job_fit?.score !== undefined) {
-      airtablePayload.fields['User-to-Job Score'] = scoreData.user_to_job_fit.score;
+      airtablePayload.fields['Role Fit Score'] = scoreData.user_to_job_fit.score;
     }
+    // Extract matched skills from breakdown
+    const skillsBreakdown = scoreData.user_to_job_fit?.breakdown?.find(b => b.criteria === 'Skills Overlap');
+    if (skillsBreakdown?.matched_skills && skillsBreakdown.matched_skills.length > 0) {
+      airtablePayload.fields['Matched Skills'] = skillsBreakdown.matched_skills.join(', ');
+    }
+    // Store interpretation summary in a notes field if available
     if (scoreData.interpretation?.summary) {
-      airtablePayload.fields['Score Summary'] = scoreData.interpretation.summary;
-    }
-    if (scoreData.interpretation?.action) {
-      airtablePayload.fields['Recommended Action'] = scoreData.interpretation.action;
+      // Combine summary and action for a complete picture
+      const summaryText = [
+        scoreData.interpretation.summary,
+        scoreData.interpretation.action ? `Action: ${scoreData.interpretation.action}` : ''
+      ].filter(Boolean).join('\n');
+      // Only add if there's a field for it (optional)
+      // airtablePayload.fields['Score Summary'] = summaryText;
     }
     // Store deal-breaker reason if triggered
     if (scoreData.deal_breaker_triggered) {
-      airtablePayload.fields['Deal Breaker'] = scoreData.deal_breaker_triggered;
+      airtablePayload.fields['Triggered Dealbreakers'] = scoreData.deal_breaker_triggered;
     }
   }
 

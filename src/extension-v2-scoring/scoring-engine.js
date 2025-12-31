@@ -33,12 +33,13 @@ const JOB_TO_USER_WEIGHTS = {
  * Weights for User-to-Job fit criteria
  * These determine how well the user matches the job's requirements
  * Must sum to 1.0
+ * NOTE: revOpsComponent is weighted heavily (0.30) as this is the user's core differentiator
  */
 const USER_TO_JOB_WEIGHTS = {
-  roleType: 0.25,         // Title/seniority alignment with target roles
-  revOpsComponent: 0.20,  // Percentage of JD about RevOps/infrastructure
+  roleType: 0.20,         // Title/seniority alignment with target roles
+  revOpsComponent: 0.30,  // Percentage of JD about RevOps/infrastructure (CRITICAL - user's differentiator)
   skillMatch: 0.20,       // Keyword overlap with user's core skills
-  industryAlignment: 0.15, // Industry match (exact/adjacent/new)
+  industryAlignment: 0.10, // Industry match (exact/adjacent/new)
   orgComplexity: 0.20     // Organizational stability assessment
 };
 

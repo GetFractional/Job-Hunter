@@ -51,27 +51,119 @@ function initJobHunter() {
 function handleLinkedIn() {
   // LinkedIn uses client-side routing, so we need to watch for URL changes
   let lastUrl = location.href;
+  let lastJobId = extractLinkedInJobId(location.href);
+  let contentChangeDebounce = null;
 
   // Check immediately if we're on a job page
   if (isLinkedInJobPage()) {
     injectOverlay('LinkedIn');
   }
 
-  // Watch for navigation changes (LinkedIn is a SPA)
-  const observer = new MutationObserver(() => {
-    if (location.href !== lastUrl) {
-      lastUrl = location.href;
-      // Remove existing overlay if present
-      removeOverlay();
+  // Watch for URL changes (LinkedIn is a SPA)
+  const urlObserver = new MutationObserver(() => {
+    const currentUrl = location.href;
+    const currentJobId = extractLinkedInJobId(currentUrl);
+
+    if (currentUrl !== lastUrl || currentJobId !== lastJobId) {
+      lastUrl = currentUrl;
+      lastJobId = currentJobId;
+      // Reset the scored URL so we re-score the new job
+      lastScoredUrl = '';
+
       // Check if new page is a job page
       if (isLinkedInJobPage()) {
         // Small delay to let page content load
-        setTimeout(() => injectOverlay('LinkedIn'), 500);
+        setTimeout(() => {
+          triggerAutoScore('LinkedIn');
+        }, 500);
       }
     }
   });
 
-  observer.observe(document.body, { childList: true, subtree: true });
+  urlObserver.observe(document.body, { childList: true, subtree: true });
+
+  // Watch for job card clicks - LinkedIn loads job details in-place
+  document.addEventListener('click', (e) => {
+    const jobCard = e.target.closest('.jobs-search-results__list-item, .job-card-container, .scaffold-layout__list-item, [data-job-id]');
+    if (jobCard) {
+      // Reset scored URL to force re-scoring
+      lastScoredUrl = '';
+      // Delay to let the job detail panel update
+      setTimeout(() => {
+        if (isLinkedInJobPage()) {
+          triggerAutoScore('LinkedIn');
+        }
+      }, 800);
+    }
+  });
+
+  // Watch for changes in the job detail panel content
+  const jobDetailSelectors = [
+    '.jobs-details',
+    '.job-details-jobs-unified-top-card',
+    '.jobs-unified-top-card',
+    '.jobs-description'
+  ];
+
+  const setupDetailObserver = () => {
+    const detailContainer = document.querySelector(jobDetailSelectors.join(', '));
+    if (!detailContainer) return;
+
+    const detailObserver = new MutationObserver((mutations) => {
+      // Check if meaningful content changed (not just minor DOM updates)
+      const hasSignificantChange = mutations.some(m =>
+        m.addedNodes.length > 0 ||
+        m.removedNodes.length > 0 ||
+        (m.type === 'characterData' && m.target.textContent?.length > 20)
+      );
+
+      if (hasSignificantChange) {
+        // Debounce to avoid excessive re-scoring
+        if (contentChangeDebounce) clearTimeout(contentChangeDebounce);
+        contentChangeDebounce = setTimeout(() => {
+          const currentJobId = extractLinkedInJobId(location.href);
+          if (currentJobId && currentJobId !== lastJobId) {
+            lastJobId = currentJobId;
+            lastScoredUrl = '';
+            triggerAutoScore('LinkedIn');
+          }
+        }, 600);
+      }
+    });
+
+    detailObserver.observe(detailContainer, {
+      childList: true,
+      subtree: true,
+      characterData: true
+    });
+  };
+
+  // Try to set up detail observer after a delay
+  setTimeout(setupDetailObserver, 1000);
+  // Also retry when URL changes
+  setInterval(() => {
+    if (!document.querySelector('.jobs-details-observer-active')) {
+      setupDetailObserver();
+    }
+  }, 3000);
+}
+
+/**
+ * Extract LinkedIn job ID from URL
+ * @param {string} url - The URL to parse
+ * @returns {string|null} Job ID or null
+ */
+function extractLinkedInJobId(url) {
+  // Match /jobs/view/123456/ pattern
+  const viewMatch = url.match(/\/jobs\/view\/(\d+)/);
+  if (viewMatch) return viewMatch[1];
+
+  // Match currentJobId=123456 query param
+  const urlObj = new URL(url);
+  const currentJobId = urlObj.searchParams.get('currentJobId');
+  if (currentJobId) return currentJobId;
+
+  return null;
 }
 
 /**
@@ -257,9 +349,28 @@ function extractLinkedInJobData() {
       data.location = data.workplaceType;
     }
 
-    // Flag if equity is mentioned in the description
-    if (/equity|stock options?|rsus?/i.test(data.descriptionText || '')) {
-      data.equityMentioned = true;
+    // Flag if equity is mentioned in the description (avoid DEI false positives)
+    if (data.descriptionText) {
+      const desc = data.descriptionText.toLowerCase();
+      // Check for compensation equity patterns
+      const equityPatterns = /stock\s+options?|rsus?|restricted\s+stock|equity\s+(grant|package|compensation)|employee\s+stock|espp/i;
+      // Check for DEI patterns to exclude
+      const deiPatterns = /diversity[^.]{0,40}equity[^.]{0,40}inclusion|equal\s+opportunity|equity\s+in\s+(hiring|employment|workplace)/i;
+      if (equityPatterns.test(desc) || (/\bequity\b/i.test(desc) && !deiPatterns.test(desc))) {
+        data.equityMentioned = true;
+      }
+    }
+
+    // Flag if bonus is mentioned in the description (avoid sign-on/referral false positives)
+    if (data.descriptionText) {
+      const desc = data.descriptionText.toLowerCase();
+      // Positive bonus patterns
+      const bonusPatterns = /performance\s+bonus|annual\s+bonus|yearly\s+bonus|target\s+bonus|discretionary\s+bonus|bonus\s+(of|up\s+to|target|structure|plan|program|eligibility)|(\d+%|\d+\s*percent)\s+bonus|variable\s+(compensation|pay)/i;
+      // Negative patterns to exclude
+      const excludePatterns = /sign[-\s]?on\s+bonus|signing\s+bonus|referral\s+bonus|hiring\s+bonus|relocation\s+bonus/i;
+      if (bonusPatterns.test(desc) && !excludePatterns.test(desc)) {
+        data.bonusMentioned = true;
+      }
     }
 
     // Clean up the job URL - remove unnecessary parameters
@@ -484,10 +595,24 @@ function extractIndeedJobData() {
     // Equity flag: avoid EEO/DEI boilerplate false positives
     if (data.descriptionText) {
       const desc = data.descriptionText.toLowerCase();
-      const mentionsEquity = /equity|stock options?|rsus?/i.test(desc);
-      const isDeiBoilerplate = /diversity[^.]{0,80}equity|equal opportunity employer/i.test(desc);
-      if (mentionsEquity && !isDeiBoilerplate) {
+      // Check for compensation equity patterns
+      const equityPatterns = /stock\s+options?|rsus?|restricted\s+stock|equity\s+(grant|package|compensation)|employee\s+stock|espp/i;
+      // Check for DEI patterns to exclude
+      const deiPatterns = /diversity[^.]{0,40}equity[^.]{0,40}inclusion|equal\s+opportunity|equity\s+in\s+(hiring|employment|workplace)/i;
+      if (equityPatterns.test(desc) || (/\bequity\b/i.test(desc) && !deiPatterns.test(desc))) {
         data.equityMentioned = true;
+      }
+    }
+
+    // Bonus flag: avoid sign-on/referral false positives
+    if (data.descriptionText) {
+      const desc = data.descriptionText.toLowerCase();
+      // Positive bonus patterns
+      const bonusPatterns = /performance\s+bonus|annual\s+bonus|yearly\s+bonus|target\s+bonus|discretionary\s+bonus|bonus\s+(of|up\s+to|target|structure|plan|program|eligibility)|(\d+%|\d+\s*percent)\s+bonus|variable\s+(compensation|pay)/i;
+      // Negative patterns to exclude
+      const excludePatterns = /sign[-\s]?on\s+bonus|signing\s+bonus|referral\s+bonus|hiring\s+bonus|relocation\s+bonus/i;
+      if (bonusPatterns.test(desc) && !excludePatterns.test(desc)) {
+        data.bonusMentioned = true;
       }
     }
 
@@ -1087,8 +1212,32 @@ async function triggerAutoScore(source) {
  */
 window.sendJobToAirtable = async function sendJobToAirtable(jobData, scoreResult = null) {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      reject(new Error('Timed out talking to background script'));
+    let timeoutId = null;
+    let isResolved = false;
+
+    const cleanup = () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+    };
+
+    const safeResolve = (value) => {
+      if (isResolved) return;
+      isResolved = true;
+      cleanup();
+      resolve(value);
+    };
+
+    const safeReject = (error) => {
+      if (isResolved) return;
+      isResolved = true;
+      cleanup();
+      reject(error);
+    };
+
+    timeoutId = setTimeout(() => {
+      safeReject(new Error('Timed out talking to background script'));
     }, 8000);
 
     // Include score data if available
@@ -1101,19 +1250,31 @@ window.sendJobToAirtable = async function sendJobToAirtable(jobData, scoreResult
       payload.score = scoreResult;
     }
 
-    chrome.runtime.sendMessage(payload, resp => {
-      clearTimeout(timeout);
-      const lastErr = chrome.runtime.lastError;
-      if (lastErr) {
-        reject(new Error(lastErr.message || 'Message failed'));
-        return;
-      }
-      if (resp && resp.success) {
-        resolve(resp);
-      } else {
-        reject(new Error(resp?.error || 'Failed to save job'));
-      }
-    });
+    try {
+      chrome.runtime.sendMessage(payload, (resp) => {
+        // Check for Chrome runtime errors first
+        const lastErr = chrome.runtime.lastError;
+        if (lastErr) {
+          console.error('[Job Hunter] Runtime error:', lastErr.message);
+          safeReject(new Error(lastErr.message || 'Message failed'));
+          return;
+        }
+
+        // Handle undefined response (background script didn't respond)
+        if (resp === undefined) {
+          safeReject(new Error('No response from background script'));
+          return;
+        }
+
+        if (resp && resp.success) {
+          safeResolve(resp);
+        } else {
+          safeReject(new Error(resp?.error || 'Failed to save job'));
+        }
+      });
+    } catch (err) {
+      safeReject(new Error(`Send message error: ${err.message}`));
+    }
   });
 }
 

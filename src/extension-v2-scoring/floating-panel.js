@@ -192,14 +192,14 @@ function updateJobHighlights(panel, jobData, scoreResult) {
     if (salaryDisplay) {
       salaryEl.textContent = salaryDisplay;
       salaryEl.classList.add('jh-fp-has-value');
-      // Add confidence indicator to title
+      // Add confidence indicator to data-tooltip
       const confidenceTitles = {
         'HIGH': 'Salary from job posting',
         'MEDIUM': 'Salary from description (keyword match)',
         'LOW': 'Salary inferred from description',
-        'NONE': 'Salary'
+        'NONE': 'Salary range'
       };
-      salaryEl.title = confidenceTitles[salaryConfidence] || 'Salary Range';
+      salaryEl.setAttribute('data-tooltip', confidenceTitles[salaryConfidence] || 'Salary range');
 
       // Visual confidence indicator - slightly dim if low confidence
       salaryEl.classList.remove('jh-fp-confidence-low');
@@ -209,7 +209,7 @@ function updateJobHighlights(panel, jobData, scoreResult) {
     } else {
       salaryEl.textContent = 'Salary N/A';
       salaryEl.classList.remove('jh-fp-has-value');
-      salaryEl.title = 'Salary not specified';
+      salaryEl.setAttribute('data-tooltip', 'Salary not specified in posting');
     }
   }
 
@@ -222,55 +222,220 @@ function updateJobHighlights(panel, jobData, scoreResult) {
       if (wpLower.includes('remote')) {
         workplaceEl.textContent = 'Remote';
         workplaceEl.classList.add('jh-fp-good');
+        workplaceEl.setAttribute('data-tooltip', 'Remote position - matches your preference');
       } else if (wpLower.includes('hybrid')) {
         workplaceEl.textContent = 'Hybrid';
         workplaceEl.classList.add('jh-fp-neutral');
+        workplaceEl.setAttribute('data-tooltip', 'Hybrid - some office time required');
       } else if (wpLower.includes('on-site') || wpLower.includes('onsite')) {
         workplaceEl.textContent = 'On-site';
         workplaceEl.classList.add('jh-fp-bad');
+        workplaceEl.setAttribute('data-tooltip', 'On-site only - requires physical presence');
       } else {
         workplaceEl.textContent = workplace;
+        workplaceEl.setAttribute('data-tooltip', 'Work location type');
       }
     } else {
       workplaceEl.textContent = 'Location N/A';
+      workplaceEl.setAttribute('data-tooltip', 'Work location not specified');
     }
   }
 
-  // Bonus - check score breakdown for detection
+  // Bonus - scan job description for actual bonus mentions
   if (bonusEl) {
-    const bonusDetected = checkBonusEquityDetected(scoreResult, 'bonus');
+    const bonusDetected = detectBonusInJob(jobData, scoreResult);
     bonusEl.classList.remove('jh-fp-good', 'jh-fp-bad');
-    if (bonusDetected) {
+    if (bonusDetected.found) {
       bonusEl.innerHTML = '<span class="jh-fp-thumb jh-fp-thumb-up">▲</span> Bonus';
       bonusEl.classList.add('jh-fp-good');
-      bonusEl.title = 'Bonus mentioned in job posting';
+      bonusEl.setAttribute('data-tooltip', bonusDetected.tooltip || 'Performance bonus mentioned');
     } else {
       bonusEl.innerHTML = '<span class="jh-fp-thumb jh-fp-thumb-down">▼</span> Bonus';
       bonusEl.classList.add('jh-fp-bad');
-      bonusEl.title = 'No bonus mentioned';
+      bonusEl.setAttribute('data-tooltip', 'No performance bonus mentioned in posting');
     }
   }
 
-  // Equity - check score breakdown for detection
+  // Equity - scan job description for actual equity mentions
   if (equityEl) {
-    const equityDetected = checkBonusEquityDetected(scoreResult, 'equity');
+    const equityDetected = detectEquityInJob(jobData, scoreResult);
     equityEl.classList.remove('jh-fp-good', 'jh-fp-bad');
-    if (equityDetected) {
+    if (equityDetected.found) {
       equityEl.innerHTML = '<span class="jh-fp-thumb jh-fp-thumb-up">▲</span> Equity';
       equityEl.classList.add('jh-fp-good');
-      equityEl.title = 'Equity/stock mentioned in job posting';
+      equityEl.setAttribute('data-tooltip', equityDetected.tooltip || 'Stock/equity compensation mentioned');
     } else {
       equityEl.innerHTML = '<span class="jh-fp-thumb jh-fp-thumb-down">▼</span> Equity';
       equityEl.classList.add('jh-fp-bad');
-      equityEl.title = 'No equity mentioned';
+      equityEl.setAttribute('data-tooltip', 'No equity/stock options mentioned in posting');
     }
   }
 }
 
 /**
- * Check if bonus or equity was detected in the job posting
+ * Detect if bonus is mentioned in the job posting
+ * Uses stricter criteria to avoid false positives
  */
-function checkBonusEquityDetected(scoreResult, keyword) {
+function detectBonusInJob(jobData, scoreResult) {
+  const description = (jobData.descriptionText || jobData.job_description_text || '').toLowerCase();
+
+  // Skip if no description
+  if (!description) {
+    return { found: false };
+  }
+
+  // Positive patterns for performance/annual bonus
+  const positivePatterns = [
+    /performance\s+bonus/i,
+    /annual\s+bonus/i,
+    /yearly\s+bonus/i,
+    /target\s+bonus/i,
+    /discretionary\s+bonus/i,
+    /bonus\s+(of|up\s+to|target|structure|plan|program|eligibility|eligible)/i,
+    /(\d+%|\d+\s*percent)\s+bonus/i,
+    /bonus\s+(\d+%|\d+\s*percent)/i,
+    /variable\s+(compensation|pay|bonus)/i,
+    /incentive\s+(bonus|compensation|pay)/i
+  ];
+
+  // Negative patterns to exclude (false positives)
+  const negativePatterns = [
+    /sign[-\s]?on\s+bonus/i,
+    /signing\s+bonus/i,
+    /referral\s+bonus/i,
+    /hiring\s+bonus/i,
+    /relocation\s+bonus/i,
+    /retention\s+bonus/i,
+    /spot\s+bonus/i
+  ];
+
+  // Check for positive matches
+  let hasPositiveMatch = false;
+  let matchedPattern = '';
+  for (const pattern of positivePatterns) {
+    if (pattern.test(description)) {
+      hasPositiveMatch = true;
+      const match = description.match(pattern);
+      if (match) matchedPattern = match[0];
+      break;
+    }
+  }
+
+  // Check for negative patterns - these reduce confidence but don't eliminate
+  let hasNegativeMatch = false;
+  for (const pattern of negativePatterns) {
+    if (pattern.test(description)) {
+      hasNegativeMatch = true;
+      break;
+    }
+  }
+
+  // Also check score result for bonus detection
+  const bonusFromScore = checkBonusEquityFromScore(scoreResult, 'bonus');
+
+  // Return result
+  if (hasPositiveMatch || (bonusFromScore && !hasNegativeMatch)) {
+    return {
+      found: true,
+      tooltip: matchedPattern ? `Bonus found: "${matchedPattern}"` : 'Performance bonus mentioned'
+    };
+  }
+
+  return { found: false };
+}
+
+/**
+ * Detect if equity is mentioned in the job posting
+ * Uses stricter criteria to avoid DEI/EEO false positives
+ */
+function detectEquityInJob(jobData, scoreResult) {
+  const description = (jobData.descriptionText || jobData.job_description_text || '').toLowerCase();
+
+  // Skip if no description
+  if (!description) {
+    return { found: false };
+  }
+
+  // Positive patterns for compensation equity
+  const positivePatterns = [
+    /stock\s+options?/i,
+    /equity\s+(grant|package|compensation|awards?|incentive)/i,
+    /rsus?(\s|,|$)/i,
+    /restricted\s+stock/i,
+    /equity\s+in\s+the\s+company/i,
+    /shares?\s+(of|in)\s+(the\s+)?company/i,
+    /ownership\s+(stake|interest)/i,
+    /stock\s+(grant|award|compensation)/i,
+    /employee\s+stock\s+purchase/i,
+    /espp/i
+  ];
+
+  // Negative patterns (DEI/EEO mentions, not compensation)
+  const negativePatterns = [
+    /equal\s+opportunity/i,
+    /diversity[^.]{0,40}equity[^.]{0,40}inclusion/i,
+    /equity\s+in\s+(hiring|employment|workplace|our\s+practices)/i,
+    /promote\s+equity/i,
+    /commitment\s+to\s+equity/i
+  ];
+
+  // Also check if explicitly mentioned in jobData
+  if (jobData.equityMentioned === true) {
+    return { found: true, tooltip: 'Equity/stock options mentioned' };
+  }
+
+  // Check for positive matches
+  let hasPositiveMatch = false;
+  let matchedPattern = '';
+  for (const pattern of positivePatterns) {
+    if (pattern.test(description)) {
+      hasPositiveMatch = true;
+      const match = description.match(pattern);
+      if (match) matchedPattern = match[0];
+      break;
+    }
+  }
+
+  // Check for negative patterns - these are disqualifying for generic "equity" mentions
+  let hasNegativeMatch = false;
+  for (const pattern of negativePatterns) {
+    if (pattern.test(description)) {
+      hasNegativeMatch = true;
+      break;
+    }
+  }
+
+  // Also check score result for equity detection
+  const equityFromScore = checkBonusEquityFromScore(scoreResult, 'equity');
+
+  // If we have a strong positive pattern, trust it even with DEI mentions
+  if (hasPositiveMatch && matchedPattern.match(/stock|rsu|espp|ownership/i)) {
+    return {
+      found: true,
+      tooltip: `Equity found: "${matchedPattern}"`
+    };
+  }
+
+  // If positive match but also DEI mention, be more careful
+  if (hasPositiveMatch && !hasNegativeMatch) {
+    return {
+      found: true,
+      tooltip: matchedPattern ? `Equity found: "${matchedPattern}"` : 'Equity compensation mentioned'
+    };
+  }
+
+  // Fall back to score result
+  if (equityFromScore && !hasNegativeMatch) {
+    return { found: true, tooltip: 'Equity compensation mentioned' };
+  }
+
+  return { found: false };
+}
+
+/**
+ * Check if bonus or equity was detected in score breakdown
+ */
+function checkBonusEquityFromScore(scoreResult, keyword) {
   const allBreakdown = [
     ...(scoreResult.job_to_user_fit?.breakdown || []),
     ...(scoreResult.user_to_job_fit?.breakdown || [])
@@ -279,15 +444,22 @@ function checkBonusEquityDetected(scoreResult, keyword) {
   for (const item of allBreakdown) {
     const criteriaLower = (item.criteria || '').toLowerCase();
     const detailsLower = (item.details || item.rationale || '').toLowerCase();
+    const actualValue = (item.actual_value || '').toLowerCase();
 
-    if (criteriaLower.includes(keyword) || detailsLower.includes(keyword)) {
-      // Check if it was actually detected/mentioned
-      if (detailsLower.includes('detected') ||
-          detailsLower.includes('mentioned') ||
+    if (criteriaLower.includes(keyword) || detailsLower.includes(keyword) || actualValue.includes(keyword)) {
+      // Check for positive indicators
+      if (detailsLower.includes('mentioned') ||
+          detailsLower.includes('detected') ||
           detailsLower.includes('offers') ||
           detailsLower.includes('includes') ||
-          detailsLower.includes('provides') ||
-          (item.score && item.score > 0)) {
+          actualValue.includes(keyword)) {
+        return true;
+      }
+      // Check score - higher score indicates presence
+      if (keyword === 'bonus' && item.bonus_score && item.bonus_score > 30) {
+        return true;
+      }
+      if (keyword === 'equity' && item.equity_score && item.equity_score > 30) {
         return true;
       }
     }
@@ -303,71 +475,134 @@ function updateExpandedContent(scoreResult) {
   const u2jScoreEl = panel.querySelector('.jh-fp-u2j-score');
   const j2uCriteriaList = panel.querySelector('.jh-fp-j2u-criteria');
   const u2jCriteriaList = panel.querySelector('.jh-fp-u2j-criteria');
-  const actionText = panel.querySelector('.jh-fp-action');
+  const recommendationBadge = panel.querySelector('.jh-fp-recommendation-badge');
+  const recommendationSummary = panel.querySelector('.jh-fp-recommendation-summary');
 
-  // Update Job→You score
+  // Update Job Fit score (job-to-user)
   if (j2uScoreEl) {
     const j2uScore = scoreResult.job_to_user_fit?.score || 0;
     j2uScoreEl.textContent = `${j2uScore}/50`;
     j2uScoreEl.className = 'jh-fp-j2u-score ' + getSubScoreClass(j2uScore);
   }
 
-  // Update You→Job score
+  // Update Your Fit score (user-to-job)
   if (u2jScoreEl) {
     const u2jScore = scoreResult.user_to_job_fit?.score || 0;
     u2jScoreEl.textContent = `${u2jScore}/50`;
     u2jScoreEl.className = 'jh-fp-u2j-score ' + getSubScoreClass(u2jScore);
   }
 
-  // Update action text
-  if (actionText && scoreResult.interpretation) {
-    actionText.textContent = scoreResult.interpretation.action || 'Review details';
+  // Update recommendation badge and summary
+  if (recommendationBadge && scoreResult.overall_label) {
+    const label = scoreResult.overall_label;
+    let badgeText = '';
+    let badgeClass = '';
+
+    switch (label) {
+      case 'STRONG FIT':
+        badgeText = 'APPLY';
+        badgeClass = 'jh-fp-rec-strong';
+        break;
+      case 'GOOD FIT':
+        badgeText = 'APPLY';
+        badgeClass = 'jh-fp-rec-good';
+        break;
+      case 'MODERATE FIT':
+        badgeText = 'CONSIDER';
+        badgeClass = 'jh-fp-rec-moderate';
+        break;
+      case 'WEAK FIT':
+        badgeText = 'LOW FIT';
+        badgeClass = 'jh-fp-rec-weak';
+        break;
+      case 'POOR FIT':
+      case 'HARD NO':
+        badgeText = 'SKIP';
+        badgeClass = 'jh-fp-rec-poor';
+        break;
+      default:
+        badgeText = label;
+        badgeClass = 'jh-fp-rec-moderate';
+    }
+
+    recommendationBadge.textContent = badgeText;
+    recommendationBadge.className = 'jh-fp-recommendation-badge ' + badgeClass;
   }
 
-  // Render Job→You criteria (left column)
+  if (recommendationSummary && scoreResult.interpretation?.summary) {
+    recommendationSummary.textContent = scoreResult.interpretation.summary;
+  }
+
+  // Render Job Fit criteria (left column) - filter out hiring urgency
   if (j2uCriteriaList) {
     const j2uCriteria = (scoreResult.job_to_user_fit?.breakdown || [])
       .filter(c => !c.criteria?.toLowerCase().includes('hiring urgency'));
-    j2uCriteriaList.innerHTML = renderCriteriaItems(j2uCriteria);
+    j2uCriteriaList.innerHTML = renderCriteriaItems(j2uCriteria, 'j2u');
   }
 
-  // Render You→Job criteria (right column)
+  // Render Your Fit criteria (right column)
   if (u2jCriteriaList) {
     const u2jCriteria = scoreResult.user_to_job_fit?.breakdown || [];
-    u2jCriteriaList.innerHTML = renderCriteriaItems(u2jCriteria);
+    u2jCriteriaList.innerHTML = renderCriteriaItems(u2jCriteria, 'u2j');
   }
+
+  // Re-initialize tooltips for dynamically added criteria
+  setTimeout(() => {
+    setupTooltips(panel);
+  }, 100);
 }
 
 /**
  * Render criteria items as HTML
  * @param {Array} criteria - Array of criterion objects
+ * @param {string} type - 'j2u' (Job Fit) or 'u2j' (Your Fit) for different thresholds
  * @returns {string} HTML string
  */
-function renderCriteriaItems(criteria) {
-  return criteria.map(c => {
-    const maxScore = c.max_score || 50;
-    const score = c.score || 0;
-    const percentage = Math.round((score / maxScore) * 100);
-    const scoreClass = percentage >= 70 ? 'jh-fp-criterion-high' :
-                       percentage >= 40 ? 'jh-fp-criterion-mid' : 'jh-fp-criterion-low';
+function renderCriteriaItems(criteria, type = 'j2u') {
+  // Different thresholds for Job Fit (j2u) vs Your Fit (u2j)
+  // Job Fit: 35-50 good, 15-34 moderate, 0-14 poor
+  // Your Fit: 25-50 good, 10-24 moderate, 0-9 poor
+  const thresholds = type === 'j2u'
+    ? { high: 35, mid: 15 }
+    : { high: 25, mid: 10 };
 
-    // Show matched skills as tags if available
+  return criteria.map(c => {
+    const score = c.score || 0;
+    const scoreClass = score >= thresholds.high ? 'jh-fp-criterion-high' :
+                       score >= thresholds.mid ? 'jh-fp-criterion-mid' : 'jh-fp-criterion-low';
+
+    // Show matched skills as tags if available (with truncation)
     let skillTagsHtml = '';
     if (c.matched_skills && c.matched_skills.length > 0) {
+      const maxDisplay = 3;
+      const displaySkills = c.matched_skills.slice(0, maxDisplay);
+      const remaining = c.matched_skills.length - maxDisplay;
+
       skillTagsHtml = `
         <div class="jh-fp-skill-tags">
-          ${c.matched_skills.slice(0, 3).map(skill =>
+          ${displaySkills.map(skill =>
             `<span class="jh-fp-skill-tag">${escapeHtml(skill)}</span>`
           ).join('')}
-          ${c.matched_skills.length > 3 ? `<span class="jh-fp-skill-more">+${c.matched_skills.length - 3}</span>` : ''}
+          ${remaining > 0 ? `<span class="jh-fp-skill-more">+${remaining} more</span>` : ''}
         </div>
       `;
     }
 
+    // Shorten long criteria names
+    let criteriaName = c.criteria || '';
+    const nameMap = {
+      'Operations & Systems Focus': 'Ops & Systems',
+      'Title & Seniority Match': 'Title Match',
+      'Organizational Stability': 'Org Stability',
+      'Industry Experience': 'Industry',
+      'Skills Overlap': 'Skills'
+    };
+    criteriaName = nameMap[criteriaName] || criteriaName;
+
     return `
-      <div class="jh-fp-criterion ${scoreClass}" title="${escapeHtml(c.rationale || '')}">
+      <div class="jh-fp-criterion ${scoreClass}" title="${escapeHtml(c.rationale || '')}" data-tooltip="${escapeHtml(c.rationale || '')}">
         <div class="jh-fp-criterion-row">
-          <span class="jh-fp-criterion-name">${escapeHtml(c.criteria)}</span>
+          <span class="jh-fp-criterion-name">${escapeHtml(criteriaName)}</span>
           <span class="jh-fp-criterion-score">${score}</span>
         </div>
         ${c.actual_value ? `<span class="jh-fp-criterion-value">${escapeHtml(c.actual_value)}</span>` : ''}
@@ -445,15 +680,6 @@ function setupPanelEventHandlers(panel) {
     });
   }
 
-  // Minimize button
-  const minimizeBtn = panel.querySelector('.jh-fp-minimize');
-  if (minimizeBtn) {
-    minimizeBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      togglePanelMinimized();
-    });
-  }
-
   // View Details button
   const detailsBtn = panel.querySelector('.jh-fp-details-btn');
   if (detailsBtn) {
@@ -499,8 +725,90 @@ function setupPanelEventHandlers(panel) {
     });
   }
 
+  // Set up tooltips
+  setupTooltips(panel);
+
   // Dragging functionality
   setupDragging(panel);
+}
+
+/**
+ * Set up tooltip event listeners
+ * @param {HTMLElement} panel - The panel element
+ */
+function setupTooltips(panel) {
+  const tooltip = panel.querySelector('.jh-fp-tooltip');
+  if (!tooltip) return;
+
+  // Elements that can show tooltips
+  const tooltipTriggers = panel.querySelectorAll('[data-tooltip], .jh-fp-criterion');
+
+  tooltipTriggers.forEach(trigger => {
+    // Mouse enter - show tooltip
+    trigger.addEventListener('mouseenter', (e) => {
+      const text = trigger.getAttribute('data-tooltip') ||
+                   trigger.getAttribute('title') ||
+                   trigger.querySelector('.jh-fp-criterion-name')?.textContent;
+
+      if (!text) return;
+
+      // Get criterion rationale if available
+      let tooltipContent = text;
+      if (trigger.classList.contains('jh-fp-criterion')) {
+        const rationale = trigger.getAttribute('title');
+        if (rationale) {
+          tooltipContent = rationale;
+        }
+      }
+
+      tooltip.textContent = tooltipContent;
+      tooltip.classList.add('jh-fp-tooltip-visible');
+
+      // Position tooltip above the trigger
+      const triggerRect = trigger.getBoundingClientRect();
+      const panelRect = panel.getBoundingClientRect();
+
+      tooltip.style.left = `${triggerRect.left - panelRect.left + triggerRect.width / 2}px`;
+      tooltip.style.top = `${triggerRect.top - panelRect.top - tooltip.offsetHeight - 8}px`;
+      tooltip.style.transform = 'translateX(-50%)';
+    });
+
+    // Mouse leave - hide tooltip
+    trigger.addEventListener('mouseleave', () => {
+      tooltip.classList.remove('jh-fp-tooltip-visible');
+    });
+
+    // Touch support - toggle tooltip on tap
+    trigger.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      const isVisible = tooltip.classList.contains('jh-fp-tooltip-visible');
+
+      if (isVisible) {
+        tooltip.classList.remove('jh-fp-tooltip-visible');
+      } else {
+        // Show tooltip at touch position
+        const text = trigger.getAttribute('data-tooltip') ||
+                     trigger.getAttribute('title');
+        if (text) {
+          tooltip.textContent = text;
+          tooltip.classList.add('jh-fp-tooltip-visible');
+
+          const triggerRect = trigger.getBoundingClientRect();
+          const panelRect = panel.getBoundingClientRect();
+          tooltip.style.left = `${triggerRect.left - panelRect.left + triggerRect.width / 2}px`;
+          tooltip.style.top = `${triggerRect.top - panelRect.top - tooltip.offsetHeight - 8}px`;
+          tooltip.style.transform = 'translateX(-50%)';
+        }
+      }
+    });
+  });
+
+  // Hide tooltip when clicking elsewhere
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.jh-fp-criterion') && !e.target.closest('[data-tooltip]')) {
+      tooltip.classList.remove('jh-fp-tooltip-visible');
+    }
+  });
 }
 
 /**
@@ -643,16 +951,15 @@ function getPanelHTML() {
           <span class="jh-fp-company">Loading...</span>
         </div>
         <div class="jh-fp-controls">
-          <button class="jh-fp-minimize" title="Minimize">−</button>
           <button class="jh-fp-close" title="Dismiss">×</button>
         </div>
       </div>
 
       <div class="jh-fp-job-highlights">
-        <span class="jh-fp-highlight jh-fp-salary" title="Salary Range">--</span>
-        <span class="jh-fp-highlight jh-fp-workplace" title="Work Location">--</span>
-        <span class="jh-fp-highlight jh-fp-bonus" title="Bonus">--</span>
-        <span class="jh-fp-highlight jh-fp-equity" title="Equity">--</span>
+        <span class="jh-fp-highlight jh-fp-salary" data-tooltip="Salary range from job posting">--</span>
+        <span class="jh-fp-highlight jh-fp-workplace" data-tooltip="Work location preference">--</span>
+        <span class="jh-fp-highlight jh-fp-bonus" data-tooltip="Performance bonus mentioned">--</span>
+        <span class="jh-fp-highlight jh-fp-equity" data-tooltip="Stock options or equity compensation">--</span>
       </div>
 
       <div class="jh-fp-meter">
@@ -664,12 +971,18 @@ function getPanelHTML() {
           <span class="jh-fp-title">Loading role...</span>
         </div>
 
+        <!-- Recommendation badge at top -->
+        <div class="jh-fp-recommendation-row">
+          <span class="jh-fp-recommendation-badge">Analyzing...</span>
+          <span class="jh-fp-recommendation-summary"></span>
+        </div>
+
         <!-- Side-by-side columns for expanded view -->
         <div class="jh-fp-columns">
-          <!-- Left Column: Job → You -->
+          <!-- Left Column: Job Fit (how well job meets your needs) -->
           <div class="jh-fp-column jh-fp-column-left">
             <div class="jh-fp-column-header">
-              <span class="jh-fp-column-title">Job → You</span>
+              <span class="jh-fp-column-title">JOB FIT</span>
               <span class="jh-fp-j2u-score">--/50</span>
             </div>
             <div class="jh-fp-criteria-list jh-fp-j2u-criteria">
@@ -677,10 +990,10 @@ function getPanelHTML() {
             </div>
           </div>
 
-          <!-- Right Column: You → Job -->
+          <!-- Right Column: Your Fit (how well you match the job) -->
           <div class="jh-fp-column jh-fp-column-right">
             <div class="jh-fp-column-header">
-              <span class="jh-fp-column-title">You → Job</span>
+              <span class="jh-fp-column-title">YOUR FIT</span>
               <span class="jh-fp-u2j-score">--/50</span>
             </div>
             <div class="jh-fp-criteria-list jh-fp-u2j-criteria">
@@ -689,8 +1002,12 @@ function getPanelHTML() {
           </div>
         </div>
 
-        <div class="jh-fp-action-row">
-          <span class="jh-fp-action">Analyzing...</span>
+        <!-- Legend -->
+        <div class="jh-fp-legend">
+          <span class="jh-fp-legend-title">Score Guide:</span>
+          <span class="jh-fp-legend-item jh-fp-legend-good">●</span><span class="jh-fp-legend-text">35-50 Good</span>
+          <span class="jh-fp-legend-item jh-fp-legend-moderate">●</span><span class="jh-fp-legend-text">15-34 Moderate</span>
+          <span class="jh-fp-legend-item jh-fp-legend-poor">●</span><span class="jh-fp-legend-text">0-14 Poor</span>
         </div>
 
         <div class="jh-fp-buttons">
@@ -700,6 +1017,9 @@ function getPanelHTML() {
       </div>
 
       <div class="jh-fp-expand-hint">Click to expand ▼</div>
+
+      <!-- Tooltip element -->
+      <div class="jh-fp-tooltip" id="jh-fp-tooltip"></div>
     </div>
   `;
 }
@@ -884,24 +1204,33 @@ function getPanelStyles() {
     .jh-fp-meter-fill.jh-fp-weak { background: #d9480f; }
     .jh-fp-meter-fill.jh-fp-poor { background: #c92a2a; }
 
-    /* Job highlights row */
+    /* Job highlights row - all badges on one line */
     .jh-fp-job-highlights {
       display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      padding: 8px 12px;
+      flex-wrap: nowrap;
+      gap: 4px;
+      padding: 8px 10px;
       background: #f8f9fa;
       border-bottom: 1px solid #e9ecef;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-width: none;
+    }
+
+    .jh-fp-job-highlights::-webkit-scrollbar {
+      display: none;
     }
 
     .jh-fp-highlight {
-      font-size: 11px;
-      padding: 3px 8px;
+      font-size: 10px;
+      padding: 3px 6px;
       background: #fff;
       border: 1px solid #dee2e6;
-      border-radius: 12px;
+      border-radius: 10px;
       color: #495057;
       white-space: nowrap;
+      flex-shrink: 0;
+      cursor: help;
     }
 
     .jh-fp-highlight.jh-fp-has-value {
@@ -943,6 +1272,37 @@ function getPanelStyles() {
 
     .jh-fp-thumb-down {
       color: #868e96;
+    }
+
+    /* Tooltip styles */
+    .jh-fp-tooltip {
+      position: absolute;
+      background: #1a1a2e;
+      color: #fff;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      max-width: 200px;
+      z-index: 1000001;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+
+    .jh-fp-tooltip.jh-fp-tooltip-visible {
+      opacity: 1;
+    }
+
+    .jh-fp-tooltip::after {
+      content: '';
+      position: absolute;
+      bottom: -6px;
+      left: 50%;
+      transform: translateX(-50%);
+      border-width: 6px 6px 0;
+      border-style: solid;
+      border-color: #1a1a2e transparent transparent;
     }
 
     /* Expand hint */
@@ -1080,25 +1440,31 @@ function getPanelStyles() {
     .jh-fp-criterion-score {
       font-size: 12px;
       font-weight: 700;
-      padding: 1px 4px;
-      border-radius: 3px;
+      min-width: 28px;
+      height: 22px;
+      padding: 0 4px;
+      border-radius: 4px;
       margin-left: 6px;
       flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
     }
 
     .jh-fp-criterion.jh-fp-criterion-high .jh-fp-criterion-score {
-      background: #d3f9d8;
-      color: #2b8a3e;
+      background: #2b8a3e;
+      color: #fff;
     }
 
     .jh-fp-criterion.jh-fp-criterion-mid .jh-fp-criterion-score {
-      background: #fff3bf;
-      color: #e67700;
+      background: #e67700;
+      color: #fff;
     }
 
     .jh-fp-criterion.jh-fp-criterion-low .jh-fp-criterion-score {
-      background: #ffe3e3;
-      color: #c92a2a;
+      background: #c92a2a;
+      color: #fff;
     }
 
     .jh-fp-criterion-value {
@@ -1133,16 +1499,96 @@ function getPanelStyles() {
       color: #868e96;
     }
 
-    .jh-fp-action-row {
+    /* Recommendation row - replaces action row */
+    .jh-fp-recommendation-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
       background: #f8f9fa;
-      padding: 8px;
       border-radius: 6px;
       margin-bottom: 10px;
     }
 
-    .jh-fp-action {
+    .jh-fp-recommendation-badge {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 4px 10px;
+      border-radius: 12px;
+      white-space: nowrap;
+    }
+
+    .jh-fp-recommendation-badge.jh-fp-rec-strong {
+      background: #2b8a3e;
+      color: #fff;
+    }
+
+    .jh-fp-recommendation-badge.jh-fp-rec-good {
+      background: #087f5b;
+      color: #fff;
+    }
+
+    .jh-fp-recommendation-badge.jh-fp-rec-moderate {
+      background: #e67700;
+      color: #fff;
+    }
+
+    .jh-fp-recommendation-badge.jh-fp-rec-weak {
+      background: #d9480f;
+      color: #fff;
+    }
+
+    .jh-fp-recommendation-badge.jh-fp-rec-poor {
+      background: #c92a2a;
+      color: #fff;
+    }
+
+    .jh-fp-recommendation-summary {
       font-size: 11px;
       color: #495057;
+      line-height: 1.3;
+      flex: 1;
+    }
+
+    /* Legend styles */
+    .jh-fp-legend {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      background: #f1f3f5;
+      border-radius: 6px;
+      margin-bottom: 10px;
+      font-size: 9px;
+    }
+
+    .jh-fp-legend-title {
+      font-weight: 600;
+      color: #495057;
+      margin-right: 4px;
+    }
+
+    .jh-fp-legend-item {
+      font-size: 10px;
+    }
+
+    .jh-fp-legend-good {
+      color: #2b8a3e;
+    }
+
+    .jh-fp-legend-moderate {
+      color: #e67700;
+    }
+
+    .jh-fp-legend-poor {
+      color: #c92a2a;
+    }
+
+    .jh-fp-legend-text {
+      color: #868e96;
+      margin-right: 8px;
     }
 
     .jh-fp-buttons {
