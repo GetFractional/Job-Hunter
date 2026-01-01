@@ -1,6 +1,11 @@
 /**
  * Job Hunter OS - Results Dashboard Styles
- * Redesigned View Details screen with side-by-side columns
+ *
+ * Styles for the score results modal overlay.
+ * Injected into LinkedIn/Indeed pages by content.js
+ *
+ * IMPORTANT: All selectors are prefixed with "jh-" to avoid
+ * conflicts with host page styles.
  */
 
 /* ============================================================================
@@ -13,7 +18,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 999999;
+  z-index: 999998;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -21,12 +26,11 @@
   font-size: 14px;
   line-height: 1.5;
   color: #1a1a2e;
+  /* Reset inherited styles */
   box-sizing: border-box;
 }
 
-.jh-modal *,
-.jh-modal *::before,
-.jh-modal *::after {
+.jh-modal * {
   box-sizing: border-box;
 }
 
@@ -36,26 +40,26 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(3px);
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
 }
 
 .jh-modal-content {
   position: relative;
   width: 90%;
-  max-width: 900px;
+  max-width: 520px;
   max-height: 90vh;
   background: #fff;
   border-radius: 16px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   overflow-y: auto;
-  animation: jh-modal-appear 0.25s ease;
+  animation: jh-modal-appear 0.3s ease;
 }
 
 @keyframes jh-modal-appear {
   from {
     opacity: 0;
-    transform: scale(0.96) translateY(20px);
+    transform: scale(0.95) translateY(10px);
   }
   to {
     opacity: 1;
@@ -63,396 +67,383 @@
   }
 }
 
-/* ============================================================================
-   HEADER
-============================================================================ */
-
-.jh-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 24px;
-  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-  border-bottom: 1px solid #dee2e6;
-  border-radius: 16px 16px 0 0;
-}
-
-.jh-job-title {
-  flex: 1;
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: #1a1a2e;
-  padding-right: 16px;
-}
-
-.jh-header-controls {
-  display: flex;
-  gap: 8px;
-}
-
-.jh-header-btn {
+/* Close button */
+.jh-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
   width: 32px;
   height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.05);
+  background: #f1f3f5;
   border: none;
   border-radius: 8px;
-  cursor: pointer;
-  color: #495057;
-  font-size: 16px;
-  transition: all 0.15s ease;
-}
-
-.jh-header-btn:hover {
-  background: rgba(0, 0, 0, 0.1);
-  color: #1a1a2e;
-}
-
-.jh-settings-btn:hover {
-  color: #4361ee;
-}
-
-.jh-close-btn {
   font-size: 20px;
-}
-
-/* ============================================================================
-   FIT ANALYSIS SECTION
-============================================================================ */
-
-.jh-fit-analysis {
-  padding: 16px 24px;
-  background: #f8f9fa;
-  border-bottom: 1px solid #dee2e6;
-}
-
-.jh-section-heading {
-  margin: 0 0 8px 0;
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
   color: #495057;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  z-index: 10;
 }
 
-.jh-fit-summary {
-  margin: 0;
-  font-size: 14px;
+.jh-modal-close:hover {
+  background: #e9ecef;
   color: #1a1a2e;
-  line-height: 1.5;
 }
 
 /* ============================================================================
-   TWO-COLUMN LAYOUT (YOUR FIT & JOB FIT)
+   SCORE HEADER
 ============================================================================ */
 
-.jh-columns {
-  display: flex;
-  gap: 20px;
-  padding: 20px 24px;
-  border-bottom: 1px solid #dee2e6;
-}
-
-.jh-column {
-  flex: 1;
-  min-width: 0;
-  background: #f8f9fa;
-  border-radius: 12px;
-  padding: 16px;
-}
-
-.jh-column-your-fit {
-  border-left: 3px solid #4361ee;
-}
-
-.jh-column-job-fit {
-  border-left: 3px solid #e67700;
-}
-
-.jh-column-header {
+.jh-score-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-  padding-bottom: 12px;
-  border-bottom: 2px solid #dee2e6;
+  gap: 20px;
+  padding: 24px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 16px 16px 0 0;
 }
 
-.jh-column-header h3 {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #495057;
+/* Score ring */
+.jh-score-ring {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  flex-shrink: 0;
 }
 
-.jh-fit-score-display {
-  display: flex;
-  align-items: baseline;
-  gap: 2px;
+.jh-score-svg {
+  width: 100%;
+  height: 100%;
 }
 
-.jh-score-large {
-  font-size: 32px;
+.jh-score-progress {
+  transition: stroke-dashoffset 1s ease, stroke 0.3s ease;
+}
+
+.jh-score-value {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.jh-score-number {
+  display: block;
+  font-size: 28px;
   font-weight: 700;
   color: #1a1a2e;
   line-height: 1;
 }
 
 .jh-score-max {
-  font-size: 16px;
-  font-weight: 500;
+  font-size: 12px;
   color: #868e96;
 }
 
-.jh-fit-label-container {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
+/* Score info */
+.jh-score-info {
+  flex: 1;
 }
 
-.jh-fit-label {
+.jh-score-label {
   display: inline-block;
   padding: 4px 12px;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  border-radius: 12px;
-}
-
-.jh-fit-label.jh-fit-great {
-  background: #10b981;
-  color: #fff;
-}
-
-.jh-fit-label.jh-fit-good {
-  background: #3b82f6;
-  color: #fff;
-}
-
-.jh-fit-label.jh-fit-moderate {
-  background: #f59e0b;
-  color: #fff;
-}
-
-.jh-fit-label.jh-fit-weak {
-  background: #ef4444;
-  color: #fff;
-}
-
-.jh-fit-label.jh-fit-poor {
-  background: #991b1b;
-  color: #fff;
-}
-
-.jh-apply-badge {
-  display: inline-block;
-  padding: 6px 14px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  border-radius: 12px;
+  border-radius: 20px;
+  margin-bottom: 8px;
 }
 
-.jh-apply-badge.jh-apply-good {
-  background: #10b981;
+/* Score label colors */
+.jh-score-label.jh-strong-fit {
+  background: #d3f9d8;
+  color: #2b8a3e;
+}
+
+.jh-score-label.jh-good-fit {
+  background: #c3fae8;
+  color: #087f5b;
+}
+
+.jh-score-label.jh-moderate-fit {
+  background: #fff3bf;
+  color: #e67700;
+}
+
+.jh-score-label.jh-weak-fit {
+  background: #ffe8cc;
+  color: #d9480f;
+}
+
+.jh-score-label.jh-poor-fit {
+  background: #ffe3e3;
+  color: #c92a2a;
+}
+
+.jh-score-label.jh-hard-no {
+  background: #495057;
   color: #fff;
 }
 
-.jh-apply-badge.jh-apply-moderate {
-  background: #f59e0b;
-  color: #fff;
+.jh-score-summary {
+  font-size: 13px;
+  color: #495057;
+  margin: 0;
 }
 
 /* ============================================================================
-   CRITERIA BREAKDOWN
+   JOB METADATA SECTION
 ============================================================================ */
 
-.jh-criteria-breakdown {
+.jh-metadata-section {
+  padding: 12px 24px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.jh-metadata-grid {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 12px 24px;
 }
 
-.jh-criterion {
-  background: #fff;
-  border-radius: 8px;
-  padding: 12px;
-  transition: all 0.15s ease;
+.jh-metadata-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
 }
 
-.jh-criterion-clickable {
-  cursor: pointer;
+.jh-metadata-label {
+  color: #6c757d;
 }
 
-.jh-criterion-clickable:hover {
-  background: #f1f3f5;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+.jh-metadata-value {
+  color: #1a1a2e;
+  font-weight: 500;
 }
 
-.jh-criterion-header {
+.jh-metadata-value.jh-good {
+  color: #2b8a3e;
+}
+
+.jh-metadata-value.jh-neutral {
+  color: #e67700;
+}
+
+.jh-metadata-value.jh-bad {
+  color: #c92a2a;
+}
+
+/* ============================================================================
+   FIT SECTIONS
+============================================================================ */
+
+.jh-fit-section {
+  padding: 16px 24px;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.jh-section-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 6px;
+  margin-bottom: 12px;
 }
 
-.jh-criterion-name {
-  font-size: 13px;
+.jh-section-header h3 {
+  font-size: 14px;
   font-weight: 600;
   color: #1a1a2e;
+  margin: 0;
 }
 
-.jh-criterion-percentage {
+.jh-section-score {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: #495057;
-}
-
-.jh-progress-bar {
-  height: 8px;
-  background: #e9ecef;
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.jh-progress-fill {
-  height: 100%;
-  transition: width 0.4s ease;
+  background: #f1f3f5;
+  padding: 2px 8px;
   border-radius: 4px;
 }
 
-.jh-progress-fill.jh-progress-green {
-  background: linear-gradient(90deg, #10b981 0%, #059669 100%);
-}
-
-.jh-progress-fill.jh-progress-yellow {
-  background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
-}
-
-.jh-progress-fill.jh-progress-red {
-  background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
+/* Criteria list */
+.jh-criteria-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .jh-loading {
   text-align: center;
   color: #868e96;
-  padding: 20px;
+  padding: 16px;
   font-size: 13px;
 }
 
-/* ============================================================================
-   DEAL BREAKERS SECTION
-============================================================================ */
-
-.jh-deal-breakers {
-  padding: 16px 24px;
-  background: #fff5f5;
-  border-bottom: 1px solid #fee2e2;
-}
-
-.jh-deal-breaker {
-  padding: 12px 16px;
-  background: #fff;
-  border-left: 4px solid #dc2626;
-  border-radius: 8px;
-  margin-bottom: 8px;
-  font-size: 14px;
-  color: #991b1b;
-}
-
-.jh-deal-breaker:last-child {
-  margin-bottom: 0;
-}
-
-.jh-deal-breaker-triggered {
-  font-weight: 600;
-}
-
-/* ============================================================================
-   JOB DETAILS SECTION
-============================================================================ */
-
-.jh-job-details {
-  padding: 20px 24px;
-}
-
-.jh-details-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px 20px;
-  margin-bottom: 20px;
-}
-
-.jh-detail-item {
+/* Criterion item */
+.jh-criterion {
   display: flex;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.jh-criterion-stars {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.jh-star {
+  width: 14px;
+  height: 14px;
+  fill: #dee2e6;
+}
+
+.jh-star.jh-filled {
+  fill: #fab005;
+}
+
+.jh-criterion-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.jh-criterion-header {
+  display: flex;
+  justify-content: space-between;
   align-items: baseline;
   gap: 8px;
-  font-size: 13px;
+  margin-bottom: 2px;
 }
 
-.jh-detail-label {
-  font-weight: 600;
-  color: #6c757d;
-  white-space: nowrap;
-}
-
-.jh-detail-value {
+.jh-criterion-name {
+  font-size: 12px;
   font-weight: 500;
   color: #1a1a2e;
 }
 
-.jh-description-container {
-  margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px solid #dee2e6;
-}
-
-.jh-description-heading {
-  margin: 0 0 12px 0;
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+.jh-criterion-value {
+  font-size: 11px;
   color: #495057;
+  background: #e9ecef;
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
 }
 
-.jh-description-text {
-  max-height: 200px;
-  overflow-y: auto;
-  padding: 12px;
-  background: #f8f9fa;
+.jh-criterion-rationale {
+  font-size: 11px;
+  color: #868e96;
+  margin: 0;
+}
+
+/* Criterion score colors */
+.jh-criterion.jh-score-high .jh-criterion-name {
+  color: #2b8a3e;
+}
+
+.jh-criterion.jh-score-low .jh-criterion-name {
+  color: #c92a2a;
+}
+
+/* ============================================================================
+   INTERPRETATION SECTION
+============================================================================ */
+
+.jh-interpretation-section {
+  padding: 16px 24px;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.jh-interpretation-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1a2e;
+  margin: 0 0 12px 0;
+}
+
+/* Action badge */
+.jh-action-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
   border-radius: 8px;
   font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 16px;
+}
+
+.jh-action-badge.jh-pursue {
+  background: #d3f9d8;
+  color: #2b8a3e;
+}
+
+.jh-action-badge.jh-consider {
+  background: #fff3bf;
+  color: #e67700;
+}
+
+.jh-action-badge.jh-skip {
+  background: #ffe3e3;
+  color: #c92a2a;
+}
+
+.jh-action-icon {
+  font-size: 16px;
+}
+
+.jh-action-badge.jh-pursue .jh-action-icon::before {
+  content: '✓';
+}
+
+.jh-action-badge.jh-consider .jh-action-icon::before {
+  content: '?';
+}
+
+.jh-action-badge.jh-skip .jh-action-icon::before {
+  content: '✗';
+}
+
+/* Conversation starters */
+.jh-conversation-starters {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.jh-conversation-starters-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: #868e96;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.jh-conversation-starter {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  font-size: 12px;
   color: #495057;
-  line-height: 1.6;
-  white-space: pre-wrap;
 }
 
-.jh-description-text::-webkit-scrollbar {
-  width: 8px;
-}
-
-.jh-description-text::-webkit-scrollbar-track {
-  background: #e9ecef;
-  border-radius: 4px;
-}
-
-.jh-description-text::-webkit-scrollbar-thumb {
-  background: #adb5bd;
-  border-radius: 4px;
-}
-
-.jh-description-text::-webkit-scrollbar-thumb:hover {
-  background: #868e96;
+.jh-conversation-starter::before {
+  content: '💬';
+  font-size: 14px;
+  flex-shrink: 0;
 }
 
 /* ============================================================================
@@ -465,13 +456,12 @@
   padding: 16px 24px;
   background: #f8f9fa;
   border-radius: 0 0 16px 16px;
-  border-top: 1px solid #dee2e6;
 }
 
 .jh-btn {
-  padding: 10px 20px;
+  padding: 10px 16px;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   border: none;
   border-radius: 8px;
   cursor: pointer;
@@ -491,8 +481,6 @@
 
 .jh-btn-primary:hover:not(:disabled) {
   background: linear-gradient(135deg, #3a56d4 0%, #324bc0 100%);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(67, 97, 238, 0.3);
 }
 
 .jh-btn-secondary {
@@ -504,10 +492,12 @@
   background: #dee2e6;
 }
 
+/* Success state for Send button */
 .jh-btn-primary.jh-success {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  background: linear-gradient(135deg, #2b8a3e 0%, #228b22 100%);
 }
 
+/* Loading state */
 .jh-btn.jh-loading {
   position: relative;
   color: transparent;
@@ -528,34 +518,45 @@
 }
 
 @keyframes jh-spin {
-  to {
-    transform: rotate(360deg);
-  }
+  to { transform: rotate(360deg); }
 }
 
 /* ============================================================================
-   RESPONSIVE DESIGN
+   SCORE RING COLORS
 ============================================================================ */
 
-@media (max-width: 768px) {
+.jh-score-ring.jh-strong-fit .jh-score-progress { stroke: #2b8a3e; }
+.jh-score-ring.jh-good-fit .jh-score-progress { stroke: #087f5b; }
+.jh-score-ring.jh-moderate-fit .jh-score-progress { stroke: #e67700; }
+.jh-score-ring.jh-weak-fit .jh-score-progress { stroke: #d9480f; }
+.jh-score-ring.jh-poor-fit .jh-score-progress { stroke: #c92a2a; }
+.jh-score-ring.jh-hard-no .jh-score-progress { stroke: #495057; }
+
+/* ============================================================================
+   RESPONSIVE ADJUSTMENTS
+============================================================================ */
+
+@media (max-width: 480px) {
   .jh-modal-content {
     width: 95%;
     max-height: 95vh;
     border-radius: 12px;
   }
 
-  .jh-columns {
+  .jh-score-header {
     flex-direction: column;
-    gap: 16px;
+    text-align: center;
+    padding: 20px;
   }
 
-  .jh-details-grid {
-    grid-template-columns: 1fr;
-    gap: 10px;
+  .jh-fit-section,
+  .jh-interpretation-section {
+    padding: 12px 16px;
   }
 
   .jh-modal-footer {
     flex-wrap: wrap;
+    padding: 12px 16px;
   }
 
   .jh-btn {
@@ -567,4 +568,32 @@
     order: -1;
     margin-bottom: 8px;
   }
+}
+
+/* ============================================================================
+   DEAL-BREAKER SPECIAL STATE
+============================================================================ */
+
+.jh-modal-content.jh-deal-breaker-triggered {
+  border: 2px solid #c92a2a;
+}
+
+.jh-modal-content.jh-deal-breaker-triggered .jh-score-header {
+  background: linear-gradient(135deg, #ffe3e3 0%, #ffc9c9 100%);
+}
+
+.jh-deal-breaker-notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #ffe3e3;
+  border-bottom: 1px solid #ffa8a8;
+  color: #c92a2a;
+  font-size: 13px;
+}
+
+.jh-deal-breaker-notice::before {
+  content: '⚠️';
+  font-size: 18px;
 }

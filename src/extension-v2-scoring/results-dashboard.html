@@ -1,165 +1,128 @@
 <!--
   Job Hunter OS - Results Dashboard
-  Redesigned View Details screen with new layout structure
+
+  This HTML template is injected as a modal overlay by content.js
+  after the scoring engine calculates a job fit score.
+
+  The template is populated by results-dashboard.js with score data.
 -->
 
 <div id="jh-results-modal" class="jh-modal">
   <div class="jh-modal-backdrop"></div>
   <div class="jh-modal-content">
-    <!-- Header: Job Title + Close + Settings -->
-    <div class="jh-modal-header">
-      <h1 class="jh-job-title" id="jh-job-title">Loading...</h1>
-      <div class="jh-header-controls">
-        <button type="button" class="jh-header-btn jh-settings-btn" id="jh-btn-settings" title="Edit Profile">⚙</button>
-        <button type="button" class="jh-header-btn jh-close-btn" id="jh-btn-close-header" title="Close">&times;</button>
-      </div>
-    </div>
+    <!-- Close button -->
+    <button type="button" class="jh-modal-close" title="Close">&times;</button>
 
-    <!-- Fit Analysis Summary -->
-    <section class="jh-fit-analysis">
-      <h2 class="jh-section-heading">FIT ANALYSIS</h2>
-      <p class="jh-fit-summary" id="jh-fit-summary">Analyzing job fit...</p>
-    </section>
-
-    <!-- Two-Column Layout: Your Fit & Job Fit -->
-    <div class="jh-columns">
-      <!-- Left Column: YOUR FIT (User → Job) -->
-      <div class="jh-column jh-column-your-fit">
-        <div class="jh-column-header">
-          <h3>YOUR FIT</h3>
-          <div class="jh-fit-score-display">
-            <span class="jh-score-large" id="jh-your-fit-score">--</span>
-            <span class="jh-score-max">/50</span>
-          </div>
-        </div>
-
-        <div class="jh-fit-label-container">
-          <span class="jh-fit-label" id="jh-your-fit-label">Calculating...</span>
-          <span class="jh-apply-badge" id="jh-apply-badge">Apply</span>
-        </div>
-
-        <div class="jh-criteria-breakdown" id="jh-your-fit-criteria">
-          <!-- Populated by JS -->
-          <div class="jh-loading">Loading criteria...</div>
+    <!-- ================================================================
+         HEADER: Overall Score Card
+    ================================================================ -->
+    <header class="jh-score-header">
+      <div class="jh-score-ring" id="jh-score-ring">
+        <svg viewBox="0 0 120 120" class="jh-score-svg">
+          <!-- Background circle -->
+          <circle cx="60" cy="60" r="54" fill="none" stroke="#e9ecef" stroke-width="8"/>
+          <!-- Score progress circle -->
+          <circle
+            cx="60" cy="60" r="54"
+            fill="none"
+            stroke="#4361ee"
+            stroke-width="8"
+            stroke-linecap="round"
+            stroke-dasharray="339.292"
+            stroke-dashoffset="339.292"
+            transform="rotate(-90 60 60)"
+            class="jh-score-progress"
+            id="jh-score-progress"
+          />
+        </svg>
+        <div class="jh-score-value">
+          <span class="jh-score-number" id="jh-score-number">--</span>
+          <span class="jh-score-max">/100</span>
         </div>
       </div>
 
-      <!-- Right Column: JOB FIT (Job → User) -->
-      <div class="jh-column jh-column-job-fit">
-        <div class="jh-column-header">
-          <h3>JOB FIT</h3>
-          <div class="jh-fit-score-display">
-            <span class="jh-score-large" id="jh-job-fit-score">--</span>
-            <span class="jh-score-max">/50</span>
-          </div>
-        </div>
-
-        <div class="jh-fit-label-container">
-          <span class="jh-fit-label" id="jh-job-fit-label">Calculating...</span>
-        </div>
-
-        <div class="jh-criteria-breakdown" id="jh-job-fit-criteria">
-          <!-- Populated by JS -->
-          <div class="jh-loading">Loading criteria...</div>
-        </div>
+      <div class="jh-score-info">
+        <span class="jh-score-label" id="jh-score-label">Calculating...</span>
+        <p class="jh-score-summary" id="jh-score-summary">
+          Analyzing job fit...
+        </p>
       </div>
-    </div>
+    </header>
 
-    <!-- Deal Breakers Section -->
-    <section class="jh-deal-breakers" id="jh-deal-breakers-section" style="display: none;">
-      <h2 class="jh-section-heading">⚠️ DEAL BREAKERS</h2>
-      <div id="jh-deal-breakers-list">
-        <!-- Populated by JS -->
-      </div>
-    </section>
-
-    <!-- Job Details Section -->
-    <section class="jh-job-details">
-      <h2 class="jh-section-heading">JOB DETAILS</h2>
-
-      <div class="jh-details-grid">
-        <!-- Hiring Manager -->
-        <div class="jh-detail-item" id="jh-hiring-manager-item" style="display: none;">
-          <span class="jh-detail-label">Hiring Manager:</span>
-          <span class="jh-detail-value" id="jh-hiring-manager">--</span>
+    <!-- ================================================================
+         SECTION: Job Metadata
+    ================================================================ -->
+    <section class="jh-metadata-section">
+      <div class="jh-metadata-grid">
+        <div class="jh-metadata-item" id="jh-posted-row">
+          <span class="jh-metadata-label">📅 Posted:</span>
+          <span class="jh-metadata-value" id="jh-posted-value">--</span>
         </div>
-
-        <!-- Posted Date -->
-        <div class="jh-detail-item" id="jh-posted-item" style="display: none;">
-          <span class="jh-detail-label">Posted:</span>
-          <span class="jh-detail-value" id="jh-posted">--</span>
+        <div class="jh-metadata-item" id="jh-applicants-row">
+          <span class="jh-metadata-label">👥 Applicants:</span>
+          <span class="jh-metadata-value" id="jh-applicants-value">--</span>
         </div>
-
-        <!-- Applicant Count -->
-        <div class="jh-detail-item" id="jh-applicants-item" style="display: none;">
-          <span class="jh-detail-label">Total Applicants:</span>
-          <span class="jh-detail-value" id="jh-applicants">--</span>
-        </div>
-
-        <!-- Location -->
-        <div class="jh-detail-item" id="jh-location-item">
-          <span class="jh-detail-label">Location:</span>
-          <span class="jh-detail-value" id="jh-location">--</span>
-        </div>
-
-        <!-- Salary -->
-        <div class="jh-detail-item" id="jh-salary-item">
-          <span class="jh-detail-label">Salary:</span>
-          <span class="jh-detail-value" id="jh-salary">--</span>
-        </div>
-
-        <!-- Bonus -->
-        <div class="jh-detail-item" id="jh-bonus-item" style="display: none;">
-          <span class="jh-detail-label">Bonus:</span>
-          <span class="jh-detail-value" id="jh-bonus">--</span>
-        </div>
-
-        <!-- Equity -->
-        <div class="jh-detail-item" id="jh-equity-item" style="display: none;">
-          <span class="jh-detail-label">Equity:</span>
-          <span class="jh-detail-value" id="jh-equity">--</span>
-        </div>
-
-        <!-- Benefits -->
-        <div class="jh-detail-item" id="jh-benefits-item" style="display: none;">
-          <span class="jh-detail-label">Benefits:</span>
-          <span class="jh-detail-value" id="jh-benefits">--</span>
-        </div>
-
-        <!-- Workplace Type -->
-        <div class="jh-detail-item" id="jh-workplace-item">
-          <span class="jh-detail-label">Workplace Type:</span>
-          <span class="jh-detail-value" id="jh-workplace">--</span>
-        </div>
-
-        <!-- Employment Type -->
-        <div class="jh-detail-item" id="jh-employment-item">
-          <span class="jh-detail-label">Employment Type:</span>
-          <span class="jh-detail-value" id="jh-employment">--</span>
-        </div>
-
-        <!-- Company Size -->
-        <div class="jh-detail-item" id="jh-company-size-item" style="display: none;">
-          <span class="jh-detail-label">Company Size:</span>
-          <span class="jh-detail-value" id="jh-company-size">--</span>
-        </div>
-      </div>
-
-      <!-- Job Description -->
-      <div class="jh-description-container">
-        <h3 class="jh-description-heading">JOB DESCRIPTION</h3>
-        <div class="jh-description-text" id="jh-description">
-          Loading job description...
+        <div class="jh-metadata-item" id="jh-hiring-manager-row">
+          <span class="jh-metadata-label">👤 Hiring Manager:</span>
+          <span class="jh-metadata-value" id="jh-hiring-manager-value">--</span>
         </div>
       </div>
     </section>
 
-    <!-- Footer: Action Buttons -->
+    <!-- ================================================================
+         SECTION: Job → User Fit
+    ================================================================ -->
+    <section class="jh-fit-section">
+      <div class="jh-section-header">
+        <h3>Job Meets Your Needs</h3>
+        <span class="jh-section-score" id="jh-j2u-score">--/50</span>
+      </div>
+
+      <div class="jh-criteria-list" id="jh-j2u-criteria">
+        <!-- Populated by JavaScript -->
+        <div class="jh-loading">Loading criteria...</div>
+      </div>
+    </section>
+
+    <!-- ================================================================
+         SECTION: User → Job Fit
+    ================================================================ -->
+    <section class="jh-fit-section">
+      <div class="jh-section-header">
+        <h3>You Match This Role</h3>
+        <span class="jh-section-score" id="jh-u2j-score">--/50</span>
+      </div>
+
+      <div class="jh-criteria-list" id="jh-u2j-criteria">
+        <!-- Populated by JavaScript -->
+        <div class="jh-loading">Loading criteria...</div>
+      </div>
+    </section>
+
+    <!-- ================================================================
+         SECTION: Interpretation & Next Steps
+    ================================================================ -->
+    <section class="jh-interpretation-section">
+      <h3>Next Steps</h3>
+
+      <div class="jh-action-badge" id="jh-action-badge">
+        <span class="jh-action-icon"></span>
+        <span class="jh-action-text" id="jh-action-text">Analyzing...</span>
+      </div>
+
+      <div class="jh-conversation-starters" id="jh-conversation-starters">
+        <!-- Populated by JavaScript -->
+      </div>
+    </section>
+
+    <!-- ================================================================
+         FOOTER: Action Buttons
+    ================================================================ -->
     <footer class="jh-modal-footer">
       <button type="button" class="jh-btn jh-btn-secondary" id="jh-btn-edit-profile">
         Edit Profile
       </button>
-      <button type="button" class="jh-btn jh-btn-secondary" id="jh-btn-cancel">
+      <button type="button" class="jh-btn jh-btn-secondary" id="jh-btn-close">
         Close
       </button>
       <button type="button" class="jh-btn jh-btn-primary" id="jh-btn-send">
