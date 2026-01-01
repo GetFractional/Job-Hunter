@@ -456,8 +456,13 @@ function extractLinkedInJobData() {
       const titleEl = hiringTeamContainer.querySelector(titleSelectors.join(', ')) ||
                       document.querySelector(titleSelectors.join(', '));
 
-      const hiringManagerName = nameEl?.textContent?.trim() || null;
-      const hiringManagerTitle = titleEl?.textContent?.trim() || null;
+      let hiringManagerName = nameEl?.textContent?.trim() || null;
+      let hiringManagerTitle = titleEl?.textContent?.trim() || null;
+
+      // Clean up hiring manager title - remove connection degree text
+      if (hiringManagerTitle) {
+        hiringManagerTitle = cleanHiringManagerTitle(hiringManagerTitle);
+      }
 
       // Store as structured object
       if (hiringManagerName) {
@@ -468,6 +473,7 @@ function extractLinkedInJobData() {
           name: hiringManagerName,
           title: hiringManagerTitle
         };
+        console.log('[Job Hunter] Hiring Manager:', data.hiringManager);
       }
     } else {
       // Fallback to simpler extraction if container not found
@@ -530,11 +536,147 @@ function extractLinkedInJobData() {
     // Clean up the job URL - remove unnecessary parameters
     data.jobUrl = cleanLinkedInUrl(window.location.href);
 
+    // Extract Company Headcount and Growth Data
+    const companyHeadcountData = extractCompanyHeadcountData();
+    if (companyHeadcountData.currentHeadcount !== null) {
+      data.companyHeadcount = companyHeadcountData.currentHeadcount;
+    }
+    if (companyHeadcountData.headcountGrowthRate !== null) {
+      data.companyHeadcountGrowth = `${companyHeadcountData.headcountGrowthRate >= 0 ? '+' : ''}${companyHeadcountData.headcountGrowthRate}%`;
+    }
+    if (companyHeadcountData.headcountDataFound) {
+      console.log('[Job Hunter] Headcount extracted:', companyHeadcountData.currentHeadcount, 'Growth:', companyHeadcountData.headcountGrowthRate + '%');
+    } else {
+      console.log('[Job Hunter] Headcount data not visible (company page may need visit)');
+    }
+
   } catch (error) {
     console.error('[Job Hunter] Error extracting LinkedIn data:', error);
   }
 
   return data;
+}
+
+/**
+ * Extract company headcount and growth data from LinkedIn page
+ * Looks in multiple places: company sidebar, about section, and page text
+ * @returns {Object} { currentHeadcount, headcountGrowthRate, headcountGrowthText, headcountDataFound }
+ */
+function extractCompanyHeadcountData() {
+  const result = {
+    currentHeadcount: null,
+    headcountGrowthRate: null,
+    headcountGrowthText: null,
+    headcountDataFound: false
+  };
+
+  try {
+    // Method 1: Try LinkedIn company sidebar / insights section on job posting
+    const companyInfoSelectors = [
+      '[data-testid="company-info"]',
+      '.job-details-jobs-unified-top-card__company-size',
+      '.jobs-unified-top-card__company-size',
+      '.jobs-company__company-description',
+      '.job-details-premium-company-insights',
+      '.job-details-company-insights'
+    ];
+
+    let companySidebarText = '';
+    for (const selector of companyInfoSelectors) {
+      const el = document.querySelector(selector);
+      if (el?.innerText) {
+        companySidebarText += ' ' + el.innerText;
+      }
+    }
+
+    // Method 2: Also check the full page text for company data
+    const pageText = document.body.innerText || '';
+
+    // Combined text to search
+    const combinedText = companySidebarText + ' ' + pageText;
+
+    // Pattern 1: "1,001-5,000 employees" or "1,001 - 5,000 employees"
+    const rangePattern = /(\d{1,3}(?:,\d{3})*)\s*(?:-|to)\s*(\d{1,3}(?:,\d{3})*)\s+employees?/i;
+    const rangeMatch = combinedText.match(rangePattern);
+
+    // Pattern 2: "500+ employees" or "250 employees"
+    const singlePattern = /(\d{1,3}(?:,\d{3})*)\+?\s+employees?/i;
+    const singleMatch = combinedText.match(singlePattern);
+
+    // Extract headcount (use midpoint for ranges)
+    if (rangeMatch) {
+      const lower = parseInt(rangeMatch[1].replace(/,/g, ''), 10);
+      const upper = parseInt(rangeMatch[2].replace(/,/g, ''), 10);
+      result.currentHeadcount = Math.floor((lower + upper) / 2);
+      result.headcountDataFound = true;
+    } else if (singleMatch) {
+      result.currentHeadcount = parseInt(singleMatch[1].replace(/,/g, ''), 10);
+      result.headcountDataFound = true;
+    }
+
+    // Pattern 3: Growth rate patterns
+    // "5% employee growth" / "+5% over last 6 months" / "8% headcount growth"
+    const growthPatterns = [
+      /([+-]?\d+(?:\.\d+)?)\s*%\s+(?:employee\s+)?growth/i,
+      /([+-]?\d+(?:\.\d+)?)\s*%\s+(?:increase|growth|over)/i,
+      /headcount[:\s]+([+-]?\d+(?:\.\d+)?)\s*%/i,
+      /growing\s+(?:at\s+)?([+-]?\d+(?:\.\d+)?)\s*%/i,
+      /([+-]?\d+(?:\.\d+)?)\s*%\s+(?:yoy|year.over.year)/i,
+      /employee\s+growth[:\s]+([+-]?\d+(?:\.\d+)?)\s*%/i
+    ];
+
+    for (const pattern of growthPatterns) {
+      const match = combinedText.match(pattern);
+      if (match) {
+        const rate = parseFloat(match[1]);
+        if (!isNaN(rate) && rate >= -100 && rate <= 500) { // Reasonable growth range
+          result.headcountGrowthRate = rate;
+          result.headcountGrowthText = match[0];
+          result.headcountDataFound = true;
+          break;
+        }
+      }
+    }
+
+    // Pattern 4: Check for LinkedIn-specific employee count display
+    // Sometimes LinkedIn shows "10,001+ employees" on company pages
+    const linkedInEmployeePattern = /(\d{1,3}(?:,\d{3})*)\+?\s*employees\b/i;
+    if (result.currentHeadcount === null) {
+      const linkedInMatch = pageText.match(linkedInEmployeePattern);
+      if (linkedInMatch) {
+        result.currentHeadcount = parseInt(linkedInMatch[1].replace(/,/g, ''), 10);
+        result.headcountDataFound = true;
+      }
+    }
+
+    // Pattern 5: Check for company description with size indicators
+    const sizeIndicators = [
+      { pattern: /fortune\s+500/i, estimate: 10000 },
+      { pattern: /fortune\s+1000/i, estimate: 5000 },
+      { pattern: /large\s+enterprise/i, estimate: 5000 },
+      { pattern: /global\s+company/i, estimate: 1000 },
+      { pattern: /startup/i, estimate: 50 },
+      { pattern: /early[-\s]?stage/i, estimate: 25 }
+    ];
+
+    if (result.currentHeadcount === null) {
+      for (const indicator of sizeIndicators) {
+        if (indicator.pattern.test(combinedText)) {
+          // Don't override with estimate if we found actual number
+          if (result.currentHeadcount === null) {
+            // This is just an estimate - don't mark as found
+            console.log('[Job Hunter] Estimated company size from indicator:', indicator.pattern, '~', indicator.estimate);
+          }
+          break;
+        }
+      }
+    }
+
+  } catch (error) {
+    console.error('[Job Hunter] Error extracting headcount data:', error);
+  }
+
+  return result;
 }
 
 /**
@@ -808,6 +950,39 @@ function extractIndeedJobData() {
 // ============================================================================
 // SHARED UTILITIES
 // ============================================================================
+
+/**
+ * Clean up hiring manager title text by removing connection degree and other noise
+ * Removes: "1st", "2nd", "3rd" degree connection, "• Hiring" badge, etc.
+ * @param {string} rawTitle - The raw title text
+ * @returns {string|null} Cleaned title or null if empty
+ */
+function cleanHiringManagerTitle(rawTitle) {
+  if (!rawTitle) return null;
+
+  let title = rawTitle.trim();
+
+  // Remove connection degree patterns (1st, 2nd, 3rd, etc.)
+  title = title.replace(/\b\d+(?:st|nd|rd|th)\s*(?:degree\s*)?(?:connection)?\b/gi, '');
+
+  // Remove "• Hiring" or "Hiring" badge text
+  title = title.replace(/[•·]\s*hiring\b/gi, '');
+  title = title.replace(/\bhiring\s*$/gi, '');
+
+  // Remove "at Company Name" suffix (we already have company separately)
+  title = title.replace(/\s+at\s+[^|]+$/i, '');
+
+  // Remove common LinkedIn artifacts
+  title = title.replace(/^\s*[•·|-]\s*/, ''); // Leading bullets
+  title = title.replace(/\s*[•·|-]\s*$/, ''); // Trailing bullets
+  title = title.replace(/\s*\|\s*$/, ''); // Trailing pipes
+
+  // Clean up extra whitespace
+  title = title.replace(/\s+/g, ' ').trim();
+
+  // If empty after cleaning, return null
+  return title.length > 0 ? title : null;
+}
 
 /**
  * Try multiple selectors and return the first matching text content

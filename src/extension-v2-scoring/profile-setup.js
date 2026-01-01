@@ -78,12 +78,99 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupTagInputs();
   setupSuggestedTags();
   setupFormSubmission();
+  setupRealTimeCountUpdates(); // NEW: Add real-time count updates for checkboxes
 
   // Load existing profile if available
   await loadExistingProfile();
 
+  // Initialize all counts
+  updateAllCounts();
+
   console.log('[Profile Setup] Initialized');
 });
+
+/**
+ * Set up real-time count updates for checkboxes and other form elements
+ * Updates counts immediately as user changes selections
+ */
+function setupRealTimeCountUpdates() {
+  // Dealbreaker checkboxes
+  const dealBreakerCheckboxes = document.querySelectorAll('input[name="deal_breakers"]');
+  dealBreakerCheckboxes.forEach(checkbox => {
+    checkbox.addEventListener('change', () => {
+      updateDealBreakerCount();
+    });
+  });
+
+  // Must-have checkboxes
+  const mustHaveCheckboxes = document.querySelectorAll('input[name="must_haves"]');
+  mustHaveCheckboxes.forEach(checkbox => {
+    checkbox.addEventListener('change', () => {
+      updateMustHaveCount();
+    });
+  });
+
+  // Workplace type checkboxes
+  const workplaceCheckboxes = document.querySelectorAll('input[name="workplace_types_acceptable"]');
+  workplaceCheckboxes.forEach(checkbox => {
+    checkbox.addEventListener('change', () => {
+      updateWorkplaceCount();
+    });
+  });
+
+  console.log('[Profile Setup] Real-time count updates configured');
+}
+
+/**
+ * Update all count displays
+ */
+function updateAllCounts() {
+  updateTagCount('skills');
+  updateTagCount('industries');
+  updateTagCount('roles');
+  updateDealBreakerCount();
+  updateMustHaveCount();
+  updateWorkplaceCount();
+}
+
+/**
+ * Update deal-breaker count display
+ */
+function updateDealBreakerCount() {
+  const checkedCount = document.querySelectorAll('input[name="deal_breakers"]:checked').length;
+  const countDisplay = document.getElementById('dealbreaker-count');
+  if (countDisplay) {
+    countDisplay.textContent = checkedCount;
+    countDisplay.classList.toggle('has-items', checkedCount > 0);
+  }
+  console.log('[Profile Setup] Deal-breakers count updated:', checkedCount);
+}
+
+/**
+ * Update must-have count display
+ */
+function updateMustHaveCount() {
+  const checkedCount = document.querySelectorAll('input[name="must_haves"]:checked').length;
+  const countDisplay = document.getElementById('musthave-count');
+  if (countDisplay) {
+    countDisplay.textContent = checkedCount;
+    countDisplay.classList.toggle('has-items', checkedCount > 0);
+  }
+  console.log('[Profile Setup] Must-haves count updated:', checkedCount);
+}
+
+/**
+ * Update workplace types count display
+ */
+function updateWorkplaceCount() {
+  const checkedCount = document.querySelectorAll('input[name="workplace_types_acceptable"]:checked').length;
+  const countDisplay = document.getElementById('workplace-count');
+  if (countDisplay) {
+    countDisplay.textContent = checkedCount;
+    countDisplay.classList.toggle('has-items', checkedCount > 0);
+  }
+  console.log('[Profile Setup] Workplace types count updated:', checkedCount);
+}
 
 /**
  * Cache frequently used DOM elements

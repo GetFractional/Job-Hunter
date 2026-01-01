@@ -1020,30 +1020,100 @@ function showCriterionDetailModal(criterionName, criterionData, category, scoreR
 }
 
 /**
- * Get explanation for a criterion score
+ * Get explanation for a criterion score with actual job data context
  */
 function getCriterionExplanation(name, criterionData, jobData) {
+  // Use rationale from scoring engine if available
   if (criterionData.rationale) {
     return criterionData.rationale;
   }
 
-  const explanations = {
-    'Base Salary': `The max salary offered is ${criterionData.actual_value || 'not specified'}. Score reflects how well this matches your target compensation.`,
-    'Work Location': `This role is ${criterionData.actual_value || 'unspecified'}. Score based on your location preferences.`,
-    'Bonus & Equity': `${criterionData.actual_value || 'Neither mentioned'}. Score reflects presence of performance-based compensation.`,
-    'Benefits Package': `Benefits detected: ${criterionData.actual_value || 'none mentioned'}. Comprehensive benefits increase the score.`,
-    'Company Maturity': `Company stage: ${criterionData.actual_value || 'unknown'}. Later-stage companies typically score higher.`,
-    'Business Lifecycle': `Company lifecycle: ${criterionData.actual_value || 'unknown'}. Growth and mature stages preferred.`,
-    'Org Stability': `Organization stability: ${criterionData.actual_value || 'unclear'}. Growing companies score higher.`,
-    'Hiring Urgency': `Hiring urgency: ${criterionData.actual_value || 'normal'}. Higher urgency indicates motivated hiring.`,
-    'Title & Seniority Match': `Role: ${criterionData.actual_value || 'Unknown'}. Score reflects alignment with your target seniority.`,
-    'Operations & Systems Focus': `RevOps focus: ${criterionData.actual_value || 'unclear'}. Higher focus on systems/operations scores better.`,
-    'Skills Overlap': `Skills matched: ${criterionData.actual_value || 'unknown'}. More matching skills = higher score.`,
-    'Industry Experience': `Industry: ${criterionData.actual_value || 'Unknown'}. Exact matches score highest.`,
-    'Experience Level': `Required experience: ${criterionData.actual_value || 'unclear'}. Score reflects experience alignment.`
+  // Build context-rich explanations based on actual job data
+  const formatSalary = (val) => {
+    if (val >= 1000000) return `$${(val / 1000000).toFixed(1)}M`;
+    if (val >= 1000) return `$${Math.round(val / 1000)}K`;
+    return val ? `$${val}` : 'unknown';
   };
 
-  return explanations[name] || criterionData.criteria_description || 'This criterion measures job fit alignment.';
+  // Dynamic explanations using actual job data
+  switch (name) {
+    case 'Base Salary':
+      const salaryMin = jobData?.salaryMin;
+      const salaryMax = jobData?.salaryMax;
+      if (salaryMax) {
+        return `Job offers max salary of ${formatSalary(salaryMax)} (range: ${formatSalary(salaryMin)}-${formatSalary(salaryMax)}). Your target is $200K+. Score reflects how close this is to your target.`;
+      }
+      return `Salary ${criterionData.actual_value || 'not specified'}. Score based on match to your target compensation.`;
+
+    case 'Work Location':
+      const workplace = jobData?.workplaceType || criterionData.actual_value;
+      if (workplace?.toLowerCase().includes('remote')) {
+        return `This role is Remote - perfect match for your preference! No office requirement.`;
+      } else if (workplace?.toLowerCase().includes('hybrid')) {
+        return `This role is Hybrid - some in-office time required. Score reflects partial match to your remote preference.`;
+      } else if (workplace?.toLowerCase().includes('on-site')) {
+        return `This role is On-site only - requires daily office presence. This may be a dealbreaker if you need remote.`;
+      }
+      return `Work location: ${workplace || 'not specified'}. Score based on match to your location preferences.`;
+
+    case 'Bonus & Equity':
+      const bonusMentioned = jobData?.bonusMentioned;
+      const equityMentioned = jobData?.equityMentioned;
+      let bonusEquityText = [];
+      if (bonusMentioned) bonusEquityText.push('Performance bonus mentioned');
+      if (equityMentioned) bonusEquityText.push('Equity/stock options offered');
+      if (bonusEquityText.length === 0) bonusEquityText.push('Neither bonus nor equity mentioned');
+      return bonusEquityText.join('. ') + '. Score reflects presence of variable compensation.';
+
+    case 'Benefits Package':
+      return `Benefits detected: ${criterionData.actual_value || 'none specified'}. Comprehensive packages (Medical, Dental, 401K, PTO) score highest.`;
+
+    case 'Company Maturity':
+      return `Company stage: ${criterionData.actual_value || 'unknown'}. Series B+ companies offer more stability. Score reflects your preference for established companies.`;
+
+    case 'Business Lifecycle':
+      const lifecycle = criterionData.detected_stage || criterionData.actual_value;
+      const matchedKeyword = criterionData.matched_keyword;
+      if (matchedKeyword) {
+        return `Detected "${matchedKeyword}" indicating ${lifecycle} phase. Growth and mature stages score highest for risk/reward balance.`;
+      }
+      return `Company lifecycle: ${lifecycle || 'unknown'}. Growth and mature stages are preferred for stability.`;
+
+    case 'Org Stability':
+      const headcount = jobData?.companyHeadcount || jobData?.company_headcount;
+      const growth = jobData?.companyHeadcountGrowth;
+      if (headcount && growth) {
+        return `Company has ~${headcount.toLocaleString()} employees with ${growth} growth. Positive growth indicates organizational health.`;
+      }
+      return `Org stability: ${criterionData.actual_value || 'data not available'}. Growing companies (5%+ headcount) score higher.`;
+
+    case 'Title & Seniority Match':
+    case 'Role Type':
+      const title = jobData?.jobTitle;
+      return `Role: "${title || 'Unknown'}". Score reflects alignment with your target seniority level (VP/Director/Head of).`;
+
+    case 'Operations & Systems Focus':
+    case 'RevOps Component':
+      return `RevOps focus: ${criterionData.actual_value || 'not clear'}. Roles with GTM, CRM, data infrastructure responsibilities score higher.`;
+
+    case 'Skills Overlap':
+      const matchedSkills = criterionData.matched_skills || [];
+      if (matchedSkills.length > 0) {
+        return `You match ${matchedSkills.length} skills from the job: ${matchedSkills.slice(0, 5).join(', ')}${matchedSkills.length > 5 ? '...' : ''}. More matches = higher score.`;
+      }
+      return `Skills match: ${criterionData.actual_value || 'unknown'}. Score based on overlap with your core skills.`;
+
+    case 'Industry Experience':
+    case 'Industry Alignment':
+      const company = jobData?.companyName;
+      return `Industry: ${criterionData.actual_value || 'Unknown'}${company ? ` (${company})` : ''}. Exact matches to your preferred industries score highest.`;
+
+    case 'Experience Level':
+      return `Experience required: ${criterionData.actual_value || 'not specified'}. Score reflects whether your experience level aligns with requirements.`;
+
+    default:
+      return criterionData.criteria_description || 'This criterion measures job fit alignment.';
+  }
 }
 
 /**
