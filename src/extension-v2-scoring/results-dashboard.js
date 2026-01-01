@@ -40,7 +40,7 @@ function showResultsModal(scoreResult, jobData, onSendToAirtable, onEditProfile)
   document.body.appendChild(modalContainer);
 
   // Populate with score data
-  populateModal(scoreResult);
+  populateModal(scoreResult, jobData);
 
   // Set up event handlers
   setupModalEventHandlers(scoreResult, jobData, onSendToAirtable, onEditProfile);
@@ -74,8 +74,9 @@ function removeResultsModal() {
 /**
  * Populate the modal with score data
  * @param {Object} scoreResult - Score result from scoring engine
+ * @param {Object} jobData - Job data including metadata
  */
-function populateModal(scoreResult) {
+function populateModal(scoreResult, jobData) {
   const modal = document.getElementById('jh-results-modal');
   if (!modal) return;
 
@@ -87,6 +88,11 @@ function populateModal(scoreResult) {
     notice.className = 'jh-deal-breaker-notice';
     notice.textContent = scoreResult.deal_breaker_triggered;
     modal.querySelector('.jh-score-header').after(notice);
+  }
+
+  // Update job metadata section
+  if (jobData) {
+    updateJobMetadata(jobData);
   }
 
   // Update overall score
@@ -261,6 +267,63 @@ function getStarRating(score) {
     html += starSVG.replace('class="jh-star"', `class="jh-star ${filled}"`);
   }
   return html;
+}
+
+/**
+ * Update the job metadata section (Posted, Applicants, Hiring Manager)
+ * @param {Object} jobData - Job data
+ */
+function updateJobMetadata(jobData) {
+  // Posted Date
+  const postedRow = document.getElementById('jh-posted-row');
+  const postedValue = document.getElementById('jh-posted-value');
+  if (postedValue) {
+    const posted = jobData.postedDate;
+    if (posted) {
+      postedValue.textContent = posted;
+      postedValue.classList.add('jh-has-value');
+    } else {
+      postedValue.textContent = 'Not listed';
+      if (postedRow) postedRow.style.display = 'none';
+    }
+  }
+
+  // Applicant Count
+  const applicantsRow = document.getElementById('jh-applicants-row');
+  const applicantsValue = document.getElementById('jh-applicants-value');
+  if (applicantsValue) {
+    const count = jobData.applicantCount;
+    if (count !== null && count !== undefined) {
+      applicantsValue.textContent = `${count}`;
+      applicantsValue.classList.add('jh-has-value');
+      // Color code based on competition level
+      applicantsValue.classList.remove('jh-good', 'jh-neutral', 'jh-bad');
+      if (count < 25) {
+        applicantsValue.classList.add('jh-good');
+      } else if (count < 100) {
+        applicantsValue.classList.add('jh-neutral');
+      } else {
+        applicantsValue.classList.add('jh-bad');
+      }
+    } else {
+      applicantsValue.textContent = 'Not listed';
+      if (applicantsRow) applicantsRow.style.display = 'none';
+    }
+  }
+
+  // Hiring Manager
+  const hiringManagerRow = document.getElementById('jh-hiring-manager-row');
+  const hiringManagerValue = document.getElementById('jh-hiring-manager-value');
+  if (hiringManagerValue) {
+    const manager = jobData.hiringManager;
+    if (manager) {
+      hiringManagerValue.textContent = manager;
+      hiringManagerValue.classList.add('jh-has-value');
+    } else {
+      hiringManagerValue.textContent = 'Not listed';
+      if (hiringManagerRow) hiringManagerRow.style.display = 'none';
+    }
+  }
 }
 
 /**

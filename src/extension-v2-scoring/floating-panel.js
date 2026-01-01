@@ -749,6 +749,20 @@ function setupPanelEventHandlers(panel) {
     });
   }
 
+  // Settings/Edit Profile button
+  const settingsBtn = panel.querySelector('.jh-fp-settings');
+  if (settingsBtn) {
+    settingsBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      // Open profile setup
+      if (window.openProfileSetup) {
+        window.openProfileSetup();
+      } else {
+        console.log('[Floating Panel] openProfileSetup not available');
+      }
+    });
+  }
+
   // View Details button
   const detailsBtn = panel.querySelector('.jh-fp-details-btn');
   if (detailsBtn) {
@@ -1020,6 +1034,7 @@ function getPanelHTML() {
           <span class="jh-fp-company">Loading...</span>
         </div>
         <div class="jh-fp-controls">
+          <button class="jh-fp-settings" title="Edit Profile">⚙</button>
           <button class="jh-fp-close" title="Dismiss">×</button>
         </div>
       </div>
@@ -1259,6 +1274,14 @@ function getPanelStyles() {
 
     .jh-fp-controls button:hover {
       background: rgba(0,0,0,0.1);
+    }
+
+    .jh-fp-settings {
+      font-size: 12px;
+    }
+
+    .jh-fp-settings:hover {
+      color: #4361ee;
     }
 
     /* Score meter */

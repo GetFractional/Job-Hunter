@@ -387,16 +387,9 @@ function extractLinkedInJobData() {
       data.location = data.workplaceType;
     }
 
-    // Flag if equity is mentioned in the description (avoid DEI false positives)
+    // Flag if equity is mentioned using contextual detection
     if (data.descriptionText) {
-      const desc = data.descriptionText.toLowerCase();
-      // Check for compensation equity patterns
-      const equityPatterns = /stock\s+options?|\brsus?\b|restricted\s+stock|equity\s+(grant|package|compensation)|employee\s+stock|\bespp\b/i;
-      // Check for DEI patterns to exclude
-      const deiPatterns = /diversity[^.]{0,40}equity[^.]{0,40}inclusion|equal\s+opportunity|equity\s+in\s+(hiring|employment|workplace)/i;
-      if (equityPatterns.test(desc) || (/\bequity\b/i.test(desc) && !deiPatterns.test(desc))) {
-        data.equityMentioned = true;
-      }
+      data.equityMentioned = detectEquityWithContext(data.descriptionText);
     }
 
     // Flag if bonus is mentioned in the description using 15-word proximity rule
@@ -685,16 +678,9 @@ function extractIndeedJobData() {
       else if (/on[-\s]?site|onsite/i.test(employmentText)) data.workplaceType = 'On-site';
     }
 
-    // Equity flag: avoid EEO/DEI boilerplate false positives
+    // Flag if equity is mentioned using contextual detection
     if (data.descriptionText) {
-      const desc = data.descriptionText.toLowerCase();
-      // Check for compensation equity patterns
-      const equityPatterns = /stock\s+options?|\brsus?\b|restricted\s+stock|equity\s+(grant|package|compensation)|employee\s+stock|\bespp\b/i;
-      // Check for DEI patterns to exclude
-      const deiPatterns = /diversity[^.]{0,40}equity[^.]{0,40}inclusion|equal\s+opportunity|equity\s+in\s+(hiring|employment|workplace)/i;
-      if (equityPatterns.test(desc) || (/\bequity\b/i.test(desc) && !deiPatterns.test(desc))) {
-        data.equityMentioned = true;
-      }
+      data.equityMentioned = detectEquityWithContext(data.descriptionText);
     }
 
     // Flag if bonus is mentioned in the description using 15-word proximity rule
@@ -831,6 +817,87 @@ function detectBonusWithProximityRule(text) {
     // If this "bonus" instance is not excluded by proximity, it's valid
     if (!isExcluded) {
       return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Detect if equity/stock compensation is mentioned using contextual analysis
+ * Only returns true for genuine compensation-related equity mentions
+ * Excludes DEI/EEO "equity" and words like "pursuing" that contain "rsu"
+ * @param {string} text - Job description text
+ * @returns {boolean} True if compensation equity is mentioned
+ */
+function detectEquityWithContext(text) {
+  if (!text) return false;
+
+  const lowerText = text.toLowerCase();
+
+  // STRONG positive patterns - these are unambiguous compensation terms
+  const strongPatterns = [
+    /stock\s+options?/i,
+    /\brestricted\s+stock\s+units?\b/i,
+    /\brsu\b/i,  // Standalone RSU only (not inside words)
+    /\brsus\b/i, // Plural RSUs only
+    /\bespp\b/i,  // Employee Stock Purchase Plan
+    /employee\s+stock\s+purchase/i,
+    /stock\s+(grant|award|compensation|package)/i,
+    /equity\s+(grant|package|compensation|award|incentive|stake)/i,
+    /ownership\s+(stake|interest|percentage)/i,
+    /vesting\s+schedule/i,
+    /(\d+\.?\d*)\s*%?\s*(equity|ownership)/i,  // "0.5% equity"
+    /equity\s+in\s+the\s+company/i,
+    /shares?\s+(of|in)\s+(the\s+)?company/i,
+    /four[-\s]?year\s+vest/i,
+    /cliff\s+(period|vesting)/i
+  ];
+
+  // Check strong patterns first - these are unambiguous
+  for (const pattern of strongPatterns) {
+    if (pattern.test(lowerText)) {
+      return true;
+    }
+  }
+
+  // WEAK pattern: generic "equity" - requires compensation context
+  if (/\bequity\b/i.test(lowerText)) {
+    // Must NOT have DEI/EEO context
+    const deiPatterns = [
+      /diversity[^.]{0,60}equity[^.]{0,60}inclusion/i,
+      /equity[^.]{0,30}inclusion[^.]{0,30}diversity/i,
+      /equal\s+opportunity/i,
+      /equity\s+in\s+(hiring|employment|workplace|opportunity|opportunities)/i,
+      /promote\s+equity/i,
+      /commitment\s+to\s+equity/i,
+      /dei\b/i,
+      /equity\s+and\s+(inclusion|diversity)/i
+    ];
+
+    const hasDeiContext = deiPatterns.some(p => p.test(lowerText));
+    if (hasDeiContext) {
+      return false;
+    }
+
+    // Must HAVE compensation context nearby for generic "equity"
+    const compensationKeywords = [
+      'compensation', 'stock', 'vesting', 'vest', 'shares', 'ownership',
+      'options', 'grant', 'package', 'salary', 'total comp', 'offer',
+      '%', 'percent', 'fully diluted', 'cap table'
+    ];
+
+    // Find each "equity" mention and check for compensation context within 100 chars
+    const equityMatches = [...lowerText.matchAll(/\bequity\b/gi)];
+    for (const match of equityMatches) {
+      const start = Math.max(0, match.index - 100);
+      const end = Math.min(lowerText.length, match.index + 100);
+      const context = lowerText.substring(start, end);
+
+      const hasCompContext = compensationKeywords.some(kw => context.includes(kw));
+      if (hasCompContext) {
+        return true;
+      }
     }
   }
 

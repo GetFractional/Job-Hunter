@@ -197,6 +197,50 @@
 }
 
 /* ============================================================================
+   JOB METADATA SECTION
+============================================================================ */
+
+.jh-metadata-section {
+  padding: 12px 24px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.jh-metadata-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+}
+
+.jh-metadata-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.jh-metadata-label {
+  color: #6c757d;
+}
+
+.jh-metadata-value {
+  color: #1a1a2e;
+  font-weight: 500;
+}
+
+.jh-metadata-value.jh-good {
+  color: #2b8a3e;
+}
+
+.jh-metadata-value.jh-neutral {
+  color: #e67700;
+}
+
+.jh-metadata-value.jh-bad {
+  color: #c92a2a;
+}
+
+/* ============================================================================
    FIT SECTIONS
 ============================================================================ */
 
