@@ -428,65 +428,103 @@ function extractLinkedInJobData() {
     }
 
     // Extract Hiring Manager with name and job title from "Meet the hiring team" section
-    const hiringTeamContainer = document.querySelector(
-      '.hirer-card__hirer-information, .jobs-poster, .hiring-team, [data-test-hiring-team-card], .job-details-jobs-unified-top-card__hiring-team'
-    );
+    // Try multiple container selectors
+    const hiringTeamContainerSelectors = [
+      '.hirer-card__hirer-information',
+      '.jobs-poster',
+      '.hiring-team',
+      '[data-test-hiring-team-card]',
+      '.job-details-jobs-unified-top-card__hiring-team',
+      '.jobs-hiring-team',
+      '.job-details-hiring-team',
+      '.hiring-insights',
+      '[data-test-hiring-team]'
+    ];
 
+    let hiringTeamContainer = null;
+    for (const selector of hiringTeamContainerSelectors) {
+      hiringTeamContainer = document.querySelector(selector);
+      if (hiringTeamContainer) break;
+    }
+
+    // Name selectors - expanded list
+    const nameSelectors = [
+      '.hirer-card__hirer-information a',
+      '.jobs-poster__name',
+      '.hiring-team__title a',
+      '[data-test-hiring-team-card] a',
+      '.job-details-jobs-unified-top-card__hiring-team-member-name',
+      '.hiring-team-card-container__link',
+      '.jobs-hiring-team__name a',
+      '.hiring-team-member__name',
+      '.hirer-info__name',
+      'a[data-test-hiring-team-member-link]'
+    ];
+
+    // Title selectors - expanded list
+    const titleSelectors = [
+      '.hirer-card__hirer-information .t-14',
+      '.jobs-poster__headline',
+      '.hiring-team__subtitle',
+      '.job-details-jobs-unified-top-card__hiring-team-member-subtitle',
+      '.hiring-team-card-container__headline',
+      '.jobs-hiring-team__subtitle',
+      '.hiring-team-member__subtitle',
+      '.hirer-info__subtitle',
+      '[data-test-hiring-team-member-subtitle]'
+    ];
+
+    let nameEl = null;
+    let titleEl = null;
+
+    // Try to find name and title within the container first
     if (hiringTeamContainer) {
-      // Name selectors
-      const nameSelectors = [
-        '.hirer-card__hirer-information a',
-        '.jobs-poster__name',
-        '.hiring-team__title a',
-        '[data-test-hiring-team-card] a',
-        '.job-details-jobs-unified-top-card__hiring-team-member-name',
-        '.hiring-team-card-container__link'
-      ];
-      // Title selectors (usually the element after the name)
-      const titleSelectors = [
-        '.hirer-card__hirer-information .t-14',
-        '.jobs-poster__headline',
-        '.hiring-team__subtitle',
-        '.job-details-jobs-unified-top-card__hiring-team-member-subtitle',
-        '.hiring-team-card-container__headline'
-      ];
-
-      const nameEl = hiringTeamContainer.querySelector(nameSelectors.join(', ')) ||
-                     document.querySelector(nameSelectors.join(', '));
-      const titleEl = hiringTeamContainer.querySelector(titleSelectors.join(', ')) ||
-                      document.querySelector(titleSelectors.join(', '));
-
-      let hiringManagerName = nameEl?.textContent?.trim() || null;
-      let hiringManagerTitle = titleEl?.textContent?.trim() || null;
-
-      // Clean up hiring manager title - remove connection degree text
-      if (hiringManagerTitle) {
-        hiringManagerTitle = cleanHiringManagerTitle(hiringManagerTitle);
+      for (const selector of nameSelectors) {
+        nameEl = hiringTeamContainer.querySelector(selector);
+        if (nameEl && nameEl.textContent?.trim()) break;
       }
 
-      // Store as structured object
-      if (hiringManagerName) {
-        data.hiringManager = hiringManagerTitle
-          ? `${hiringManagerName}, ${hiringManagerTitle}`
-          : hiringManagerName;
-        data.hiringManagerDetails = {
-          name: hiringManagerName,
-          title: hiringManagerTitle
-        };
-        console.log('[Job Hunter] Hiring Manager:', data.hiringManager);
+      for (const selector of titleSelectors) {
+        titleEl = hiringTeamContainer.querySelector(selector);
+        if (titleEl && titleEl.textContent?.trim()) break;
       }
+    }
+
+    // Fallback: search entire document
+    if (!nameEl || !nameEl.textContent?.trim()) {
+      for (const selector of nameSelectors) {
+        nameEl = document.querySelector(selector);
+        if (nameEl && nameEl.textContent?.trim()) break;
+      }
+    }
+
+    if (!titleEl || !titleEl.textContent?.trim()) {
+      for (const selector of titleSelectors) {
+        titleEl = document.querySelector(selector);
+        if (titleEl && titleEl.textContent?.trim()) break;
+      }
+    }
+
+    let hiringManagerName = nameEl?.textContent?.trim() || null;
+    let hiringManagerTitle = titleEl?.textContent?.trim() || null;
+
+    // Clean up hiring manager title - remove connection degree text
+    if (hiringManagerTitle) {
+      hiringManagerTitle = cleanHiringManagerTitle(hiringManagerTitle);
+    }
+
+    // Store as structured object
+    if (hiringManagerName) {
+      data.hiringManager = hiringManagerTitle
+        ? `${hiringManagerName}, ${hiringManagerTitle}`
+        : hiringManagerName;
+      data.hiringManagerDetails = {
+        name: hiringManagerName,
+        title: hiringManagerTitle
+      };
+      console.log('[Job Hunter] Hiring Manager extracted:', data.hiringManager);
     } else {
-      // Fallback to simpler extraction if container not found
-      const hiringManagerEl = document.querySelector([
-        '.hirer-card__hirer-information a',
-        '.jobs-poster__name',
-        '.hiring-team__title a',
-        '[data-test-hiring-team-card] a',
-        '.job-details-jobs-unified-top-card__hiring-team-member-name'
-      ].join(', '));
-      if (hiringManagerEl?.textContent?.trim()) {
-        data.hiringManager = hiringManagerEl.textContent.trim();
-      }
+      console.log('[Job Hunter] Hiring Manager not found on page');
     }
 
     // Extract Posted Date from job card metadata
@@ -578,15 +616,24 @@ function extractCompanyHeadcountData() {
       '.jobs-unified-top-card__company-size',
       '.jobs-company__company-description',
       '.job-details-premium-company-insights',
-      '.job-details-company-insights'
+      '.job-details-company-insights',
+      '.company-size',
+      '.jobs-company-info',
+      '.job-details-about-company',
+      '[data-test-company-size]',
+      '.jobs-unified-top-card__job-insight',
+      '.job-details-jobs-unified-top-card__job-insight',
+      '.t-14.t-black--light.t-normal' // Company size text on some pages
     ];
 
     let companySidebarText = '';
     for (const selector of companyInfoSelectors) {
-      const el = document.querySelector(selector);
-      if (el?.innerText) {
-        companySidebarText += ' ' + el.innerText;
-      }
+      const elements = document.querySelectorAll(selector);
+      elements.forEach(el => {
+        if (el?.innerText) {
+          companySidebarText += ' ' + el.innerText;
+        }
+      });
     }
 
     // Method 2: Also check the full page text for company data

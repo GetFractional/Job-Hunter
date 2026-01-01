@@ -1,11 +1,6 @@
 /**
  * Job Hunter OS - Results Dashboard Script
- *
- * Handles rendering and interaction for the score results modal.
- * This script is injected into the page alongside results-dashboard.html
- * by content.js when a user clicks "Score This Job".
- *
- * Functions exported to window.JobHunterResults for use by content.js
+ * Redesigned to match new View Details layout with side-by-side columns
  */
 
 // ============================================================================
@@ -57,9 +52,11 @@ function showResultsModal(scoreResult, jobData, onSendToAirtable, onEditProfile)
 function removeResultsModal() {
   const container = document.getElementById('jh-results-container');
   const styles = document.getElementById('jh-results-styles');
+  const criterionModalStyles = document.getElementById('jh-criterion-modal-styles');
 
   if (container) container.remove();
   if (styles) styles.remove();
+  if (criterionModalStyles) criterionModalStyles.remove();
 
   // Restore body scroll
   document.body.style.overflow = '';
@@ -80,287 +77,392 @@ function populateModal(scoreResult, jobData) {
   const modal = document.getElementById('jh-results-modal');
   if (!modal) return;
 
-  // Handle deal-breaker case
-  if (scoreResult.deal_breaker_triggered) {
-    modal.querySelector('.jh-modal-content').classList.add('jh-deal-breaker-triggered');
-    // Insert deal-breaker notice
-    const notice = document.createElement('div');
-    notice.className = 'jh-deal-breaker-notice';
-    notice.textContent = scoreResult.deal_breaker_triggered;
-    modal.querySelector('.jh-score-header').after(notice);
+  // Populate header with job title and company
+  const jobTitle = modal.querySelector('#jh-job-title');
+  if (jobTitle && jobData) {
+    const title = jobData.jobTitle || 'Unknown Role';
+    const company = jobData.companyName || 'Unknown Company';
+    jobTitle.textContent = `${title} at ${company}`;
   }
 
-  // Update job metadata section
-  if (jobData) {
-    updateJobMetadata(jobData);
+  // Populate Fit Analysis summary
+  const fitSummary = modal.querySelector('#jh-fit-summary');
+  if (fitSummary && scoreResult.interpretation) {
+    fitSummary.textContent = scoreResult.interpretation.summary || 'Analyzing job fit...';
   }
 
-  // Update overall score
-  updateOverallScore(scoreResult.overall_score, scoreResult.overall_label);
+  // Populate YOUR FIT column (user → job)
+  const yourFitScore = scoreResult.user_to_job_fit?.score || 0;
+  const yourFitScoreEl = modal.querySelector('#jh-your-fit-score');
+  const yourFitLabelEl = modal.querySelector('#jh-your-fit-label');
 
-  // Update summary
-  const summaryEl = document.getElementById('jh-score-summary');
-  if (summaryEl) {
-    summaryEl.textContent = scoreResult.interpretation?.summary || 'Score calculated.';
+  if (yourFitScoreEl) {
+    yourFitScoreEl.textContent = yourFitScore;
+  }
+  if (yourFitLabelEl) {
+    const label = getFitLabel(yourFitScore);
+    yourFitLabelEl.textContent = label;
+    yourFitLabelEl.className = 'jh-fit-label ' + getFitLabelClass(yourFitScore);
   }
 
-  // Update Job-to-User fit section
-  const j2uScoreEl = document.getElementById('jh-j2u-score');
-  if (j2uScoreEl) {
-    j2uScoreEl.textContent = `${scoreResult.job_to_user_fit.score}/50`;
-  }
-  renderCriteriaList('jh-j2u-criteria', scoreResult.job_to_user_fit.breakdown);
-
-  // Update User-to-Job fit section
-  const u2jScoreEl = document.getElementById('jh-u2j-score');
-  if (u2jScoreEl) {
-    u2jScoreEl.textContent = `${scoreResult.user_to_job_fit.score}/50`;
-  }
-  renderCriteriaList('jh-u2j-criteria', scoreResult.user_to_job_fit.breakdown);
-
-  // Update interpretation section
-  updateInterpretation(scoreResult.interpretation);
-}
-
-/**
- * Update the overall score display with animation
- * @param {number} score - Score 0-100
- * @param {string} label - Score label (e.g., "STRONG FIT")
- */
-function updateOverallScore(score, label) {
-  const scoreNumber = document.getElementById('jh-score-number');
-  const scoreLabel = document.getElementById('jh-score-label');
-  const scoreRing = document.getElementById('jh-score-ring');
-  const scoreProgress = document.getElementById('jh-score-progress');
-
-  if (scoreNumber) {
-    // Animate score number
-    animateValue(scoreNumber, 0, score, 1000);
-  }
-
-  if (scoreLabel) {
-    scoreLabel.textContent = label;
-    // Add label class for styling
-    const labelClass = label.toLowerCase().replace(/\s+/g, '-');
-    scoreLabel.classList.add(`jh-${labelClass}`);
-  }
-
-  if (scoreRing) {
-    const ringClass = label.toLowerCase().replace(/\s+/g, '-');
-    scoreRing.classList.add(`jh-${ringClass}`);
-  }
-
-  if (scoreProgress) {
-    // Animate the progress circle
-    // Full circle = 339.292 (2 * PI * 54)
-    const circumference = 339.292;
-    const offset = circumference - (score / 100) * circumference;
-    setTimeout(() => {
-      scoreProgress.style.strokeDashoffset = offset;
-    }, 100);
-  }
-}
-
-/**
- * Animate a number value
- * @param {HTMLElement} element - Element to update
- * @param {number} start - Start value
- * @param {number} end - End value
- * @param {number} duration - Animation duration in ms
- */
-function animateValue(element, start, end, duration) {
-  const startTime = performance.now();
-
-  function update(currentTime) {
-    const elapsed = currentTime - startTime;
-    const progress = Math.min(elapsed / duration, 1);
-    // Ease out quad
-    const easeProgress = 1 - (1 - progress) * (1 - progress);
-    const current = Math.round(start + (end - start) * easeProgress);
-
-    element.textContent = current;
-
-    if (progress < 1) {
-      requestAnimationFrame(update);
+  // Update Apply Badge
+  const applyBadge = modal.querySelector('#jh-apply-badge');
+  if (applyBadge) {
+    const overallScore = scoreResult.overall_score || 0;
+    if (overallScore >= 70) {
+      applyBadge.textContent = 'APPLY';
+      applyBadge.className = 'jh-apply-badge jh-apply-good';
+    } else if (overallScore >= 50) {
+      applyBadge.textContent = 'READY';
+      applyBadge.className = 'jh-apply-badge jh-apply-moderate';
+    } else {
+      applyBadge.style.display = 'none';
     }
   }
 
-  requestAnimationFrame(update);
+  // Render YOUR FIT criteria
+  renderCriteriaColumn('jh-your-fit-criteria', scoreResult.user_to_job_fit?.breakdown || [], scoreResult, jobData);
+
+  // Populate JOB FIT column (job → user)
+  const jobFitScore = scoreResult.job_to_user_fit?.score || 0;
+  const jobFitScoreEl = modal.querySelector('#jh-job-fit-score');
+  const jobFitLabelEl = modal.querySelector('#jh-job-fit-label');
+
+  if (jobFitScoreEl) {
+    jobFitScoreEl.textContent = jobFitScore;
+  }
+  if (jobFitLabelEl) {
+    const label = getFitLabel(jobFitScore);
+    jobFitLabelEl.textContent = label;
+    jobFitLabelEl.className = 'jh-fit-label ' + getFitLabelClass(jobFitScore);
+  }
+
+  // Render JOB FIT criteria
+  renderCriteriaColumn('jh-job-fit-criteria', scoreResult.job_to_user_fit?.breakdown || [], scoreResult, jobData);
+
+  // Populate Deal Breakers section
+  populateDealBreakers(scoreResult);
+
+  // Populate Job Details section
+  populateJobDetails(jobData);
 }
 
 /**
- * Render a list of criteria with scores
- * @param {string} containerId - ID of the container element
- * @param {Array} criteria - Array of criterion objects
+ * Get fit label text based on score (0-50 scale)
  */
-function renderCriteriaList(containerId, criteria) {
-  const container = document.getElementById(containerId);
-  if (!container || !criteria) return;
+function getFitLabel(score) {
+  if (score >= 40) return 'GREAT FIT';
+  if (score >= 30) return 'GOOD FIT';
+  if (score >= 20) return 'MODERATE FIT';
+  if (score >= 10) return 'WEAK FIT';
+  return 'POOR FIT';
+}
 
-  // Filter out Hiring Urgency - it doesn't provide value
+/**
+ * Get CSS class for fit label based on score
+ */
+function getFitLabelClass(score) {
+  if (score >= 40) return 'jh-fit-great';
+  if (score >= 30) return 'jh-fit-good';
+  if (score >= 20) return 'jh-fit-moderate';
+  if (score >= 10) return 'jh-fit-weak';
+  return 'jh-fit-poor';
+}
+
+/**
+ * Render criteria breakdown in a column
+ * @param {string} containerId - ID of container element
+ * @param {Array} criteria - Array of criterion objects
+ * @param {Object} scoreResult - Full score result
+ * @param {Object} jobData - Job data
+ */
+function renderCriteriaColumn(containerId, criteria, scoreResult, jobData) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  // Filter out hiring urgency
   const filteredCriteria = criteria.filter(c =>
     !c.criteria?.toLowerCase().includes('hiring urgency')
   );
 
-  container.innerHTML = filteredCriteria.map(criterion => {
-    const scorePercentage = Math.round((criterion.score / (criterion.max_score || 50)) * 100);
-    const scoreClass = criterion.score >= 40 ? 'jh-score-high' : criterion.score <= 20 ? 'jh-score-low' : '';
+  if (filteredCriteria.length === 0) {
+    container.innerHTML = '<div class="jh-loading">No criteria available</div>';
+    return;
+  }
 
-    // For Skills Overlap, show matching skills as tags
-    let skillTagsHtml = '';
-    if (criterion.criteria?.toLowerCase().includes('skill') && criterion.matched_skills && criterion.matched_skills.length > 0) {
-      skillTagsHtml = `
-        <div class="jh-skill-tags">
-          ${criterion.matched_skills.map(skill => `<span class="jh-skill-tag">${escapeHtml(skill)}</span>`).join('')}
-        </div>
-      `;
-    }
+  container.innerHTML = filteredCriteria.map(criterion => {
+    const score = criterion.score || 0;
+    const maxScore = criterion.max_score || 50;
+    const percentage = Math.round((score / maxScore) * 100);
+    const barClass = getProgressBarClass(percentage);
 
     return `
-      <div class="jh-criterion ${scoreClass}">
-        <div class="jh-criterion-score-badge">
-          <span class="jh-score-number">${criterion.score}</span>
-          <span class="jh-score-max">/${criterion.max_score || 50}</span>
+      <div class="jh-criterion jh-criterion-clickable"
+           data-criterion="${escapeHtml(criterion.criteria)}"
+           data-score="${score}"
+           data-max-score="${maxScore}">
+        <div class="jh-criterion-header">
+          <span class="jh-criterion-name">${escapeHtml(criterion.criteria)}</span>
+          <span class="jh-criterion-percentage">${percentage}%</span>
         </div>
-        <div class="jh-criterion-content">
-          <div class="jh-criterion-header">
-            <span class="jh-criterion-name">${escapeHtml(criterion.criteria)}</span>
-            <span class="jh-criterion-value">${escapeHtml(criterion.actual_value || '')}</span>
-          </div>
-          <p class="jh-criterion-rationale">${escapeHtml(criterion.rationale)}</p>
-          ${skillTagsHtml}
+        <div class="jh-progress-bar">
+          <div class="jh-progress-fill ${barClass}" style="width: ${percentage}%"></div>
         </div>
       </div>
     `;
   }).join('');
+
+  // Attach click handlers to show detailed breakdown
+  attachCriterionClickHandlers(container, criteria, scoreResult, jobData);
 }
 
 /**
- * Generate star rating HTML based on score percentage
- * Stars correlate directly with the score: 0-10% = 0-1 star, 10-30% = 1-2 stars, etc.
- * @param {number} score - Score 0-50 (representing a criterion score)
- * @returns {string} HTML for star rating
+ * Get progress bar color class based on percentage
  */
-function getStarRating(score) {
-  // Convert 0-50 score to percentage, then to 0-5 stars
-  // Score 0-10 = 0-1 star, 10-20 = 1-2 stars, 20-30 = 2-3 stars, 30-40 = 3-4 stars, 40-50 = 4-5 stars
-  const percentage = (score / 50) * 100;
-  let filledStars;
-
-  if (percentage <= 10) {
-    filledStars = percentage >= 5 ? 1 : 0;
-  } else if (percentage <= 30) {
-    filledStars = percentage >= 20 ? 2 : 1;
-  } else if (percentage <= 50) {
-    filledStars = percentage >= 40 ? 3 : 2;
-  } else if (percentage <= 70) {
-    filledStars = percentage >= 60 ? 4 : 3;
-  } else {
-    filledStars = percentage >= 90 ? 5 : 4;
-  }
-
-  const starSVG = `<svg class="jh-star" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>`;
-
-  let html = '';
-  for (let i = 0; i < 5; i++) {
-    const filled = i < filledStars ? 'jh-filled' : '';
-    html += starSVG.replace('class="jh-star"', `class="jh-star ${filled}"`);
-  }
-  return html;
+function getProgressBarClass(percentage) {
+  if (percentage >= 70) return 'jh-progress-green';
+  if (percentage >= 40) return 'jh-progress-yellow';
+  return 'jh-progress-red';
 }
 
 /**
- * Update the job metadata section (Posted, Applicants, Hiring Manager)
- * @param {Object} jobData - Job data
+ * Attach click handlers to criteria for detail view
  */
-function updateJobMetadata(jobData) {
-  // Posted Date
-  const postedRow = document.getElementById('jh-posted-row');
-  const postedValue = document.getElementById('jh-posted-value');
-  if (postedValue) {
-    const posted = jobData.postedDate;
-    if (posted) {
-      postedValue.textContent = posted;
-      postedValue.classList.add('jh-has-value');
-    } else {
-      postedValue.textContent = 'Not listed';
-      if (postedRow) postedRow.style.display = 'none';
-    }
-  }
+function attachCriterionClickHandlers(container, allCriteria, scoreResult, jobData) {
+  const criterionEls = container.querySelectorAll('.jh-criterion-clickable');
 
-  // Applicant Count
-  const applicantsRow = document.getElementById('jh-applicants-row');
-  const applicantsValue = document.getElementById('jh-applicants-value');
-  if (applicantsValue) {
-    const count = jobData.applicantCount;
-    if (count !== null && count !== undefined) {
-      applicantsValue.textContent = `${count}`;
-      applicantsValue.classList.add('jh-has-value');
-      // Color code based on competition level
-      applicantsValue.classList.remove('jh-good', 'jh-neutral', 'jh-bad');
-      if (count < 25) {
-        applicantsValue.classList.add('jh-good');
-      } else if (count < 100) {
-        applicantsValue.classList.add('jh-neutral');
-      } else {
-        applicantsValue.classList.add('jh-bad');
+  criterionEls.forEach(el => {
+    el.style.cursor = 'pointer';
+
+    el.addEventListener('click', () => {
+      const criterionName = el.getAttribute('data-criterion');
+      const criterionData = allCriteria.find(c => c.criteria === criterionName);
+
+      if (criterionData) {
+        showCriterionDetailModal(criterionData, scoreResult, jobData);
       }
-    } else {
-      applicantsValue.textContent = 'Not listed';
-      if (applicantsRow) applicantsRow.style.display = 'none';
-    }
+    });
+  });
+}
+
+/**
+ * Show detailed modal for a specific criterion
+ */
+function showCriterionDetailModal(criterionData, scoreResult, jobData) {
+  // Remove any existing criterion modal
+  const existing = document.getElementById('jh-criterion-detail-modal');
+  if (existing) existing.remove();
+
+  const score = criterionData.score || 0;
+  const maxScore = criterionData.max_score || 50;
+  const percentage = Math.round((score / maxScore) * 100);
+
+  // Build modal
+  const modal = document.createElement('div');
+  modal.id = 'jh-criterion-detail-modal';
+  modal.className = 'jh-criterion-modal-overlay';
+
+  modal.innerHTML = `
+    <div class="jh-criterion-modal">
+      <button class="jh-criterion-close">&times;</button>
+
+      <h2>${escapeHtml(criterionData.criteria)}</h2>
+
+      <div class="jh-criterion-score-box">
+        <span class="jh-criterion-score-value">${score}<span class="jh-criterion-score-max">/${maxScore}</span></span>
+        <div class="jh-progress-bar jh-progress-bar-large">
+          <div class="jh-progress-fill ${getProgressBarClass(percentage)}" style="width: ${percentage}%"></div>
+        </div>
+      </div>
+
+      <div class="jh-criterion-section">
+        <h3>Why this score?</h3>
+        <p>${escapeHtml(criterionData.rationale || 'Score based on job fit analysis.')}</p>
+        ${criterionData.actual_value ? `<p class="jh-criterion-actual"><strong>Detected:</strong> ${escapeHtml(criterionData.actual_value)}</p>` : ''}
+        ${criterionData.matched_skills && criterionData.matched_skills.length > 0 ? `
+          <div class="jh-matched-skills">
+            <strong>Matched Skills:</strong>
+            ${criterionData.matched_skills.map(skill => `<span class="jh-skill-badge">${escapeHtml(skill)}</span>`).join('')}
+          </div>
+        ` : ''}
+      </div>
+
+      <div class="jh-criterion-section">
+        <h3>How to improve:</h3>
+        <ul>
+          ${getCriterionTips(criterionData.criteria).map(tip => `<li>${escapeHtml(tip)}</li>`).join('')}
+        </ul>
+      </div>
+    </div>
+  `;
+
+  // Add modal styles if not present
+  if (!document.getElementById('jh-criterion-modal-styles')) {
+    const styleEl = document.createElement('style');
+    styleEl.id = 'jh-criterion-modal-styles';
+    styleEl.textContent = getCriterionModalStyles();
+    document.head.appendChild(styleEl);
   }
+
+  // Close handlers
+  const closeBtn = modal.querySelector('.jh-criterion-close');
+  closeBtn.addEventListener('click', () => modal.remove());
+
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.remove();
+  });
+
+  document.body.appendChild(modal);
+}
+
+/**
+ * Get improvement tips for a criterion
+ */
+function getCriterionTips(criterionName) {
+  const tips = {
+    'Base Salary': [
+      'Target roles at Series C+ companies for higher budgets',
+      'VP/Director titles typically command $180K-250K+',
+      'Negotiate based on total comp, not just base'
+    ],
+    'Work Location': [
+      'Filter job searches by your location preference',
+      'Remote roles offer geographic flexibility'
+    ],
+    'Bonus & Equity': [
+      'Look for explicit bonus percentages (10-20% typical)',
+      'Growth-stage companies often offer meaningful equity'
+    ],
+    'Skills Overlap': [
+      'Target roles where 60%+ skills match',
+      'Highlight transferable skills in applications'
+    ],
+    'Title & Seniority Match': [
+      'Target VP/Head-of titles for your experience',
+      'Focus on scope and impact, not just title'
+    ],
+    'Industry Alignment': [
+      'Leverage adjacent industry experience',
+      'SaaS/B2B experience is widely transferable'
+    ]
+  };
+
+  return tips[criterionName] || ['Focus on opportunities better aligned with this criterion'];
+}
+
+/**
+ * Populate deal breakers section
+ */
+function populateDealBreakers(scoreResult) {
+  const section = document.getElementById('jh-deal-breakers-section');
+  const list = document.getElementById('jh-deal-breakers-list');
+
+  if (!section || !list) return;
+
+  // Check for deal breaker in score result
+  if (scoreResult.deal_breaker_triggered) {
+    section.style.display = 'block';
+    list.innerHTML = `
+      <div class="jh-deal-breaker jh-deal-breaker-triggered">
+        ⚠️ ${escapeHtml(scoreResult.deal_breaker_triggered)}
+      </div>
+    `;
+  } else {
+    section.style.display = 'none';
+  }
+}
+
+/**
+ * Populate job details section
+ */
+function populateJobDetails(jobData) {
+  if (!jobData) return;
 
   // Hiring Manager
-  const hiringManagerRow = document.getElementById('jh-hiring-manager-row');
-  const hiringManagerValue = document.getElementById('jh-hiring-manager-value');
-  if (hiringManagerValue) {
-    const manager = jobData.hiringManager;
-    if (manager) {
-      hiringManagerValue.textContent = manager;
-      hiringManagerValue.classList.add('jh-has-value');
-    } else {
-      hiringManagerValue.textContent = 'Not listed';
-      if (hiringManagerRow) hiringManagerRow.style.display = 'none';
-    }
-  }
-}
-
-/**
- * Update the interpretation section
- * @param {Object} interpretation - Interpretation object
- */
-function updateInterpretation(interpretation) {
-  if (!interpretation) return;
-
-  // Update action badge
-  const actionBadge = document.getElementById('jh-action-badge');
-  const actionText = document.getElementById('jh-action-text');
-
-  if (actionBadge && actionText) {
-    actionText.textContent = interpretation.action || 'Review score details';
-
-    // Set badge style based on action
-    if (interpretation.action?.includes('PURSUE') || interpretation.action?.includes('STRONG')) {
-      actionBadge.classList.add('jh-pursue');
-    } else if (interpretation.action?.includes('CONSIDER') || interpretation.action?.includes('MODERATE')) {
-      actionBadge.classList.add('jh-consider');
-    } else {
-      actionBadge.classList.add('jh-skip');
-    }
+  const hiringManagerItem = document.getElementById('jh-hiring-manager-item');
+  const hiringManagerValue = document.getElementById('jh-hiring-manager');
+  if (jobData.hiringManager && hiringManagerValue) {
+    hiringManagerValue.textContent = jobData.hiringManager;
+    if (hiringManagerItem) hiringManagerItem.style.display = 'flex';
   }
 
-  // Update conversation starters
-  const startersContainer = document.getElementById('jh-conversation-starters');
-  if (startersContainer && interpretation.conversation_starters?.length > 0) {
-    startersContainer.innerHTML = `
-      <span class="jh-conversation-starters-label">Questions to Ask</span>
-      ${interpretation.conversation_starters.map(q =>
-        `<div class="jh-conversation-starter">${escapeHtml(q)}</div>`
-      ).join('')}
-    `;
-  } else if (startersContainer) {
-    startersContainer.innerHTML = '';
+  // Posted Date
+  const postedItem = document.getElementById('jh-posted-item');
+  const postedValue = document.getElementById('jh-posted');
+  if (jobData.postedDate && postedValue) {
+    postedValue.textContent = jobData.postedDate;
+    if (postedItem) postedItem.style.display = 'flex';
+  }
+
+  // Applicants
+  const applicantsItem = document.getElementById('jh-applicants-item');
+  const applicantsValue = document.getElementById('jh-applicants');
+  if (jobData.applicantCount !== null && jobData.applicantCount !== undefined && applicantsValue) {
+    applicantsValue.textContent = jobData.applicantCount;
+    if (applicantsItem) applicantsItem.style.display = 'flex';
+  }
+
+  // Location
+  const locationValue = document.getElementById('jh-location');
+  if (locationValue) {
+    locationValue.textContent = jobData.location || 'Not specified';
+  }
+
+  // Salary
+  const salaryValue = document.getElementById('jh-salary');
+  if (salaryValue) {
+    if (jobData.salaryMin && jobData.salaryMax) {
+      const formatSalary = (val) => {
+        if (val >= 1000000) return `$${(val / 1000000).toFixed(1)}M`;
+        if (val >= 1000) return `$${Math.round(val / 1000)}K`;
+        return `$${val}`;
+      };
+      salaryValue.textContent = `${formatSalary(jobData.salaryMin)} - ${formatSalary(jobData.salaryMax)}`;
+    } else {
+      salaryValue.textContent = 'Not specified';
+    }
+  }
+
+  // Bonus
+  const bonusItem = document.getElementById('jh-bonus-item');
+  const bonusValue = document.getElementById('jh-bonus');
+  if (jobData.bonusMentioned && bonusValue) {
+    bonusValue.textContent = 'Performance bonus mentioned';
+    if (bonusItem) bonusItem.style.display = 'flex';
+  }
+
+  // Equity
+  const equityItem = document.getElementById('jh-equity-item');
+  const equityValue = document.getElementById('jh-equity');
+  if (jobData.equityMentioned && equityValue) {
+    equityValue.textContent = 'Stock options or equity mentioned';
+    if (equityItem) equityItem.style.display = 'flex';
+  }
+
+  // Workplace Type
+  const workplaceValue = document.getElementById('jh-workplace');
+  if (workplaceValue) {
+    workplaceValue.textContent = jobData.workplaceType || 'Not specified';
+  }
+
+  // Employment Type
+  const employmentValue = document.getElementById('jh-employment');
+  if (employmentValue) {
+    employmentValue.textContent = jobData.employmentType || 'Not specified';
+  }
+
+  // Company Size
+  const companySizeItem = document.getElementById('jh-company-size-item');
+  const companySizeValue = document.getElementById('jh-company-size');
+  if (jobData.companyHeadcount && companySizeValue) {
+    companySizeValue.textContent = `${jobData.companyHeadcount} employees`;
+    if (companySizeItem) companySizeItem.style.display = 'flex';
+  }
+
+  // Job Description
+  const descriptionValue = document.getElementById('jh-description');
+  if (descriptionValue) {
+    descriptionValue.textContent = jobData.descriptionText || 'No description available';
   }
 }
 
@@ -369,49 +471,40 @@ function updateInterpretation(interpretation) {
 // ============================================================================
 
 /**
- * Set up event handlers for modal buttons
- * @param {Object} scoreResult - Score result
- * @param {Object} jobData - Job data
- * @param {Function} onSendToAirtable - Callback for send button
- * @param {Function} onEditProfile - Callback for edit profile button
+ * Set up modal event handlers
  */
 function setupModalEventHandlers(scoreResult, jobData, onSendToAirtable, onEditProfile) {
   const modal = document.getElementById('jh-results-modal');
   if (!modal) return;
 
-  // Close button
-  const closeBtn = modal.querySelector('.jh-modal-close');
-  if (closeBtn) {
-    closeBtn.addEventListener('click', removeResultsModal);
+  // Close button (header)
+  const closeHeaderBtn = document.getElementById('jh-btn-close-header');
+  if (closeHeaderBtn) {
+    closeHeaderBtn.addEventListener('click', removeResultsModal);
   }
 
-  // Close on backdrop click
-  const backdrop = modal.querySelector('.jh-modal-backdrop');
-  if (backdrop) {
-    backdrop.addEventListener('click', removeResultsModal);
-  }
-
-  // Close button in footer
-  const footerCloseBtn = document.getElementById('jh-btn-close');
-  if (footerCloseBtn) {
-    footerCloseBtn.addEventListener('click', removeResultsModal);
-  }
-
-  // Escape key to close
-  const escHandler = (e) => {
-    if (e.key === 'Escape') {
+  // Settings button (header)
+  const settingsBtn = document.getElementById('jh-btn-settings');
+  if (settingsBtn && onEditProfile) {
+    settingsBtn.addEventListener('click', () => {
+      onEditProfile();
       removeResultsModal();
-      document.removeEventListener('keydown', escHandler);
-    }
-  };
-  document.addEventListener('keydown', escHandler);
+    });
+  }
 
-  // Edit Profile button
+  // Edit Profile button (footer)
   const editProfileBtn = document.getElementById('jh-btn-edit-profile');
   if (editProfileBtn && onEditProfile) {
     editProfileBtn.addEventListener('click', () => {
       onEditProfile();
+      removeResultsModal();
     });
+  }
+
+  // Cancel/Close button (footer)
+  const cancelBtn = document.getElementById('jh-btn-cancel');
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', removeResultsModal);
   }
 
   // Send to Job Hunter button
@@ -420,7 +513,7 @@ function setupModalEventHandlers(scoreResult, jobData, onSendToAirtable, onEditP
     sendBtn.addEventListener('click', async () => {
       sendBtn.disabled = true;
       sendBtn.classList.add('jh-loading');
-      sendBtn.textContent = '';
+      sendBtn.textContent = 'Sending...';
 
       try {
         await onSendToAirtable(jobData, scoreResult);
@@ -428,7 +521,6 @@ function setupModalEventHandlers(scoreResult, jobData, onSendToAirtable, onEditP
         sendBtn.classList.add('jh-success');
         sendBtn.textContent = 'Sent!';
 
-        // Close modal after success
         setTimeout(() => {
           removeResultsModal();
         }, 1500);
@@ -440,6 +532,21 @@ function setupModalEventHandlers(scoreResult, jobData, onSendToAirtable, onEditP
       }
     });
   }
+
+  // Close on backdrop click
+  const backdrop = modal.querySelector('.jh-modal-backdrop');
+  if (backdrop) {
+    backdrop.addEventListener('click', removeResultsModal);
+  }
+
+  // Close on Escape key
+  const escHandler = (e) => {
+    if (e.key === 'Escape') {
+      removeResultsModal();
+      document.removeEventListener('keydown', escHandler);
+    }
+  };
+  document.addEventListener('keydown', escHandler);
 }
 
 // ============================================================================
@@ -448,8 +555,6 @@ function setupModalEventHandlers(scoreResult, jobData, onSendToAirtable, onEditP
 
 /**
  * Escape HTML to prevent XSS
- * @param {string} text - Text to escape
- * @returns {string} Escaped text
  */
 function escapeHtml(text) {
   if (!text) return '';
@@ -459,81 +564,176 @@ function escapeHtml(text) {
 }
 
 // ============================================================================
-// MODAL HTML TEMPLATE
+// MODAL HTML & STYLES
 // ============================================================================
 
 /**
- * Get the modal HTML template
- * @returns {string} HTML string
+ * Get the modal HTML template (inline)
  */
 function getModalHTML() {
   return `
 <div id="jh-results-modal" class="jh-modal">
   <div class="jh-modal-backdrop"></div>
   <div class="jh-modal-content">
-    <button type="button" class="jh-modal-close" title="Close">&times;</button>
+    <!-- Header: Job Title + Close + Settings -->
+    <div class="jh-modal-header">
+      <h1 class="jh-job-title" id="jh-job-title">Loading...</h1>
+      <div class="jh-header-controls">
+        <button type="button" class="jh-header-btn jh-settings-btn" id="jh-btn-settings" title="Edit Profile">⚙</button>
+        <button type="button" class="jh-header-btn jh-close-btn" id="jh-btn-close-header" title="Close">&times;</button>
+      </div>
+    </div>
 
-    <header class="jh-score-header">
-      <div class="jh-score-ring" id="jh-score-ring">
-        <svg viewBox="0 0 120 120" class="jh-score-svg">
-          <circle cx="60" cy="60" r="54" fill="none" stroke="#e9ecef" stroke-width="8"/>
-          <circle
-            cx="60" cy="60" r="54"
-            fill="none"
-            stroke="#4361ee"
-            stroke-width="8"
-            stroke-linecap="round"
-            stroke-dasharray="339.292"
-            stroke-dashoffset="339.292"
-            transform="rotate(-90 60 60)"
-            class="jh-score-progress"
-            id="jh-score-progress"
-          />
-        </svg>
-        <div class="jh-score-value">
-          <span class="jh-score-number" id="jh-score-number">--</span>
-          <span class="jh-score-max">/100</span>
+    <!-- Fit Analysis Summary -->
+    <section class="jh-fit-analysis">
+      <h2 class="jh-section-heading">FIT ANALYSIS</h2>
+      <p class="jh-fit-summary" id="jh-fit-summary">Analyzing job fit...</p>
+    </section>
+
+    <!-- Two-Column Layout: Your Fit & Job Fit -->
+    <div class="jh-columns">
+      <!-- Left Column: YOUR FIT (User → Job) -->
+      <div class="jh-column jh-column-your-fit">
+        <div class="jh-column-header">
+          <h3>YOUR FIT</h3>
+          <div class="jh-fit-score-display">
+            <span class="jh-score-large" id="jh-your-fit-score">--</span>
+            <span class="jh-score-max">/50</span>
+          </div>
+        </div>
+
+        <div class="jh-fit-label-container">
+          <span class="jh-fit-label" id="jh-your-fit-label">Calculating...</span>
+          <span class="jh-apply-badge" id="jh-apply-badge">Apply</span>
+        </div>
+
+        <div class="jh-criteria-breakdown" id="jh-your-fit-criteria">
+          <!-- Populated by JS -->
+          <div class="jh-loading">Loading criteria...</div>
         </div>
       </div>
-      <div class="jh-score-info">
-        <span class="jh-score-label" id="jh-score-label">Calculating...</span>
-        <p class="jh-score-summary" id="jh-score-summary">Analyzing job fit...</p>
-      </div>
-    </header>
 
-    <section class="jh-fit-section">
-      <div class="jh-section-header">
-        <h3>Job Meets Your Needs</h3>
-        <span class="jh-section-score" id="jh-j2u-score">--/50</span>
+      <!-- Right Column: JOB FIT (Job → User) -->
+      <div class="jh-column jh-column-job-fit">
+        <div class="jh-column-header">
+          <h3>JOB FIT</h3>
+          <div class="jh-fit-score-display">
+            <span class="jh-score-large" id="jh-job-fit-score">--</span>
+            <span class="jh-score-max">/50</span>
+          </div>
+        </div>
+
+        <div class="jh-fit-label-container">
+          <span class="jh-fit-label" id="jh-job-fit-label">Calculating...</span>
+        </div>
+
+        <div class="jh-criteria-breakdown" id="jh-job-fit-criteria">
+          <!-- Populated by JS -->
+          <div class="jh-loading">Loading criteria...</div>
+        </div>
       </div>
-      <div class="jh-criteria-list" id="jh-j2u-criteria">
-        <div class="jh-loading">Loading criteria...</div>
+    </div>
+
+    <!-- Deal Breakers Section -->
+    <section class="jh-deal-breakers" id="jh-deal-breakers-section" style="display: none;">
+      <h2 class="jh-section-heading">⚠️ DEAL BREAKERS</h2>
+      <div id="jh-deal-breakers-list">
+        <!-- Populated by JS -->
       </div>
     </section>
 
-    <section class="jh-fit-section">
-      <div class="jh-section-header">
-        <h3>You Match This Role</h3>
-        <span class="jh-section-score" id="jh-u2j-score">--/50</span>
+    <!-- Job Details Section -->
+    <section class="jh-job-details">
+      <h2 class="jh-section-heading">JOB DETAILS</h2>
+
+      <div class="jh-details-grid">
+        <!-- Hiring Manager -->
+        <div class="jh-detail-item" id="jh-hiring-manager-item" style="display: none;">
+          <span class="jh-detail-label">Hiring Manager:</span>
+          <span class="jh-detail-value" id="jh-hiring-manager">--</span>
+        </div>
+
+        <!-- Posted Date -->
+        <div class="jh-detail-item" id="jh-posted-item" style="display: none;">
+          <span class="jh-detail-label">Posted:</span>
+          <span class="jh-detail-value" id="jh-posted">--</span>
+        </div>
+
+        <!-- Applicant Count -->
+        <div class="jh-detail-item" id="jh-applicants-item" style="display: none;">
+          <span class="jh-detail-label">Total Applicants:</span>
+          <span class="jh-detail-value" id="jh-applicants">--</span>
+        </div>
+
+        <!-- Location -->
+        <div class="jh-detail-item" id="jh-location-item">
+          <span class="jh-detail-label">Location:</span>
+          <span class="jh-detail-value" id="jh-location">--</span>
+        </div>
+
+        <!-- Salary -->
+        <div class="jh-detail-item" id="jh-salary-item">
+          <span class="jh-detail-label">Salary:</span>
+          <span class="jh-detail-value" id="jh-salary">--</span>
+        </div>
+
+        <!-- Bonus -->
+        <div class="jh-detail-item" id="jh-bonus-item" style="display: none;">
+          <span class="jh-detail-label">Bonus:</span>
+          <span class="jh-detail-value" id="jh-bonus">--</span>
+        </div>
+
+        <!-- Equity -->
+        <div class="jh-detail-item" id="jh-equity-item" style="display: none;">
+          <span class="jh-detail-label">Equity:</span>
+          <span class="jh-detail-value" id="jh-equity">--</span>
+        </div>
+
+        <!-- Benefits -->
+        <div class="jh-detail-item" id="jh-benefits-item" style="display: none;">
+          <span class="jh-detail-label">Benefits:</span>
+          <span class="jh-detail-value" id="jh-benefits">--</span>
+        </div>
+
+        <!-- Workplace Type -->
+        <div class="jh-detail-item" id="jh-workplace-item">
+          <span class="jh-detail-label">Workplace Type:</span>
+          <span class="jh-detail-value" id="jh-workplace">--</span>
+        </div>
+
+        <!-- Employment Type -->
+        <div class="jh-detail-item" id="jh-employment-item">
+          <span class="jh-detail-label">Employment Type:</span>
+          <span class="jh-detail-value" id="jh-employment">--</span>
+        </div>
+
+        <!-- Company Size -->
+        <div class="jh-detail-item" id="jh-company-size-item" style="display: none;">
+          <span class="jh-detail-label">Company Size:</span>
+          <span class="jh-detail-value" id="jh-company-size">--</span>
+        </div>
       </div>
-      <div class="jh-criteria-list" id="jh-u2j-criteria">
-        <div class="jh-loading">Loading criteria...</div>
+
+      <!-- Job Description -->
+      <div class="jh-description-container">
+        <h3 class="jh-description-heading">JOB DESCRIPTION</h3>
+        <div class="jh-description-text" id="jh-description">
+          Loading job description...
+        </div>
       </div>
     </section>
 
-    <section class="jh-interpretation-section">
-      <h3>Next Steps</h3>
-      <div class="jh-action-badge" id="jh-action-badge">
-        <span class="jh-action-icon"></span>
-        <span class="jh-action-text" id="jh-action-text">Analyzing...</span>
-      </div>
-      <div class="jh-conversation-starters" id="jh-conversation-starters"></div>
-    </section>
-
+    <!-- Footer: Action Buttons -->
     <footer class="jh-modal-footer">
-      <button type="button" class="jh-btn jh-btn-secondary" id="jh-btn-edit-profile">Edit Profile</button>
-      <button type="button" class="jh-btn jh-btn-secondary" id="jh-btn-close">Close</button>
-      <button type="button" class="jh-btn jh-btn-primary" id="jh-btn-send">Send to Job Hunter</button>
+      <button type="button" class="jh-btn jh-btn-secondary" id="jh-btn-edit-profile">
+        Edit Profile
+      </button>
+      <button type="button" class="jh-btn jh-btn-secondary" id="jh-btn-cancel">
+        Close
+      </button>
+      <button type="button" class="jh-btn jh-btn-primary" id="jh-btn-send">
+        Send to Job Hunter
+      </button>
     </footer>
   </div>
 </div>
@@ -541,300 +741,158 @@ function getModalHTML() {
 }
 
 /**
- * Get the modal styles
- * Note: This is a subset of the full CSS, inlined for injection
- * @returns {string} CSS string
+ * Get the modal CSS styles (loaded from separate CSS file via content.js)
+ * This function is a placeholder - actual styles come from results-dashboard.css
  */
 function getModalStyles() {
-  // Return the CSS content - this is loaded from results-dashboard.css
-  // For inline injection, we include the essential styles here
+  // The CSS is injected separately by content.js, so we return an empty string
+  // This ensures the modal works even if the CSS hasn't loaded yet
+  return '';
+}
+
+/**
+ * Get criterion modal styles
+ */
+function getCriterionModalStyles() {
   return `
-.jh-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 999998;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-  font-size: 14px;
-  line-height: 1.5;
-  color: #1a1a2e;
-  box-sizing: border-box;
-}
-.jh-modal * { box-sizing: border-box; }
-.jh-modal-backdrop {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(2px);
-}
-.jh-modal-content {
-  position: relative;
-  width: 90%;
-  max-width: 520px;
-  max-height: 90vh;
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  overflow-y: auto;
-  animation: jh-modal-appear 0.3s ease;
-}
-@keyframes jh-modal-appear {
-  from { opacity: 0; transform: scale(0.95) translateY(10px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
-}
-.jh-modal-close {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #f1f3f5;
-  border: none;
-  border-radius: 8px;
-  font-size: 20px;
-  color: #495057;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  z-index: 10;
-}
-.jh-modal-close:hover { background: #e9ecef; color: #1a1a2e; }
-.jh-score-header {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 24px;
-  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-  border-radius: 16px 16px 0 0;
-}
-.jh-score-ring {
-  position: relative;
-  width: 100px;
-  height: 100px;
-  flex-shrink: 0;
-}
-.jh-score-svg { width: 100%; height: 100%; }
-.jh-score-progress { transition: stroke-dashoffset 1s ease, stroke 0.3s ease; }
-.jh-score-value {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  text-align: center;
-}
-.jh-score-number {
-  display: block;
-  font-size: 28px;
-  font-weight: 700;
-  color: #1a1a2e;
-  line-height: 1;
-}
-.jh-score-max { font-size: 12px; color: #868e96; }
-.jh-score-info { flex: 1; }
-.jh-score-label {
-  display: inline-block;
-  padding: 4px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  border-radius: 20px;
-  margin-bottom: 8px;
-}
-.jh-score-label.jh-strong-fit { background: #d3f9d8; color: #2b8a3e; }
-.jh-score-label.jh-good-fit { background: #c3fae8; color: #087f5b; }
-.jh-score-label.jh-moderate-fit { background: #fff3bf; color: #e67700; }
-.jh-score-label.jh-weak-fit { background: #ffe8cc; color: #d9480f; }
-.jh-score-label.jh-poor-fit { background: #ffe3e3; color: #c92a2a; }
-.jh-score-label.jh-hard-no { background: #495057; color: #fff; }
-.jh-score-summary { font-size: 13px; color: #495057; margin: 0; }
-.jh-fit-section { padding: 16px 24px; border-bottom: 1px solid #e9ecef; }
-.jh-section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-.jh-section-header h3 { font-size: 14px; font-weight: 600; color: #1a1a2e; margin: 0; }
-.jh-section-score {
-  font-size: 13px;
-  font-weight: 600;
-  color: #495057;
-  background: #f1f3f5;
-  padding: 2px 8px;
-  border-radius: 4px;
-}
-.jh-criteria-list { display: flex; flex-direction: column; gap: 8px; }
-.jh-loading { text-align: center; color: #868e96; padding: 16px; font-size: 13px; }
-.jh-criterion {
-  display: flex;
-  gap: 12px;
-  padding: 10px 12px;
-  background: #f8f9fa;
-  border-radius: 8px;
-}
-.jh-criterion-score-badge {
-  display: flex;
-  align-items: baseline;
-  padding: 4px 8px;
-  background: #e9ecef;
-  border-radius: 6px;
-  flex-shrink: 0;
-}
-.jh-criterion-score-badge .jh-score-number { font-size: 14px; font-weight: 700; color: #1a1a2e; }
-.jh-criterion-score-badge .jh-score-max { font-size: 11px; color: #868e96; }
-.jh-criterion.jh-score-high .jh-criterion-score-badge { background: #d3f9d8; }
-.jh-criterion.jh-score-high .jh-criterion-score-badge .jh-score-number { color: #2b8a3e; }
-.jh-criterion.jh-score-low .jh-criterion-score-badge { background: #ffe3e3; }
-.jh-criterion.jh-score-low .jh-criterion-score-badge .jh-score-number { color: #c92a2a; }
-.jh-criterion-content { flex: 1; min-width: 0; }
-.jh-skill-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
-.jh-skill-tag {
-  font-size: 10px;
-  padding: 2px 6px;
-  background: #e7f5ff;
-  color: #1971c2;
-  border-radius: 10px;
-  border: 1px solid #a5d8ff;
-}
-.jh-criterion-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 8px;
-  margin-bottom: 2px;
-}
-.jh-criterion-name { font-size: 12px; font-weight: 500; color: #1a1a2e; }
-.jh-criterion-value {
-  font-size: 11px;
-  color: #495057;
-  background: #e9ecef;
-  padding: 1px 6px;
-  border-radius: 3px;
-  white-space: nowrap;
-}
-.jh-criterion-rationale { font-size: 11px; color: #868e96; margin: 0; }
-.jh-criterion.jh-score-high .jh-criterion-name { color: #2b8a3e; }
-.jh-criterion.jh-score-low .jh-criterion-name { color: #c92a2a; }
-.jh-interpretation-section { padding: 16px 24px; border-bottom: 1px solid #e9ecef; }
-.jh-interpretation-section h3 { font-size: 14px; font-weight: 600; color: #1a1a2e; margin: 0 0 12px 0; }
-.jh-action-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  margin-bottom: 16px;
-}
-.jh-action-badge.jh-pursue { background: #d3f9d8; color: #2b8a3e; }
-.jh-action-badge.jh-consider { background: #fff3bf; color: #e67700; }
-.jh-action-badge.jh-skip { background: #ffe3e3; color: #c92a2a; }
-.jh-action-icon { font-size: 16px; }
-.jh-action-badge.jh-pursue .jh-action-icon::before { content: '✓'; }
-.jh-action-badge.jh-consider .jh-action-icon::before { content: '?'; }
-.jh-action-badge.jh-skip .jh-action-icon::before { content: '✗'; }
-.jh-conversation-starters { display: flex; flex-direction: column; gap: 8px; }
-.jh-conversation-starters-label {
-  font-size: 11px;
-  font-weight: 500;
-  color: #868e96;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 4px;
-}
-.jh-conversation-starter {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 8px 12px;
-  background: #f8f9fa;
-  border-radius: 6px;
-  font-size: 12px;
-  color: #495057;
-}
-.jh-conversation-starter::before { content: '💬'; font-size: 14px; flex-shrink: 0; }
-.jh-modal-footer {
-  display: flex;
-  gap: 10px;
-  padding: 16px 24px;
-  background: #f8f9fa;
-  border-radius: 0 0 16px 16px;
-}
-.jh-btn {
-  padding: 10px 16px;
-  font-size: 13px;
-  font-weight: 500;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-.jh-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-.jh-btn-primary {
-  flex: 1;
-  background: linear-gradient(135deg, #4361ee 0%, #3a56d4 100%);
-  color: #fff;
-}
-.jh-btn-primary:hover:not(:disabled) { background: linear-gradient(135deg, #3a56d4 0%, #324bc0 100%); }
-.jh-btn-secondary { background: #e9ecef; color: #495057; }
-.jh-btn-secondary:hover:not(:disabled) { background: #dee2e6; }
-.jh-btn-primary.jh-success { background: linear-gradient(135deg, #2b8a3e 0%, #228b22 100%); }
-.jh-btn.jh-loading { position: relative; color: transparent; }
-.jh-btn.jh-loading::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 14px;
-  height: 14px;
-  margin: -7px 0 0 -7px;
-  border: 2px solid transparent;
-  border-top-color: #fff;
-  border-radius: 50%;
-  animation: jh-spin 0.8s linear infinite;
-}
-@keyframes jh-spin { to { transform: rotate(360deg); } }
-.jh-score-ring.jh-strong-fit .jh-score-progress { stroke: #2b8a3e; }
-.jh-score-ring.jh-good-fit .jh-score-progress { stroke: #087f5b; }
-.jh-score-ring.jh-moderate-fit .jh-score-progress { stroke: #e67700; }
-.jh-score-ring.jh-weak-fit .jh-score-progress { stroke: #d9480f; }
-.jh-score-ring.jh-poor-fit .jh-score-progress { stroke: #c92a2a; }
-.jh-score-ring.jh-hard-no .jh-score-progress { stroke: #495057; }
-.jh-modal-content.jh-deal-breaker-triggered { border: 2px solid #c92a2a; }
-.jh-modal-content.jh-deal-breaker-triggered .jh-score-header {
-  background: linear-gradient(135deg, #ffe3e3 0%, #ffc9c9 100%);
-}
-.jh-deal-breaker-notice {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  background: #ffe3e3;
-  border-bottom: 1px solid #ffa8a8;
-  color: #c92a2a;
-  font-size: 13px;
-}
-.jh-deal-breaker-notice::before { content: '⚠️'; font-size: 18px; }
-@media (max-width: 480px) {
-  .jh-modal-content { width: 95%; max-height: 95vh; border-radius: 12px; }
-  .jh-score-header { flex-direction: column; text-align: center; padding: 20px; }
-  .jh-fit-section, .jh-interpretation-section { padding: 12px 16px; }
-  .jh-modal-footer { flex-wrap: wrap; padding: 12px 16px; }
-  .jh-btn { flex: 1 1 45%; }
-  .jh-btn-primary { flex: 1 1 100%; order: -1; margin-bottom: 8px; }
-}
+    .jh-criterion-modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000000;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    .jh-criterion-modal {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      max-width: 500px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+      position: relative;
+    }
+
+    .jh-criterion-modal h2 {
+      margin: 0 0 16px 0;
+      font-size: 18px;
+      font-weight: 600;
+      color: #1f2937;
+      padding-right: 32px;
+    }
+
+    .jh-criterion-close {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: #6b7280;
+      line-height: 1;
+      padding: 0;
+      width: 24px;
+      height: 24px;
+    }
+
+    .jh-criterion-close:hover {
+      color: #1f2937;
+    }
+
+    .jh-criterion-score-box {
+      background: #f3f4f6;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+
+    .jh-criterion-score-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: #1f2937;
+      display: block;
+      margin-bottom: 12px;
+    }
+
+    .jh-criterion-score-max {
+      font-size: 18px;
+      font-weight: 400;
+      color: #6b7280;
+    }
+
+    .jh-progress-bar-large {
+      height: 12px;
+      margin-top: 8px;
+    }
+
+    .jh-criterion-section {
+      margin-bottom: 20px;
+    }
+
+    .jh-criterion-section h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #374151;
+      margin: 0 0 8px 0;
+    }
+
+    .jh-criterion-section p {
+      font-size: 14px;
+      color: #4b5563;
+      margin: 0 0 8px 0;
+      line-height: 1.5;
+    }
+
+    .jh-criterion-actual {
+      color: #6b7280 !important;
+      font-size: 13px !important;
+    }
+
+    .jh-matched-skills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 12px;
+      align-items: center;
+    }
+
+    .jh-matched-skills strong {
+      font-size: 13px;
+      color: #374151;
+      margin-right: 4px;
+    }
+
+    .jh-skill-badge {
+      display: inline-block;
+      padding: 4px 8px;
+      background: #e7f5ff;
+      color: #1971c2;
+      border: 1px solid #a5d8ff;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .jh-criterion-section ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    .jh-criterion-section li {
+      font-size: 13px;
+      color: #4b5563;
+      margin: 6px 0;
+      line-height: 1.4;
+    }
   `;
 }
 
@@ -842,7 +900,6 @@ function getModalStyles() {
 // EXPORTS
 // ============================================================================
 
-// Export functions for use by content.js
 if (typeof window !== 'undefined') {
   window.JobHunterResults = {
     showResultsModal,
