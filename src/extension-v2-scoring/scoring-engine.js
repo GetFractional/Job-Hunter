@@ -38,14 +38,13 @@ const JOB_TO_USER_WEIGHTS = {
  * Weights for User-to-Job fit criteria (how well YOU match the JOB requirements)
  * These determine how well the user matches the job's requirements
  * Must sum to 1.0
- * NOTE: revOpsComponent is weighted heavily (0.25) as this is the user's core differentiator
  */
 const USER_TO_JOB_WEIGHTS = {
   roleType: 0.25,         // Title/seniority alignment with target roles
-  revOpsComponent: 0.25,  // Percentage of JD about RevOps/infrastructure (CRITICAL - user's differentiator)
+  neededSkills: 0.25,     // Missing skills you need to acquire (inverse scoring)
   skillMatch: 0.25,       // Keyword overlap with user's core skills
   industryAlignment: 0.15, // Industry match (exact/adjacent/new)
-  experienceLevel: 0.10   // Years of experience alignment - REPLACES orgComplexity
+  experienceLevel: 0.10   // Years of experience alignment
 };
 
 /**
@@ -234,7 +233,7 @@ function calculateJobToUserFit(jobPayload, userProfile) {
 function calculateUserToJobFit(jobPayload, userProfile) {
   const criteria = [
     scoreRoleType(jobPayload, userProfile),
-    scoreRevOpsComponent(jobPayload, userProfile),
+    scoreNeededSkills(jobPayload, userProfile),
     scoreSkillMatch(jobPayload, userProfile),
     scoreIndustryAlignment(jobPayload, userProfile),
     scoreExperienceLevel(jobPayload, userProfile)
@@ -243,7 +242,7 @@ function calculateUserToJobFit(jobPayload, userProfile) {
   // Calculate weighted average
   const weights = [
     USER_TO_JOB_WEIGHTS.roleType,
-    USER_TO_JOB_WEIGHTS.revOpsComponent,
+    USER_TO_JOB_WEIGHTS.neededSkills,
     USER_TO_JOB_WEIGHTS.skillMatch,
     USER_TO_JOB_WEIGHTS.industryAlignment,
     USER_TO_JOB_WEIGHTS.experienceLevel
@@ -506,9 +505,9 @@ function scoreWorkplaceType(jobPayload, userProfile) {
 
 /**
  * Score bonus and equity presence (0-50)
- * Scores bonus and equity based on user's separate preferences for each
+ * SIMPLE SCORING: 0 for neither, 25 for one, 50 for both
  * @param {Object} jobPayload - Job data with equity_mentioned, bonus_mentioned
- * @param {Object} userProfile - User preferences with bonus_preference and equity_preference
+ * @param {Object} userProfile - User preferences
  * @returns {Object} Criterion score result
  */
 function scoreEquityBonus(jobPayload, userProfile) {
@@ -516,88 +515,40 @@ function scoreEquityBonus(jobPayload, userProfile) {
   const bonusMentioned = jobPayload.bonusMentioned || jobPayload.bonus_mentioned || false;
   const bonusPercent = jobPayload.bonus_estimated_percent;
 
-  // Get separate preferences (with fallback to old combined field for migration)
-  const bonusPref = userProfile?.preferences?.bonus_preference ||
-    userProfile?.preferences?.bonus_and_equity_preference || 'preferred';
-  const equityPref = userProfile?.preferences?.equity_preference ||
-    (userProfile?.preferences?.bonus_and_equity_preference === 'required' ? 'preferred' : 'optional');
-
-  // Weight for each component (bonus slightly higher based on user preference patterns)
-  const bonusWeight = 0.55;
-  const equityWeight = 0.45;
-
-  // Score bonus (0-50 scale for this component)
-  // FIX: Score 0 when not mentioned - we can't assume bonus exists if not stated
-  let bonusScore = 0;
-  let bonusRationale = '';
-  if (bonusMentioned) {
-    bonusScore = 50;
-    bonusRationale = bonusPercent ? `${Math.round(bonusPercent * 100)}% bonus mentioned` : 'Bonus mentioned';
-  } else {
-    // When not mentioned, score 0 regardless of preference
-    // User's preference affects how they FEEL about 0, not the score itself
-    bonusScore = 0;
-    if (bonusPref === 'required') {
-      bonusRationale = 'No bonus mentioned (you require it)';
-    } else if (bonusPref === 'preferred') {
-      bonusRationale = 'No bonus mentioned (you prefer it)';
-    } else {
-      bonusRationale = 'No bonus mentioned';
-    }
-  }
-
-  // Score equity (0-50 scale for this component)
-  // FIX: Score 0 when not mentioned - we can't assume equity exists if not stated
-  let equityScore = 0;
-  let equityRationale = '';
-  if (equityMentioned) {
-    equityScore = 50;
-    equityRationale = 'Equity/stock options mentioned';
-  } else {
-    // When not mentioned, score 0 regardless of preference
-    equityScore = 0;
-    if (equityPref === 'required') {
-      equityRationale = 'No equity mentioned (you require it)';
-    } else if (equityPref === 'preferred') {
-      equityRationale = 'No equity mentioned (you prefer it)';
-    } else {
-      equityRationale = 'No equity mentioned';
-    }
-  }
-
-  // Combine scores based on weights
-  const combinedScore = (bonusScore * bonusWeight) + (equityScore * equityWeight);
-
-  // Build actual value string
+  // Simple scoring logic
+  let score = 0;
+  let rationale = '';
   const parts = [];
+
   if (bonusMentioned) {
+    score += 25;
     parts.push(bonusPercent ? `${Math.round(bonusPercent * 100)}% bonus` : 'Bonus');
   }
+
   if (equityMentioned) {
+    score += 25;
     parts.push('Equity');
   }
-  const actualValue = parts.length > 0 ? parts.join(' + ') : 'Neither mentioned';
 
-  // Build combined rationale
-  let rationale = '';
+  // Build rationale
   if (bonusMentioned && equityMentioned) {
-    rationale = 'Both bonus and equity mentioned - great total comp potential';
+    rationale = 'Both bonus and equity mentioned - excellent total compensation package';
   } else if (bonusMentioned) {
-    rationale = `Bonus: ${bonusRationale}. Equity: ${equityRationale}`;
+    rationale = 'Bonus mentioned, but no equity';
   } else if (equityMentioned) {
-    rationale = `Equity: ${equityRationale}. Bonus: ${bonusRationale}`;
+    rationale = 'Equity mentioned, but no bonus';
   } else {
-    rationale = `${bonusRationale}. ${equityRationale}`;
+    rationale = 'Neither bonus nor equity mentioned';
   }
+
+  const actualValue = parts.length > 0 ? parts.join(' + ') : 'Neither mentioned';
 
   return {
     criteria: 'Bonus & Equity',
-    criteria_description: 'Whether the job mentions performance bonuses and/or equity compensation based on your preferences',
+    criteria_description: 'Whether the job mentions performance bonuses and/or equity compensation (25 points each)',
     actual_value: actualValue,
-    score: Math.round(combinedScore),
-    rationale,
-    bonus_score: Math.round(bonusScore),
-    equity_score: Math.round(equityScore)
+    score: score,
+    rationale
   };
 }
 
@@ -728,7 +679,7 @@ function scoreCompanyStage(jobPayload, userProfile) {
   }
   // Fallback: use headcount as proxy
   else if (headcount !== null && headcount !== undefined) {
-    actualValue = `~${headcount} employees`;
+    actualValue = `${headcount} employees`;
 
     if (headcount >= 500) {
       score = 45;
@@ -739,9 +690,12 @@ function scoreCompanyStage(jobPayload, userProfile) {
     } else if (headcount >= 50) {
       score = 30;
       rationale = 'Growth company (50-200 employees)';
+    } else if (headcount >= 20) {
+      score = 20;
+      rationale = 'Small company (20-50 employees) - early/growth stage';
     } else {
-      score = 15;
-      rationale = 'Small company (<50 employees) - early stage';
+      score = 10;
+      rationale = 'Very small company (<20 employees) - likely pre-seed or seed stage';
     }
   }
   // Fallback: use revenue
@@ -930,6 +884,7 @@ function scoreBusinessLifecycle(jobPayload, userProfile) {
   }
 
   // Fallback to headcount-based estimation if no keywords matched
+  // IMPORTANT: Small companies (2-10) are almost always seed/pre-seed, not mature
   if (detectedStage === 'unknown' && companySize > 0) {
     if (companySize > 1000) {
       detectedStage = 'maturity';
@@ -937,8 +892,10 @@ function scoreBusinessLifecycle(jobPayload, userProfile) {
       detectedStage = 'growth';
     } else if (companySize > 50) {
       detectedStage = 'startup';
+    } else if (companySize > 20) {
+      detectedStage = 'startup'; // 21-50 = early startup
     } else {
-      detectedStage = 'seed';
+      detectedStage = 'seed'; // 2-20 = seed stage
     }
   }
 
@@ -1018,7 +975,7 @@ function scoreOrgStability(jobPayload, userProfile) {
   const hasGrowthSignals = growthKeywords.some(kw => description.includes(kw));
   const hasDeclineSignals = declineKeywords.some(kw => description.includes(kw));
 
-  let score = 35; // Default moderate
+  let score = 25; // Default moderate (lowered from 35 to be more conservative)
   let rationale = 'Organizational stability unclear';
   let actualValue = 'Unknown';
 
@@ -1363,6 +1320,119 @@ function scoreSkillMatch(jobPayload, userProfile) {
 }
 
 /**
+ * Score needed skills - identifies key skills mentioned in JD that user lacks (0-50)
+ * INVERSE SCORING: Fewer missing skills = higher score
+ * @param {Object} jobPayload - Job data with job_description_text
+ * @param {Object} userProfile - User background with core_skills
+ * @returns {Object} Criterion score result
+ */
+function scoreNeededSkills(jobPayload, userProfile) {
+  const description = (jobPayload.descriptionText || jobPayload.job_description_text || '').toLowerCase();
+  const userSkills = (userProfile?.background?.core_skills || []).map(s => s.toLowerCase().replace(/[_-]/g, ' '));
+
+  if (!description) {
+    return {
+      criteria: 'Needed Skills',
+      criteria_description: 'Key skills mentioned in the job description that you don\'t currently have in your profile',
+      actual_value: 'No job description',
+      score: 25,
+      rationale: 'Cannot assess needed skills without job description',
+      missing_data: true
+    };
+  }
+
+  // Common skills to look for in job descriptions
+  const commonSkills = [
+    // Marketing/Growth Skills
+    'seo', 'sem', 'ppc', 'google ads', 'facebook ads', 'linkedin ads',
+    'content marketing', 'email marketing', 'marketing automation',
+    'google analytics', 'ga4', 'mixpanel', 'amplitude',
+    'a/b testing', 'conversion rate optimization', 'cro',
+    'product marketing', 'growth hacking', 'growth marketing',
+    'demand generation', 'lead generation', 'lead nurturing',
+    'account based marketing', 'abm',
+
+    // RevOps/Sales Ops Skills
+    'salesforce', 'hubspot', 'marketo', 'pardot', 'eloqua',
+    'crm', 'marketing ops', 'sales ops', 'revops',
+    'data analysis', 'sql', 'python', 'excel', 'spreadsheets',
+    'tableau', 'looker', 'power bi', 'data visualization',
+    'apis', 'zapier', 'webhooks', 'integrations',
+
+    // Leadership/Soft Skills
+    'team management', 'people management', 'leadership',
+    'strategic planning', 'strategy', 'stakeholder management',
+    'budget management', 'p&l', 'roi analysis',
+    'project management', 'agile', 'scrum',
+
+    // Industry-Specific
+    'saas', 'b2b', 'b2c', 'd2c', 'ecommerce',
+    'fintech', 'healthtech', 'edtech',
+
+    // Other Tools
+    'asana', 'jira', 'slack', 'notion',
+    'adobe creative suite', 'photoshop', 'figma', 'canva'
+  ];
+
+  // Find skills mentioned in JD
+  const requiredSkills = [];
+  commonSkills.forEach(skill => {
+    const variations = [skill, skill.replace(/\s+/g, ''), skill.replace(/\s+/g, '-')];
+    const hasMatch = variations.some(v => description.includes(v));
+    if (hasMatch) {
+      requiredSkills.push(skill);
+    }
+  });
+
+  // Filter to only skills user doesn't have
+  const neededSkills = requiredSkills.filter(reqSkill => {
+    return !userSkills.some(userSkill => {
+      return userSkill.includes(reqSkill) || reqSkill.includes(userSkill);
+    });
+  });
+
+  // Score based on how many skills are missing (inverse)
+  const missingCount = neededSkills.length;
+  let score = 0;
+  let rationale = '';
+
+  if (missingCount === 0) {
+    score = 50;
+    rationale = 'You have all key skills mentioned in the job description';
+  } else if (missingCount === 1) {
+    score = 45;
+    rationale = `Only 1 skill gap identified: ${neededSkills[0]}`;
+  } else if (missingCount === 2) {
+    score = 40;
+    rationale = `Minor skill gaps: ${neededSkills.join(', ')}`;
+  } else if (missingCount <= 4) {
+    score = 30;
+    rationale = `${missingCount} skills to develop: ${neededSkills.slice(0, 3).join(', ')}${missingCount > 3 ? '...' : ''}`;
+  } else if (missingCount <= 6) {
+    score = 20;
+    rationale = `Significant skill gaps (${missingCount} missing)`;
+  } else {
+    score = 10;
+    rationale = `Major skill gaps (${missingCount} missing) - may need upskilling`;
+  }
+
+  const actualValue = neededSkills.length > 0
+    ? `${neededSkills.length} missing: ${neededSkills.slice(0, 3).join(', ')}${neededSkills.length > 3 ? '...' : ''}`
+    : 'None - you have all key skills';
+
+  return {
+    criteria: 'Needed Skills',
+    criteria_description: 'Key skills mentioned in the job description that you don\'t currently have in your profile',
+    actual_value: actualValue,
+    score: Math.round(score),
+    rationale,
+    needed_skills: neededSkills,
+    total_required_skills: requiredSkills.length,
+    missing_count: missingCount
+  };
+}
+
+/**
  * Score industry alignment (0-50)
  * @param {Object} jobPayload - Job data with company_name, job_description_text
  * @param {Object} userProfile - User background with industries
@@ -1597,9 +1667,9 @@ function scoreExperienceLevel(jobPayload, userProfile) {
   } else if (hasSeniorSignals && !hasJuniorSignals) {
     // Senior role detected
     if (userExperience >= 10) {
-      score = 45;
+      score = 50;
       actualValue = 'Senior-level role';
-      rationale = 'Senior role matches your experience level';
+      rationale = 'Senior role is a perfect match for your experience level';
     } else {
       score = 25;
       actualValue = 'Senior-level role';
