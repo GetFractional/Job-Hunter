@@ -17,31 +17,35 @@
 // ============================================================================
 
 /**
- * Weights for Job-to-User fit criteria
+ * Weights for Job-to-User fit criteria (how well the JOB meets YOUR needs)
  * These determine how important each factor is in determining if a job meets user needs
  * Must sum to 1.0
+ *
+ * REORGANIZED: Now includes Business Lifecycle and Org Stability
  */
 const JOB_TO_USER_WEIGHTS = {
-  salary: 0.25,           // How well the salary meets user's floor/target
-  workplaceType: 0.20,    // Remote/Hybrid/On-site alignment
-  equityBonus: 0.20,      // Whether equity/bonus is present
-  benefits: 0.15,         // Benefits package (health, 401k, PTO, etc.)
+  salary: 0.22,           // How well the salary meets user's floor/target
+  workplaceType: 0.18,    // Remote/Hybrid/On-site alignment
+  equityBonus: 0.15,      // Whether equity/bonus is present
+  benefits: 0.12,         // Benefits package (health, 401k, PTO, etc.)
   companyStage: 0.10,     // Company maturity level
-  hiringUrgency: 0.10     // Urgency signals from job posting
+  businessLifecycle: 0.10, // Company stage (Seed/Startup/Growth/Maturity)
+  orgStability: 0.08,     // Headcount growth/decline trends - MOVED from User-to-Job
+  hiringUrgency: 0.05     // Urgency signals from job posting
 };
 
 /**
- * Weights for User-to-Job fit criteria
+ * Weights for User-to-Job fit criteria (how well YOU match the JOB requirements)
  * These determine how well the user matches the job's requirements
  * Must sum to 1.0
- * NOTE: revOpsComponent is weighted heavily (0.30) as this is the user's core differentiator
+ * NOTE: revOpsComponent is weighted heavily (0.25) as this is the user's core differentiator
  */
 const USER_TO_JOB_WEIGHTS = {
-  roleType: 0.20,         // Title/seniority alignment with target roles
-  revOpsComponent: 0.30,  // Percentage of JD about RevOps/infrastructure (CRITICAL - user's differentiator)
-  skillMatch: 0.20,       // Keyword overlap with user's core skills
-  industryAlignment: 0.10, // Industry match (exact/adjacent/new)
-  orgComplexity: 0.20     // Organizational stability assessment
+  roleType: 0.25,         // Title/seniority alignment with target roles
+  revOpsComponent: 0.25,  // Percentage of JD about RevOps/infrastructure (CRITICAL - user's differentiator)
+  skillMatch: 0.25,       // Keyword overlap with user's core skills
+  industryAlignment: 0.15, // Industry match (exact/adjacent/new)
+  experienceLevel: 0.10   // Years of experience alignment - REPLACES orgComplexity
 };
 
 /**
@@ -175,6 +179,8 @@ function calculateJobToUserFit(jobPayload, userProfile) {
     scoreEquityBonus(jobPayload, userProfile),
     scoreBenefits(jobPayload, userProfile),
     scoreCompanyStage(jobPayload, userProfile),
+    scoreBusinessLifecycle(jobPayload, userProfile),
+    scoreOrgStability(jobPayload, userProfile),
     scoreHiringUrgency(jobPayload, userProfile)
   ];
 
@@ -185,6 +191,8 @@ function calculateJobToUserFit(jobPayload, userProfile) {
     JOB_TO_USER_WEIGHTS.equityBonus,
     JOB_TO_USER_WEIGHTS.benefits,
     JOB_TO_USER_WEIGHTS.companyStage,
+    JOB_TO_USER_WEIGHTS.businessLifecycle,
+    JOB_TO_USER_WEIGHTS.orgStability,
     JOB_TO_USER_WEIGHTS.hiringUrgency
   ];
 
@@ -225,7 +233,7 @@ function calculateUserToJobFit(jobPayload, userProfile) {
     scoreRevOpsComponent(jobPayload, userProfile),
     scoreSkillMatch(jobPayload, userProfile),
     scoreIndustryAlignment(jobPayload, userProfile),
-    scoreOrgComplexity(jobPayload, userProfile)
+    scoreExperienceLevel(jobPayload, userProfile)
   ];
 
   // Calculate weighted average
@@ -234,7 +242,7 @@ function calculateUserToJobFit(jobPayload, userProfile) {
     USER_TO_JOB_WEIGHTS.revOpsComponent,
     USER_TO_JOB_WEIGHTS.skillMatch,
     USER_TO_JOB_WEIGHTS.industryAlignment,
-    USER_TO_JOB_WEIGHTS.orgComplexity
+    USER_TO_JOB_WEIGHTS.experienceLevel
   ];
 
   const score = criteria.reduce((sum, c, i) => sum + (c.score * weights[i]), 0);
@@ -356,6 +364,7 @@ function checkDealBreakers(jobPayload, userProfile) {
 
 /**
  * Score salary alignment (0-50)
+ * USES SALARY MAX (Glass Ceiling) for scoring - this represents the budget they can pay
  * @param {Object} jobPayload - Job data with salary_min, salary_max
  * @param {Object} userProfile - User preferences with salary_floor, salary_target
  * @returns {Object} Criterion score result
@@ -366,8 +375,12 @@ function scoreSalary(jobPayload, userProfile) {
   const salaryMin = jobPayload.salaryMin || jobPayload.salary_min;
   const salaryMax = jobPayload.salaryMax || jobPayload.salary_max;
 
+  // KEY: Use salaryMax (upper bound / glass ceiling) for scoring
+  // This represents the maximum budget they're willing to pay
+  const offeredSalary = salaryMax || salaryMin;
+
   // Handle missing salary data
-  if (salaryMin === null || salaryMin === undefined) {
+  if (offeredSalary === null || offeredSalary === undefined) {
     return {
       criteria: 'Base Salary',
       criteria_description: `Whether the posted salary meets your $${formatSalary(floor)} minimum and $${formatSalary(target)} target`,
@@ -381,31 +394,45 @@ function scoreSalary(jobPayload, userProfile) {
   let score = 0;
   let rationale = '';
 
-  if (salaryMin >= target) {
-    // At or above target - perfect score
+  // SCORING LOGIC using max salary (glass ceiling)
+  if (offeredSalary >= target) {
+    // Meets or exceeds target - perfect score
     score = 50;
-    rationale = `Base $${formatSalary(salaryMin)} exceeds target of $${formatSalary(target)}`;
-  } else if (salaryMin >= floor) {
-    // Between floor and target - interpolate score from 35 to 50
-    const range = target - floor;
-    const aboveFloor = salaryMin - floor;
-    score = 35 + (aboveFloor / range) * 15;
-    rationale = `Base $${formatSalary(salaryMin)} exceeds floor by $${formatSalary(aboveFloor)}; within target range`;
+    rationale = `Max $${formatSalary(offeredSalary)} meets/exceeds target of $${formatSalary(target)}`;
+  } else if (offeredSalary >= (target * 0.95)) {
+    // Within 5% of target (e.g., $190k when target is $200k)
+    score = 48;
+    rationale = `Max $${formatSalary(offeredSalary)} is within 5% of target`;
+  } else if (offeredSalary >= (target * 0.90)) {
+    // Within 10% of target
+    score = 45;
+    rationale = `Max $${formatSalary(offeredSalary)} is within 10% of target`;
+  } else if (offeredSalary >= floor) {
+    // Between floor and 90% of target - interpolate score from 35 to 45
+    const range = (target * 0.90) - floor;
+    const aboveFloor = offeredSalary - floor;
+    const percentage = aboveFloor / range;
+    score = 35 + (percentage * 10);
+    rationale = `Max $${formatSalary(offeredSalary)} exceeds floor by $${formatSalary(aboveFloor)}; within target range`;
+  } else if (offeredSalary >= (floor * 0.9)) {
+    // Close to floor (within 10%)
+    score = 15;
+    rationale = `Max $${formatSalary(offeredSalary)} is close to but below your $${formatSalary(floor)} floor`;
   } else {
-    // Below floor - score drops quickly
-    const belowFloor = floor - salaryMin;
-    const percentBelow = belowFloor / floor;
-    score = Math.max(0, 35 * (1 - percentBelow * 2));
-    rationale = `Base $${formatSalary(salaryMin)} is $${formatSalary(belowFloor)} below your floor`;
+    // Significantly below floor
+    const belowFloor = floor - offeredSalary;
+    score = 5;
+    rationale = `Max $${formatSalary(offeredSalary)} is $${formatSalary(belowFloor)} below your floor`;
   }
 
-  const displaySalary = salaryMax && salaryMax !== salaryMin
+  // Build display salary string
+  const displaySalary = salaryMax && salaryMin && salaryMax !== salaryMin
     ? `$${formatSalary(salaryMin)}-$${formatSalary(salaryMax)}`
-    : `$${formatSalary(salaryMin)}`;
+    : `$${formatSalary(offeredSalary)}`;
 
   return {
     criteria: 'Base Salary',
-    criteria_description: `Whether the posted salary meets your $${formatSalary(floor)} minimum and $${formatSalary(target)} target`,
+    criteria_description: `Whether the posted max salary meets your $${formatSalary(floor)} minimum and $${formatSalary(target)} target`,
     actual_value: displaySalary,
     score: Math.round(score),
     rationale
@@ -742,6 +769,161 @@ function scoreCompanyStage(jobPayload, userProfile) {
     score: Math.round(score),
     rationale,
     missing_data: !stage && !headcount && !revenue
+  };
+}
+
+/**
+ * Score business lifecycle stage (0-50)
+ * What stage is the company? (Risk/opportunity profile)
+ * @param {Object} jobPayload - Job data with job_description_text, company_headcount
+ * @param {Object} userProfile - User preferences
+ * @returns {Object} Criterion score result
+ */
+function scoreBusinessLifecycle(jobPayload, userProfile) {
+  const description = (jobPayload.descriptionText || jobPayload.job_description_text || '').toLowerCase();
+  const companySize = jobPayload.company_headcount || jobPayload.companyHeadcount || 0;
+
+  // Detection keywords for each stage
+  const seedKeywords = ['seed', 'pre-seed', 'pre seed', 'angel', 'bootstrapped'];
+  const startupKeywords = ['startup', 'founded 20', 'early stage', 'early-stage', 'series a'];
+  const growthKeywords = ['series b', 'series c', 'hypergrowth', 'hyper-growth', 'scaling', 'rapid growth', 'high growth'];
+  const maturityKeywords = ['series d', 'series e', 'late stage', 'late-stage', 'enterprise', 'established', 'mature', 'fortune'];
+  const expansionKeywords = ['expanding', 'new markets', 'expansion', 'international growth', 'global expansion'];
+  const declineKeywords = ['restructuring', 'wind down', 'acquired', 'bankruptcy', 'layoffs', 'downsizing'];
+
+  // Detect stage from keywords and headcount
+  let detectedStage = 'unknown';
+
+  if (declineKeywords.some(kw => description.includes(kw))) {
+    detectedStage = 'decline';
+  } else if (maturityKeywords.some(kw => description.includes(kw)) || companySize > 500) {
+    detectedStage = 'maturity';
+  } else if (growthKeywords.some(kw => description.includes(kw)) || (companySize > 100 && companySize <= 500)) {
+    detectedStage = 'growth';
+  } else if (expansionKeywords.some(kw => description.includes(kw))) {
+    detectedStage = 'expansion';
+  } else if (startupKeywords.some(kw => description.includes(kw)) || (companySize > 20 && companySize <= 100)) {
+    detectedStage = 'startup';
+  } else if (seedKeywords.some(kw => description.includes(kw)) || (companySize > 0 && companySize <= 20)) {
+    detectedStage = 'seed';
+  }
+
+  // User preferences for company stages
+  const userPreferredStages = userProfile?.preferences?.preferred_company_stages || ['growth', 'maturity', 'expansion'];
+
+  // Scoring based on stage
+  const stageScores = {
+    'seed': 15,       // High risk
+    'startup': 25,    // Below preference
+    'growth': 45,     // Good stage
+    'maturity': 50,   // Preferred (stable + growth opportunity)
+    'expansion': 45,  // Growth + stability
+    'decline': 5,     // Deal breaker risk
+    'unknown': 25     // Moderate assumption
+  };
+
+  const score = stageScores[detectedStage] || 25;
+
+  // Format display value
+  const stageLabels = {
+    'seed': 'Seed Stage',
+    'startup': 'Early Stage/Startup',
+    'growth': 'Growth Stage',
+    'maturity': 'Mature/Enterprise',
+    'expansion': 'Expansion',
+    'decline': 'Decline/Restructuring',
+    'unknown': 'Unknown'
+  };
+
+  return {
+    criteria: 'Business Lifecycle',
+    criteria_description: 'Company lifecycle stage (Seed → Startup → Growth → Maturity → Expansion)',
+    actual_value: stageLabels[detectedStage] || 'Unknown',
+    score: Math.round(score),
+    rationale: detectedStage === 'unknown'
+      ? 'Company lifecycle stage not determined from available info'
+      : `Company appears to be in ${stageLabels[detectedStage]} phase`,
+    detected_stage: detectedStage,
+    missing_data: detectedStage === 'unknown'
+  };
+}
+
+/**
+ * Score organizational stability (0-50)
+ * Based on headcount growth/decline trends
+ * @param {Object} jobPayload - Job data with company_headcount_growth
+ * @param {Object} userProfile - User preferences
+ * @returns {Object} Criterion score result
+ */
+function scoreOrgStability(jobPayload, userProfile) {
+  const description = (jobPayload.descriptionText || jobPayload.job_description_text || '').toLowerCase();
+  const headcountGrowthText = jobPayload.companyHeadcountGrowth || jobPayload.company_headcount_growth || '';
+
+  // Parse growth percentage from text like "+5% over last 6 months" or "-3% decline"
+  let growthRate = null;
+  const growthMatch = headcountGrowthText.match(/([+-]?\d+(?:\.\d+)?)\s*%/);
+  if (growthMatch) {
+    growthRate = parseFloat(growthMatch[1]);
+  }
+
+  // Also check description for signals
+  const growthKeywords = ['growing', 'expanding team', 'scaling', 'hiring', 'new positions'];
+  const declineKeywords = ['layoffs', 'restructuring', 'downsizing', 'headcount reduction', 'cost cutting'];
+
+  const hasGrowthSignals = growthKeywords.some(kw => description.includes(kw));
+  const hasDeclineSignals = declineKeywords.some(kw => description.includes(kw));
+
+  let score = 35; // Default moderate
+  let rationale = 'Organizational stability unclear';
+  let actualValue = 'Unknown';
+
+  // Score based on growth rate if available
+  if (growthRate !== null) {
+    if (growthRate >= 10) {
+      score = 50;
+      rationale = `Strong growth company (+${growthRate}% headcount)`;
+      actualValue = `+${growthRate}% growth`;
+    } else if (growthRate >= 5) {
+      score = 45;
+      rationale = `Good growth (+${growthRate}% headcount)`;
+      actualValue = `+${growthRate}% growth`;
+    } else if (growthRate >= 0) {
+      score = 40;
+      rationale = `Stable company (${growthRate}% headcount change)`;
+      actualValue = 'Stable';
+    } else if (growthRate >= -3) {
+      score = 30;
+      rationale = `Minor decline (${growthRate}% headcount)`;
+      actualValue = `${growthRate}% decline`;
+    } else if (growthRate >= -5) {
+      score = 15;
+      rationale = `Concerning decline (${growthRate}% headcount)`;
+      actualValue = `${growthRate}% decline`;
+    } else {
+      score = 5;
+      rationale = `Significant decline (${growthRate}%) - potential layoffs`;
+      actualValue = `${growthRate}% decline`;
+    }
+  }
+  // Use description signals if no explicit data
+  else if (hasDeclineSignals) {
+    score = 15;
+    rationale = 'Signs of restructuring or layoffs detected';
+    actualValue = 'Concerning';
+  } else if (hasGrowthSignals) {
+    score = 40;
+    rationale = 'Company appears to be growing/hiring';
+    actualValue = 'Growing';
+  }
+
+  return {
+    criteria: 'Org Stability',
+    criteria_description: 'Company headcount growth/decline trends (growing = more stable)',
+    actual_value: actualValue,
+    score: Math.round(score),
+    rationale,
+    growth_rate: growthRate,
+    missing_data: growthRate === null && !hasGrowthSignals && !hasDeclineSignals
   };
 }
 
@@ -1199,6 +1381,106 @@ function scoreOrgComplexity(jobPayload, userProfile) {
     actual_value: actualValue,
     score: Math.round(score),
     rationale
+  };
+}
+
+/**
+ * Score experience level alignment (0-50)
+ * How well the user's experience matches the job's requirements
+ * @param {Object} jobPayload - Job data with job_description_text
+ * @param {Object} userProfile - User background with years_of_experience
+ * @returns {Object} Criterion score result
+ */
+function scoreExperienceLevel(jobPayload, userProfile) {
+  const description = (jobPayload.descriptionText || jobPayload.job_description_text || '').toLowerCase();
+  const userExperience = userProfile?.background?.years_of_experience || 15; // Default to 15 for experienced professionals
+
+  // Extract required years from job description
+  const experiencePatterns = [
+    /(\d+)\+?\s*years?\s+(?:of\s+)?experience/gi,
+    /experience\s*:\s*(\d+)\+?\s*years?/gi,
+    /minimum\s+(\d+)\s*years?/gi,
+    /at\s+least\s+(\d+)\s*years?/gi
+  ];
+
+  let requiredYears = null;
+  for (const pattern of experiencePatterns) {
+    const match = description.match(pattern);
+    if (match) {
+      // Extract the number from the match
+      const numMatch = match[0].match(/(\d+)/);
+      if (numMatch) {
+        const years = parseInt(numMatch[1]);
+        if (requiredYears === null || years > requiredYears) {
+          requiredYears = years;
+        }
+      }
+    }
+  }
+
+  // Detect seniority signals
+  const seniorSignals = ['senior', 'principal', 'lead', 'head of', 'director', 'vp', 'vice president'];
+  const juniorSignals = ['junior', 'entry level', 'entry-level', 'associate', 'trainee'];
+
+  const hasSeniorSignals = seniorSignals.some(s => description.includes(s));
+  const hasJuniorSignals = juniorSignals.some(s => description.includes(s));
+
+  let score = 30; // Default moderate
+  let rationale = 'Experience alignment unclear';
+  let actualValue = 'Unknown';
+
+  if (requiredYears !== null) {
+    actualValue = `${requiredYears}+ years required`;
+
+    if (userExperience >= requiredYears + 5) {
+      // Overqualified but good
+      score = 45;
+      rationale = `You exceed requirements (${userExperience} years vs ${requiredYears}+ required)`;
+    } else if (userExperience >= requiredYears) {
+      // Perfect match
+      score = 50;
+      rationale = `Experience matches requirements (${userExperience} years vs ${requiredYears}+ required)`;
+    } else if (userExperience >= requiredYears - 2) {
+      // Close to requirements
+      score = 35;
+      rationale = `Slightly below requirements (${userExperience} vs ${requiredYears}+ years)`;
+    } else {
+      // Underqualified
+      score = 15;
+      rationale = `Below experience requirements (${userExperience} vs ${requiredYears}+ years)`;
+    }
+  } else if (hasSeniorSignals && !hasJuniorSignals) {
+    // Senior role detected
+    if (userExperience >= 10) {
+      score = 45;
+      actualValue = 'Senior-level role';
+      rationale = 'Senior role matches your experience level';
+    } else {
+      score = 25;
+      actualValue = 'Senior-level role';
+      rationale = 'Senior role may require more experience';
+    }
+  } else if (hasJuniorSignals && !hasSeniorSignals) {
+    // Junior role - probably not a good fit for experienced professional
+    score = 15;
+    actualValue = 'Entry/Junior-level role';
+    rationale = 'Role may be below your experience level';
+  } else {
+    // Default for mid-level or unclear
+    score = 35;
+    actualValue = 'Mid-level or unclear';
+    rationale = 'Experience level not clearly specified';
+  }
+
+  return {
+    criteria: 'Experience Level',
+    criteria_description: 'How well your years of experience match the job requirements',
+    actual_value: actualValue,
+    score: Math.round(score),
+    rationale,
+    required_years: requiredYears,
+    user_years: userExperience,
+    missing_data: requiredYears === null && !hasSeniorSignals && !hasJuniorSignals
   };
 }
 

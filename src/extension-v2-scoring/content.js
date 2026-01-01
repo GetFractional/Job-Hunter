@@ -46,6 +46,51 @@ function initJobHunter() {
 // ============================================================================
 
 /**
+ * Safely initialize a MutationObserver with defensive error handling
+ * Prevents "Failed to execute 'observe' on 'MutationObserver'" errors
+ * @param {Element|null} targetElement - The element to observe
+ * @param {Function} callback - MutationObserver callback
+ * @param {Object} config - Observer configuration
+ * @param {string} label - Label for logging
+ * @returns {MutationObserver|null} The observer or null if failed
+ */
+function safeInitMutationObserver(targetElement, callback, config, label = 'unnamed') {
+  try {
+    // Validate target exists
+    if (!targetElement) {
+      console.log(`[Job Hunter] MutationObserver target not found for ${label}`);
+      return null;
+    }
+
+    // Validate target is a valid Node (not a disconnected element or iframe content)
+    if (!(targetElement instanceof Node)) {
+      console.log(`[Job Hunter] MutationObserver target is not a valid Node for ${label}:`, typeof targetElement);
+      return null;
+    }
+
+    // Check if the node is connected to the document
+    if (!targetElement.isConnected) {
+      console.log(`[Job Hunter] MutationObserver target is not connected to document for ${label}`);
+      return null;
+    }
+
+    // Additional check: ensure it's not inside an iframe
+    if (targetElement.ownerDocument !== document) {
+      console.log(`[Job Hunter] MutationObserver target is in different document (possibly iframe) for ${label}`);
+      return null;
+    }
+
+    const observer = new MutationObserver(callback);
+    observer.observe(targetElement, config);
+    console.log(`[Job Hunter] MutationObserver initialized successfully for ${label}`);
+    return observer;
+  } catch (error) {
+    console.error(`[Job Hunter] Failed to initialize MutationObserver for ${label}:`, error.message);
+    return null;
+  }
+}
+
+/**
  * Initialize LinkedIn job page handling
  */
 function handleLinkedIn() {
@@ -60,7 +105,7 @@ function handleLinkedIn() {
   }
 
   // Watch for URL changes (LinkedIn is a SPA)
-  const urlObserver = new MutationObserver(() => {
+  const urlCallback = () => {
     const currentUrl = location.href;
     const currentJobId = extractLinkedInJobId(currentUrl);
 
@@ -78,19 +123,15 @@ function handleLinkedIn() {
         }, 500);
       }
     }
-  });
+  };
 
   // Safely observe document.body with validation
-  try {
-    if (document.body && document.body instanceof Node) {
-      urlObserver.observe(document.body, { childList: true, subtree: true });
-      console.log('[Job Hunter] URL observer attached to document.body');
-    } else {
-      console.warn('[Job Hunter] document.body not available for URL observer');
-    }
-  } catch (err) {
-    console.error('[Job Hunter] Failed to attach URL observer:', err);
-  }
+  const urlObserver = safeInitMutationObserver(
+    document.body,
+    urlCallback,
+    { childList: true, subtree: true },
+    'URL observer'
+  );
 
   // Watch for job card clicks - LinkedIn loads job details in-place
   document.addEventListener('click', (e) => {
@@ -124,50 +165,38 @@ function handleLinkedIn() {
 
     const detailContainer = document.querySelector(jobDetailSelectors.join(', '));
 
-    // Validate the element exists and is a proper Node before observing
-    if (!detailContainer) {
-      console.log('[Job Hunter] Detail container not found, will retry');
-      return;
-    }
+    // Use the safe observer initialization function
+    const detailCallback = (mutations) => {
+      // Check if meaningful content changed (not just minor DOM updates)
+      const hasSignificantChange = mutations.some(m =>
+        m.addedNodes.length > 0 ||
+        m.removedNodes.length > 0 ||
+        (m.type === 'characterData' && m.target.textContent?.length > 20)
+      );
 
-    if (!(detailContainer instanceof Node)) {
-      console.warn('[Job Hunter] Detail container is not a valid Node:', typeof detailContainer);
-      return;
-    }
+      if (hasSignificantChange) {
+        // Debounce to avoid excessive re-scoring
+        if (contentChangeDebounce) clearTimeout(contentChangeDebounce);
+        contentChangeDebounce = setTimeout(() => {
+          const currentJobId = extractLinkedInJobId(location.href);
+          if (currentJobId && currentJobId !== lastJobId) {
+            lastJobId = currentJobId;
+            lastScoredUrl = '';
+            triggerAutoScore('LinkedIn');
+          }
+        }, 600);
+      }
+    };
 
-    try {
-      const detailObserver = new MutationObserver((mutations) => {
-        // Check if meaningful content changed (not just minor DOM updates)
-        const hasSignificantChange = mutations.some(m =>
-          m.addedNodes.length > 0 ||
-          m.removedNodes.length > 0 ||
-          (m.type === 'characterData' && m.target.textContent?.length > 20)
-        );
+    const detailObserver = safeInitMutationObserver(
+      detailContainer,
+      detailCallback,
+      { childList: true, subtree: true, characterData: true },
+      'Detail observer'
+    );
 
-        if (hasSignificantChange) {
-          // Debounce to avoid excessive re-scoring
-          if (contentChangeDebounce) clearTimeout(contentChangeDebounce);
-          contentChangeDebounce = setTimeout(() => {
-            const currentJobId = extractLinkedInJobId(location.href);
-            if (currentJobId && currentJobId !== lastJobId) {
-              lastJobId = currentJobId;
-              lastScoredUrl = '';
-              triggerAutoScore('LinkedIn');
-            }
-          }, 600);
-        }
-      });
-
-      detailObserver.observe(detailContainer, {
-        childList: true,
-        subtree: true,
-        characterData: true
-      });
-
+    if (detailObserver) {
       detailObserverActive = true;
-      console.log('[Job Hunter] Detail observer attached successfully');
-    } catch (err) {
-      console.error('[Job Hunter] Failed to attach detail observer:', err);
     }
   };
 
@@ -231,6 +260,7 @@ function extractLinkedInJobData() {
     source: 'LinkedIn',
     // New extraction fields
     hiringManager: null,
+    hiringManagerDetails: null, // { name, title }
     postedDate: null,
     applicantCount: null
   };
@@ -397,17 +427,60 @@ function extractLinkedInJobData() {
       data.bonusMentioned = detectBonusWithProximityRule(data.descriptionText);
     }
 
-    // Extract Hiring Manager from "Meet the hiring team" section
-    const hiringTeamSelectors = [
-      '.hirer-card__hirer-information a',
-      '.jobs-poster__name',
-      '.hiring-team__title a',
-      '[data-test-hiring-team-card] a',
-      '.job-details-jobs-unified-top-card__hiring-team-member-name'
-    ];
-    const hiringManagerEl = document.querySelector(hiringTeamSelectors.join(', '));
-    if (hiringManagerEl?.textContent?.trim()) {
-      data.hiringManager = hiringManagerEl.textContent.trim();
+    // Extract Hiring Manager with name and job title from "Meet the hiring team" section
+    const hiringTeamContainer = document.querySelector(
+      '.hirer-card__hirer-information, .jobs-poster, .hiring-team, [data-test-hiring-team-card], .job-details-jobs-unified-top-card__hiring-team'
+    );
+
+    if (hiringTeamContainer) {
+      // Name selectors
+      const nameSelectors = [
+        '.hirer-card__hirer-information a',
+        '.jobs-poster__name',
+        '.hiring-team__title a',
+        '[data-test-hiring-team-card] a',
+        '.job-details-jobs-unified-top-card__hiring-team-member-name',
+        '.hiring-team-card-container__link'
+      ];
+      // Title selectors (usually the element after the name)
+      const titleSelectors = [
+        '.hirer-card__hirer-information .t-14',
+        '.jobs-poster__headline',
+        '.hiring-team__subtitle',
+        '.job-details-jobs-unified-top-card__hiring-team-member-subtitle',
+        '.hiring-team-card-container__headline'
+      ];
+
+      const nameEl = hiringTeamContainer.querySelector(nameSelectors.join(', ')) ||
+                     document.querySelector(nameSelectors.join(', '));
+      const titleEl = hiringTeamContainer.querySelector(titleSelectors.join(', ')) ||
+                      document.querySelector(titleSelectors.join(', '));
+
+      const hiringManagerName = nameEl?.textContent?.trim() || null;
+      const hiringManagerTitle = titleEl?.textContent?.trim() || null;
+
+      // Store as structured object
+      if (hiringManagerName) {
+        data.hiringManager = hiringManagerTitle
+          ? `${hiringManagerName}, ${hiringManagerTitle}`
+          : hiringManagerName;
+        data.hiringManagerDetails = {
+          name: hiringManagerName,
+          title: hiringManagerTitle
+        };
+      }
+    } else {
+      // Fallback to simpler extraction if container not found
+      const hiringManagerEl = document.querySelector([
+        '.hirer-card__hirer-information a',
+        '.jobs-poster__name',
+        '.hiring-team__title a',
+        '[data-test-hiring-team-card] a',
+        '.job-details-jobs-unified-top-card__hiring-team-member-name'
+      ].join(', '));
+      if (hiringManagerEl?.textContent?.trim()) {
+        data.hiringManager = hiringManagerEl.textContent.trim();
+      }
     }
 
     // Extract Posted Date from job card metadata

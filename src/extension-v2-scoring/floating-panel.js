@@ -274,6 +274,26 @@ function updateJobHighlights(panel, jobData, scoreResult) {
     }
   }
 
+  // Benefits - scan for health, dental, PTO, 401k etc.
+  const benefitsEl = panel.querySelector('.jh-fp-benefits');
+  if (benefitsEl) {
+    const benefitsDetected = detectBenefitsInJob(jobData, scoreResult);
+    benefitsEl.classList.remove('jh-fp-good', 'jh-fp-neutral', 'jh-fp-bad');
+    if (benefitsDetected.count >= 3) {
+      benefitsEl.textContent = benefitsDetected.display || 'Benefits';
+      benefitsEl.classList.add('jh-fp-good');
+      benefitsEl.setAttribute('data-tooltip', benefitsDetected.tooltip || 'Comprehensive benefits package');
+    } else if (benefitsDetected.count >= 1) {
+      benefitsEl.textContent = benefitsDetected.display || 'Some Benefits';
+      benefitsEl.classList.add('jh-fp-neutral');
+      benefitsEl.setAttribute('data-tooltip', benefitsDetected.tooltip || 'Some benefits mentioned');
+    } else {
+      benefitsEl.textContent = 'Benefits?';
+      benefitsEl.classList.add('jh-fp-bad');
+      benefitsEl.setAttribute('data-tooltip', 'No benefits information found');
+    }
+  }
+
   // Posted Date
   if (postedEl) {
     const posted = jobData.postedDate;
@@ -311,13 +331,25 @@ function updateJobHighlights(panel, jobData, scoreResult) {
     }
   }
 
-  // Hiring Manager
+  // Hiring Manager (with optional job title)
   if (hiringManagerEl) {
-    const manager = jobData.hiringManager;
-    if (manager) {
-      hiringManagerEl.textContent = `👤 ${manager}`;
+    const managerDetails = jobData.hiringManagerDetails;
+    const managerName = managerDetails?.name || jobData.hiringManager;
+
+    if (managerName) {
+      // Display format: "👤 Name" or "👤 Name, Title"
+      const displayText = managerDetails?.title
+        ? `👤 ${managerDetails.name}, ${managerDetails.title}`
+        : `👤 ${managerName}`;
+
+      hiringManagerEl.textContent = displayText;
       hiringManagerEl.classList.add('jh-fp-has-value');
-      hiringManagerEl.setAttribute('data-tooltip', `Hiring Manager: ${manager}`);
+
+      // Tooltip with full details
+      const tooltipText = managerDetails?.title
+        ? `Hiring Manager: ${managerDetails.name}\nTitle: ${managerDetails.title}`
+        : `Hiring Manager: ${managerName}`;
+      hiringManagerEl.setAttribute('data-tooltip', tooltipText);
     } else {
       hiringManagerEl.textContent = '';
       hiringManagerEl.style.display = 'none';
@@ -502,6 +534,58 @@ function detectEquityInJob(jobData, scoreResult) {
 }
 
 /**
+ * Detect benefits mentioned in job posting
+ * Returns count and display string for header badge
+ */
+function detectBenefitsInJob(jobData, scoreResult) {
+  const description = (jobData.descriptionText || jobData.job_description_text || '').toLowerCase();
+
+  if (!description) {
+    return { count: 0, display: 'Benefits?', tooltip: 'No description to analyze' };
+  }
+
+  // Benefits categories to detect
+  const benefitCategories = {
+    'Medical': [/health\s*(insurance|care|coverage|benefits)/i, /medical\s*(insurance|coverage|benefits)/i],
+    'Dental': [/dental/i],
+    'Vision': [/vision/i],
+    '401k': [/401\s*\(?\s*k\)?/i, /retirement\s*(plan|benefits)/i],
+    'PTO': [/\bpto\b/i, /paid\s+time\s+off/i, /unlimited\s+(pto|vacation)/i, /vacation\s+(days?|time)/i],
+    'Parental': [/parental\s+leave/i, /maternity/i, /paternity/i]
+  };
+
+  const foundBenefits = [];
+
+  for (const [name, patterns] of Object.entries(benefitCategories)) {
+    for (const pattern of patterns) {
+      if (pattern.test(description)) {
+        foundBenefits.push(name);
+        break;
+      }
+    }
+  }
+
+  const count = foundBenefits.length;
+
+  // Build display string - show first 2-3 benefits
+  let display = 'Benefits?';
+  let tooltip = 'No benefits information found';
+
+  if (count >= 3) {
+    display = foundBenefits.slice(0, 2).join(' + ') + '+';
+    tooltip = `Benefits: ${foundBenefits.join(', ')}`;
+  } else if (count === 2) {
+    display = foundBenefits.join(' + ');
+    tooltip = `Benefits: ${foundBenefits.join(', ')}`;
+  } else if (count === 1) {
+    display = foundBenefits[0];
+    tooltip = `Only ${foundBenefits[0]} mentioned`;
+  }
+
+  return { count, display, tooltip, found: foundBenefits };
+}
+
+/**
  * Check if bonus or equity was detected in score breakdown
  */
 function checkBonusEquityFromScore(scoreResult, keyword) {
@@ -669,7 +753,12 @@ function renderCriteriaItems(criteria, type = 'j2u') {
     criteriaName = nameMap[criteriaName] || criteriaName;
 
     return `
-      <div class="jh-fp-criterion ${scoreClass}" title="${escapeHtml(c.rationale || '')}" data-tooltip="${escapeHtml(c.rationale || '')}">
+      <div class="jh-fp-criterion ${scoreClass} jh-fp-clickable"
+           data-criterion="${escapeHtml(c.criteria || criteriaName)}"
+           data-category="${type}"
+           data-score="${score}"
+           title="${escapeHtml(c.rationale || '')}"
+           data-tooltip="Click for details: ${escapeHtml(c.rationale || '')}">
         <div class="jh-fp-criterion-row">
           <span class="jh-fp-criterion-name">${escapeHtml(criteriaName)}</span>
           <span class="jh-fp-criterion-score">${score}</span>
@@ -808,11 +897,348 @@ function setupPanelEventHandlers(panel) {
     });
   }
 
+  // Set up criterion click handlers for detail modals
+  setupCriterionClickHandlers(panel);
+
   // Set up tooltips
   setupTooltips(panel);
 
   // Dragging functionality
   setupDragging(panel);
+}
+
+/**
+ * Set up click handlers for criterion items to show detail modals
+ * @param {HTMLElement} panel - The panel element
+ */
+function setupCriterionClickHandlers(panel) {
+  const criteria = panel.querySelectorAll('.jh-fp-criterion.jh-fp-clickable');
+
+  criteria.forEach(criterionEl => {
+    criterionEl.style.cursor = 'pointer';
+
+    criterionEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+
+      const criterionName = criterionEl.getAttribute('data-criterion');
+      const category = criterionEl.getAttribute('data-category');
+      const score = parseInt(criterionEl.getAttribute('data-score'), 10) || 0;
+
+      // Find the full criterion data
+      const scoreResult = panelState.currentScore;
+      const jobData = panelState.currentJobData;
+
+      if (!scoreResult) return;
+
+      const breakdown = category === 'j2u'
+        ? scoreResult.job_to_user_fit?.breakdown
+        : scoreResult.user_to_job_fit?.breakdown;
+
+      const criterionData = breakdown?.find(c => c.criteria === criterionName);
+
+      if (criterionData) {
+        showCriterionDetailModal(criterionName, criterionData, category, scoreResult, jobData);
+      }
+    });
+
+    // Visual feedback on hover
+    criterionEl.addEventListener('mouseenter', () => {
+      criterionEl.style.opacity = '0.85';
+    });
+
+    criterionEl.addEventListener('mouseleave', () => {
+      criterionEl.style.opacity = '1';
+    });
+  });
+}
+
+/**
+ * Show detail modal for a specific criterion
+ */
+function showCriterionDetailModal(criterionName, criterionData, category, scoreResult, jobData) {
+  // Remove any existing modal
+  const existingModal = document.getElementById('jh-criterion-modal');
+  if (existingModal) existingModal.remove();
+
+  const score = criterionData.score || 0;
+  const maxScore = 50;
+  const percentage = Math.round((score / maxScore) * 100);
+
+  // Build modal content
+  const tips = getCriterionTips(criterionName);
+  const explanation = getCriterionExplanation(criterionName, criterionData, jobData);
+
+  const modal = document.createElement('div');
+  modal.id = 'jh-criterion-modal';
+  modal.className = 'jh-criterion-modal-overlay';
+  modal.innerHTML = `
+    <div class="jh-criterion-modal">
+      <button class="jh-criterion-modal-close">&times;</button>
+
+      <h2>${escapeHtml(criterionName)}</h2>
+
+      <div class="jh-criterion-score-display">
+        <span class="jh-criterion-score-value">${score}<span class="jh-criterion-score-max">/${maxScore}</span></span>
+        <div class="jh-criterion-progress-bar">
+          <div class="jh-criterion-progress-fill" style="width: ${percentage}%"></div>
+        </div>
+      </div>
+
+      <div class="jh-criterion-section">
+        <h3>Why this score?</h3>
+        <p>${escapeHtml(explanation)}</p>
+        ${criterionData.actual_value ? `<p class="jh-criterion-actual"><strong>Detected:</strong> ${escapeHtml(criterionData.actual_value)}</p>` : ''}
+      </div>
+
+      <div class="jh-criterion-section">
+        <h3>How to improve:</h3>
+        <ul>
+          ${tips.map(tip => `<li>${escapeHtml(tip)}</li>`).join('')}
+        </ul>
+      </div>
+    </div>
+  `;
+
+  // Add modal styles if not already present
+  if (!document.getElementById('jh-criterion-modal-styles')) {
+    const styleEl = document.createElement('style');
+    styleEl.id = 'jh-criterion-modal-styles';
+    styleEl.textContent = getCriterionModalStyles();
+    document.head.appendChild(styleEl);
+  }
+
+  // Close handlers
+  modal.querySelector('.jh-criterion-modal-close').addEventListener('click', () => {
+    modal.remove();
+  });
+
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.remove();
+  });
+
+  document.body.appendChild(modal);
+}
+
+/**
+ * Get explanation for a criterion score
+ */
+function getCriterionExplanation(name, criterionData, jobData) {
+  if (criterionData.rationale) {
+    return criterionData.rationale;
+  }
+
+  const explanations = {
+    'Base Salary': `The max salary offered is ${criterionData.actual_value || 'not specified'}. Score reflects how well this matches your target compensation.`,
+    'Work Location': `This role is ${criterionData.actual_value || 'unspecified'}. Score based on your location preferences.`,
+    'Bonus & Equity': `${criterionData.actual_value || 'Neither mentioned'}. Score reflects presence of performance-based compensation.`,
+    'Benefits Package': `Benefits detected: ${criterionData.actual_value || 'none mentioned'}. Comprehensive benefits increase the score.`,
+    'Company Maturity': `Company stage: ${criterionData.actual_value || 'unknown'}. Later-stage companies typically score higher.`,
+    'Business Lifecycle': `Company lifecycle: ${criterionData.actual_value || 'unknown'}. Growth and mature stages preferred.`,
+    'Org Stability': `Organization stability: ${criterionData.actual_value || 'unclear'}. Growing companies score higher.`,
+    'Hiring Urgency': `Hiring urgency: ${criterionData.actual_value || 'normal'}. Higher urgency indicates motivated hiring.`,
+    'Title & Seniority Match': `Role: ${criterionData.actual_value || 'Unknown'}. Score reflects alignment with your target seniority.`,
+    'Operations & Systems Focus': `RevOps focus: ${criterionData.actual_value || 'unclear'}. Higher focus on systems/operations scores better.`,
+    'Skills Overlap': `Skills matched: ${criterionData.actual_value || 'unknown'}. More matching skills = higher score.`,
+    'Industry Experience': `Industry: ${criterionData.actual_value || 'Unknown'}. Exact matches score highest.`,
+    'Experience Level': `Required experience: ${criterionData.actual_value || 'unclear'}. Score reflects experience alignment.`
+  };
+
+  return explanations[name] || criterionData.criteria_description || 'This criterion measures job fit alignment.';
+}
+
+/**
+ * Get improvement tips for a criterion
+ */
+function getCriterionTips(name) {
+  const tips = {
+    'Base Salary': [
+      'Target roles at Series C+ companies for higher budgets',
+      'VP/Director titles typically command $180K-250K+',
+      'Negotiate based on total comp, not just base'
+    ],
+    'Work Location': [
+      'Filter job searches by your location preference',
+      'Remote roles offer geographic flexibility',
+      'Hybrid may require occasional office presence'
+    ],
+    'Bonus & Equity': [
+      'Look for explicit bonus percentages (10-20% typical)',
+      'Growth-stage companies often offer meaningful equity',
+      'Ask about equity details during interviews'
+    ],
+    'Benefits Package': [
+      'Premium companies offer comprehensive health coverage',
+      'Look for 401k matching and PTO policies',
+      'Benefits value can add 20-30% to total comp'
+    ],
+    'Company Maturity': [
+      'Series B+ companies offer more stability',
+      'Enterprise companies have established processes',
+      'Consider your risk tolerance when evaluating stage'
+    ],
+    'Business Lifecycle': [
+      'Growth stage offers opportunity and some stability',
+      'Mature companies provide predictable environments',
+      'Avoid decline-stage unless restructuring interests you'
+    ],
+    'Org Stability': [
+      'Check LinkedIn for headcount growth trends',
+      'Research recent news for layoff announcements',
+      'Ask about team growth plans in interviews'
+    ],
+    'Title & Seniority Match': [
+      'Target VP/Head-of titles for your experience',
+      'Director roles may be stepping stones',
+      'Focus on scope and impact, not just title'
+    ],
+    'Operations & Systems Focus': [
+      'Look for GTM/RevOps responsibilities in JD',
+      'CRM and data infrastructure keywords are good signs',
+      'Avoid pure creative/brand marketing roles'
+    ],
+    'Skills Overlap': [
+      'Update your profile with relevant skills',
+      'Target roles where 60%+ skills match',
+      'Highlight transferable skills in applications'
+    ],
+    'Industry Experience': [
+      'Leverage adjacent industry experience',
+      'SaaS/B2B experience is widely transferable',
+      'Highlight relevant vertical knowledge'
+    ],
+    'Experience Level': [
+      'Target roles matching your years of experience',
+      'Senior roles require 10+ years typically',
+      'Highlight leadership and strategic experience'
+    ]
+  };
+
+  return tips[name] || ['Focus on opportunities better aligned with this criterion'];
+}
+
+/**
+ * Get CSS styles for criterion detail modal
+ */
+function getCriterionModalStyles() {
+  return `
+    .jh-criterion-modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100001;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    .jh-criterion-modal {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      max-width: 450px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+      position: relative;
+    }
+
+    .jh-criterion-modal h2 {
+      margin: 0 0 16px 0;
+      color: #1f2937;
+      font-size: 18px;
+      padding-right: 30px;
+    }
+
+    .jh-criterion-modal-close {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: #6b7280;
+      line-height: 1;
+    }
+
+    .jh-criterion-modal-close:hover {
+      color: #1f2937;
+    }
+
+    .jh-criterion-score-display {
+      background: #f3f4f6;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+
+    .jh-criterion-score-value {
+      font-size: 28px;
+      font-weight: bold;
+      color: #1f2937;
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .jh-criterion-score-max {
+      font-size: 16px;
+      font-weight: normal;
+      color: #6b7280;
+    }
+
+    .jh-criterion-progress-bar {
+      height: 8px;
+      background: #e5e7eb;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .jh-criterion-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #ef4444, #f59e0b, #10b981);
+      transition: width 0.3s ease;
+    }
+
+    .jh-criterion-section {
+      margin-bottom: 16px;
+    }
+
+    .jh-criterion-section h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #374151;
+      margin: 0 0 8px 0;
+    }
+
+    .jh-criterion-section p {
+      font-size: 14px;
+      color: #4b5563;
+      margin: 0;
+      line-height: 1.5;
+    }
+
+    .jh-criterion-actual {
+      margin-top: 8px !important;
+      color: #6b7280 !important;
+    }
+
+    .jh-criterion-section ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    .jh-criterion-section li {
+      font-size: 13px;
+      color: #4b5563;
+      margin: 6px 0;
+      line-height: 1.4;
+    }
+  `;
 }
 
 /**
@@ -1044,6 +1470,7 @@ function getPanelHTML() {
         <span class="jh-fp-highlight jh-fp-workplace" data-tooltip="Work location preference">--</span>
         <span class="jh-fp-highlight jh-fp-bonus" data-tooltip="Performance bonus mentioned">--</span>
         <span class="jh-fp-highlight jh-fp-equity" data-tooltip="Stock options or equity compensation">--</span>
+        <span class="jh-fp-highlight jh-fp-benefits" data-tooltip="Benefits package (Medical, Dental, PTO)">--</span>
       </div>
 
       <div class="jh-fp-job-meta">
