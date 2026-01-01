@@ -274,6 +274,26 @@ function updateJobHighlights(panel, jobData, scoreResult) {
     }
   }
 
+  // Benefits - scan for health, dental, PTO, 401k etc.
+  const benefitsEl = panel.querySelector('.jh-fp-benefits');
+  if (benefitsEl) {
+    const benefitsDetected = detectBenefitsInJob(jobData, scoreResult);
+    benefitsEl.classList.remove('jh-fp-good', 'jh-fp-neutral', 'jh-fp-bad');
+    if (benefitsDetected.count >= 3) {
+      benefitsEl.textContent = benefitsDetected.display || 'Benefits';
+      benefitsEl.classList.add('jh-fp-good');
+      benefitsEl.setAttribute('data-tooltip', benefitsDetected.tooltip || 'Comprehensive benefits package');
+    } else if (benefitsDetected.count >= 1) {
+      benefitsEl.textContent = benefitsDetected.display || 'Some Benefits';
+      benefitsEl.classList.add('jh-fp-neutral');
+      benefitsEl.setAttribute('data-tooltip', benefitsDetected.tooltip || 'Some benefits mentioned');
+    } else {
+      benefitsEl.textContent = 'Benefits?';
+      benefitsEl.classList.add('jh-fp-bad');
+      benefitsEl.setAttribute('data-tooltip', 'No benefits information found');
+    }
+  }
+
   // Posted Date
   if (postedEl) {
     const posted = jobData.postedDate;
@@ -499,6 +519,58 @@ function detectEquityInJob(jobData, scoreResult) {
   }
 
   return { found: false };
+}
+
+/**
+ * Detect benefits mentioned in job posting
+ * Returns count and display string for header badge
+ */
+function detectBenefitsInJob(jobData, scoreResult) {
+  const description = (jobData.descriptionText || jobData.job_description_text || '').toLowerCase();
+
+  if (!description) {
+    return { count: 0, display: 'Benefits?', tooltip: 'No description to analyze' };
+  }
+
+  // Benefits categories to detect
+  const benefitCategories = {
+    'Medical': [/health\s*(insurance|care|coverage|benefits)/i, /medical\s*(insurance|coverage|benefits)/i],
+    'Dental': [/dental/i],
+    'Vision': [/vision/i],
+    '401k': [/401\s*\(?\s*k\)?/i, /retirement\s*(plan|benefits)/i],
+    'PTO': [/\bpto\b/i, /paid\s+time\s+off/i, /unlimited\s+(pto|vacation)/i, /vacation\s+(days?|time)/i],
+    'Parental': [/parental\s+leave/i, /maternity/i, /paternity/i]
+  };
+
+  const foundBenefits = [];
+
+  for (const [name, patterns] of Object.entries(benefitCategories)) {
+    for (const pattern of patterns) {
+      if (pattern.test(description)) {
+        foundBenefits.push(name);
+        break;
+      }
+    }
+  }
+
+  const count = foundBenefits.length;
+
+  // Build display string - show first 2-3 benefits
+  let display = 'Benefits?';
+  let tooltip = 'No benefits information found';
+
+  if (count >= 3) {
+    display = foundBenefits.slice(0, 2).join(' + ') + '+';
+    tooltip = `Benefits: ${foundBenefits.join(', ')}`;
+  } else if (count === 2) {
+    display = foundBenefits.join(' + ');
+    tooltip = `Benefits: ${foundBenefits.join(', ')}`;
+  } else if (count === 1) {
+    display = foundBenefits[0];
+    tooltip = `Only ${foundBenefits[0]} mentioned`;
+  }
+
+  return { count, display, tooltip, found: foundBenefits };
 }
 
 /**
@@ -1044,6 +1116,7 @@ function getPanelHTML() {
         <span class="jh-fp-highlight jh-fp-workplace" data-tooltip="Work location preference">--</span>
         <span class="jh-fp-highlight jh-fp-bonus" data-tooltip="Performance bonus mentioned">--</span>
         <span class="jh-fp-highlight jh-fp-equity" data-tooltip="Stock options or equity compensation">--</span>
+        <span class="jh-fp-highlight jh-fp-benefits" data-tooltip="Benefits package (Medical, Dental, PTO)">--</span>
       </div>
 
       <div class="jh-fp-job-meta">
