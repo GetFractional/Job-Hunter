@@ -1578,14 +1578,14 @@ function getPanelStyles() {
       background: #fff;
       border-radius: 12px;
       box-shadow: 0 4px 20px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05);
-      min-width: 280px;
-      max-width: 300px;
+      min-width: 340px;
+      max-width: 360px;
       overflow: hidden;
       transition: max-width 0.25s ease;
     }
 
     #jh-floating-panel.jh-fp-expanded .jh-fp-container {
-      max-width: 600px;
+      max-width: 620px;
     }
 
     /* Drag handle */
@@ -1729,21 +1729,14 @@ function getPanelStyles() {
     .jh-fp-meter-fill.jh-fp-weak { background: #d9480f; }
     .jh-fp-meter-fill.jh-fp-poor { background: #c92a2a; }
 
-    /* Job highlights row - all badges on one line */
+    /* Job highlights row - all badges visible */
     .jh-fp-job-highlights {
       display: flex;
-      flex-wrap: nowrap;
+      flex-wrap: wrap;
       gap: 4px;
       padding: 8px 10px;
       background: #f8f9fa;
       border-bottom: 1px solid #e9ecef;
-      overflow-x: auto;
-      overflow-y: hidden;
-      scrollbar-width: none;
-    }
-
-    .jh-fp-job-highlights::-webkit-scrollbar {
-      display: none;
     }
 
     .jh-fp-highlight {

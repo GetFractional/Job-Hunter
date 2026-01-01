@@ -113,57 +113,61 @@ const SUB_SCORE_THRESHOLDS = {
  * @param {Object} jobPayload - Extracted job data from content.js
  * @param {Object} userProfile - User preferences from chrome.storage.local
  * @returns {Object} Complete score result with breakdowns and interpretation
+ *
+ * ARCHITECTURE: Always calculate ALL scores first, THEN apply dealbreaker check.
+ * This ensures users see the detailed breakdown even when a dealbreaker is triggered.
  */
 function calculateJobFitScore(jobPayload, userProfile) {
   const timestamp = new Date().toISOString();
   const scoreId = `score_${Date.now()}`;
 
-  // Check deal-breakers first - if any match, return 0 immediately
-  const dealBreakerResult = checkDealBreakers(jobPayload, userProfile);
-  if (dealBreakerResult.triggered) {
-    return {
-      score_id: scoreId,
-      job_id: jobPayload.job_id || `${jobPayload.source}_${Date.now()}`,
-      timestamp,
-      overall_score: 0,
-      overall_label: 'HARD NO',
-      deal_breaker_triggered: dealBreakerResult.reason,
-      job_to_user_fit: { score: 0, label: 'HARD NO', breakdown: [] },
-      user_to_job_fit: { score: 0, label: 'N/A', breakdown: [] },
-      interpretation: {
-        summary: `This job was automatically rejected: ${dealBreakerResult.reason}`,
-        action: 'SKIP - Deal-breaker detected',
-        conversation_starters: []
-      }
-    };
-  }
-
-  // Calculate bidirectional scores
+  // STEP 1: Always calculate bidirectional scores FIRST (regardless of dealbreakers)
   const jobToUserFit = calculateJobToUserFit(jobPayload, userProfile);
   const userToJobFit = calculateUserToJobFit(jobPayload, userProfile);
 
-  // Combine scores (each contributes 50% to overall 0-100 score)
+  // STEP 2: Combine scores (each contributes 50% to overall 0-100 score)
   const overallResult = combineScores(jobToUserFit.score, userToJobFit.score);
 
-  // Generate interpretation
-  const interpretation = generateInterpretation(
-    jobPayload,
-    userProfile,
-    jobToUserFit,
-    userToJobFit,
-    overallResult
-  );
+  // STEP 3: Check deal-breakers AFTER calculating all scores
+  const dealBreakerResult = checkDealBreakers(jobPayload, userProfile);
 
-  return {
+  // STEP 4: Generate interpretation (accounts for dealbreaker status)
+  let interpretation;
+  if (dealBreakerResult.triggered) {
+    // Override interpretation for dealbreaker situations
+    interpretation = {
+      summary: `Deal-breaker triggered: ${dealBreakerResult.reason}. However, the detailed scoring is shown above for context.`,
+      action: 'HARD NO - Deal-breaker detected. Review the breakdown to understand why this role doesn\'t fit.',
+      conversation_starters: []
+    };
+  } else {
+    interpretation = generateInterpretation(
+      jobPayload,
+      userProfile,
+      jobToUserFit,
+      userToJobFit,
+      overallResult
+    );
+  }
+
+  // Build the result - always include full breakdown
+  const result = {
     score_id: scoreId,
     job_id: jobPayload.job_id || `${jobPayload.source}_${Date.now()}`,
     timestamp,
     overall_score: overallResult.score,
-    overall_label: overallResult.label,
+    overall_label: dealBreakerResult.triggered ? 'HARD NO' : overallResult.label,
     job_to_user_fit: jobToUserFit,
     user_to_job_fit: userToJobFit,
     interpretation
   };
+
+  // Add dealbreaker info if triggered (but keep all scores visible)
+  if (dealBreakerResult.triggered) {
+    result.deal_breaker_triggered = dealBreakerResult.reason;
+  }
+
+  return result;
 }
 
 /**
@@ -523,40 +527,41 @@ function scoreEquityBonus(jobPayload, userProfile) {
   const equityWeight = 0.45;
 
   // Score bonus (0-50 scale for this component)
+  // FIX: Score 0 when not mentioned - we can't assume bonus exists if not stated
   let bonusScore = 0;
   let bonusRationale = '';
   if (bonusMentioned) {
     bonusScore = 50;
     bonusRationale = bonusPercent ? `${Math.round(bonusPercent * 100)}% bonus mentioned` : 'Bonus mentioned';
   } else {
+    // When not mentioned, score 0 regardless of preference
+    // User's preference affects how they FEEL about 0, not the score itself
+    bonusScore = 0;
     if (bonusPref === 'required') {
-      bonusScore = 0;
-      bonusRationale = 'No bonus (required)';
+      bonusRationale = 'No bonus mentioned (you require it)';
     } else if (bonusPref === 'preferred') {
-      bonusScore = 15;
-      bonusRationale = 'No bonus mentioned';
+      bonusRationale = 'No bonus mentioned (you prefer it)';
     } else {
-      bonusScore = 30;
-      bonusRationale = 'No bonus (not important to you)';
+      bonusRationale = 'No bonus mentioned';
     }
   }
 
   // Score equity (0-50 scale for this component)
+  // FIX: Score 0 when not mentioned - we can't assume equity exists if not stated
   let equityScore = 0;
   let equityRationale = '';
   if (equityMentioned) {
     equityScore = 50;
     equityRationale = 'Equity/stock options mentioned';
   } else {
+    // When not mentioned, score 0 regardless of preference
+    equityScore = 0;
     if (equityPref === 'required') {
-      equityScore = 0;
-      equityRationale = 'No equity (required)';
+      equityRationale = 'No equity mentioned (you require it)';
     } else if (equityPref === 'preferred') {
-      equityScore = 15;
-      equityRationale = 'No equity mentioned';
+      equityRationale = 'No equity mentioned (you prefer it)';
     } else {
-      equityScore = 30;
-      equityRationale = 'No equity (not important to you)';
+      equityRationale = 'No equity mentioned';
     }
   }
 
@@ -781,31 +786,160 @@ function scoreCompanyStage(jobPayload, userProfile) {
  */
 function scoreBusinessLifecycle(jobPayload, userProfile) {
   const description = (jobPayload.descriptionText || jobPayload.job_description_text || '').toLowerCase();
+  const companyName = (jobPayload.companyName || jobPayload.company_name || '').toLowerCase();
   const companySize = jobPayload.company_headcount || jobPayload.companyHeadcount || 0;
+  const companyStage = (jobPayload.company_stage || '').toLowerCase();
 
-  // Detection keywords for each stage
-  const seedKeywords = ['seed', 'pre-seed', 'pre seed', 'angel', 'bootstrapped'];
-  const startupKeywords = ['startup', 'founded 20', 'early stage', 'early-stage', 'series a'];
-  const growthKeywords = ['series b', 'series c', 'hypergrowth', 'hyper-growth', 'scaling', 'rapid growth', 'high growth'];
-  const maturityKeywords = ['series d', 'series e', 'late stage', 'late-stage', 'enterprise', 'established', 'mature', 'fortune'];
-  const expansionKeywords = ['expanding', 'new markets', 'expansion', 'international growth', 'global expansion'];
-  const declineKeywords = ['restructuring', 'wind down', 'acquired', 'bankruptcy', 'layoffs', 'downsizing'];
+  // Enhanced detection keywords for each stage
+  // IMPROVED: More comprehensive patterns for accurate lifecycle detection
+  const seedKeywords = [
+    'seed', 'pre-seed', 'pre seed', 'preseed', 'angel', 'angel-backed',
+    'bootstrapped', 'self-funded', 'founder-funded', 'pre-revenue',
+    'just launched', 'newly launched', 'stealth', 'stealth mode'
+  ];
 
-  // Detect stage from keywords and headcount
+  const startupKeywords = [
+    'startup', 'start-up', 'early stage', 'early-stage',
+    'series a', 'series-a', 'series seed',
+    'founded 2023', 'founded 2024', 'founded 2025', // Recent years
+    'emerging company', 'young company', 'small but growing',
+    'scrappy', 'nimble', 'agile team', 'small team',
+    'first hire', 'founding team', 'early employee',
+    'building from scratch', 'greenfield'
+  ];
+
+  const growthKeywords = [
+    'series b', 'series-b', 'series c', 'series-c',
+    'hypergrowth', 'hyper-growth', 'high-growth', 'high growth',
+    'scaling', 'scaling rapidly', 'rapid growth', 'fast-growing',
+    'growth stage', 'growth-stage', 'growth company',
+    'doubling', 'tripling', '100% growth', '200% growth',
+    'recently raised', 'just raised', 'backed by',
+    'expanding rapidly', 'hiring aggressively'
+  ];
+
+  const maturityKeywords = [
+    'series d', 'series-d', 'series e', 'series-e', 'series f',
+    'late stage', 'late-stage', 'pre-ipo', 'pre ipo',
+    'enterprise', 'established', 'mature', 'publicly traded',
+    'fortune 500', 'fortune 1000', 'fortune 100', 'f500', 'f100',
+    'global leader', 'market leader', 'industry leader',
+    'decades of experience', 'over 20 years', 'over 30 years',
+    'well-established', 'household name', 'iconic brand',
+    'publicly held', 'nyse', 'nasdaq', 'stock symbol'
+  ];
+
+  const expansionKeywords = [
+    'expanding', 'expansion', 'new markets', 'entering new',
+    'international growth', 'global expansion', 'going global',
+    'new territory', 'new region', 'opening offices',
+    'launching in', 'expanding to', 'international presence',
+    'multi-national', 'multinational'
+  ];
+
+  const declineKeywords = [
+    'restructuring', 'wind down', 'winding down',
+    'bankruptcy', 'chapter 11', 'chapter 7',
+    'layoffs', 'downsizing', 'reduction in force', 'rif',
+    'turnaround', 'turn around', 'pivot required',
+    'cost cutting', 'budget cuts', 'financial difficulties'
+  ];
+
+  // Priority-based detection (most specific matches first)
   let detectedStage = 'unknown';
+  let matchedKeyword = '';
 
-  if (declineKeywords.some(kw => description.includes(kw))) {
-    detectedStage = 'decline';
-  } else if (maturityKeywords.some(kw => description.includes(kw)) || companySize > 500) {
-    detectedStage = 'maturity';
-  } else if (growthKeywords.some(kw => description.includes(kw)) || (companySize > 100 && companySize <= 500)) {
-    detectedStage = 'growth';
-  } else if (expansionKeywords.some(kw => description.includes(kw))) {
-    detectedStage = 'expansion';
-  } else if (startupKeywords.some(kw => description.includes(kw)) || (companySize > 20 && companySize <= 100)) {
-    detectedStage = 'startup';
-  } else if (seedKeywords.some(kw => description.includes(kw)) || (companySize > 0 && companySize <= 20)) {
-    detectedStage = 'seed';
+  // Check explicit company stage from LinkedIn data first
+  if (companyStage) {
+    if (companyStage.includes('seed') || companyStage.includes('pre-')) {
+      detectedStage = 'seed';
+    } else if (companyStage.includes('series a')) {
+      detectedStage = 'startup';
+    } else if (companyStage.includes('series b') || companyStage.includes('series c')) {
+      detectedStage = 'growth';
+    } else if (companyStage.includes('series d') || companyStage.includes('late') || companyStage.includes('public')) {
+      detectedStage = 'maturity';
+    }
+  }
+
+  // Check keywords if not already detected
+  if (detectedStage === 'unknown') {
+    // Check decline first (important warning sign)
+    for (const kw of declineKeywords) {
+      if (description.includes(kw)) {
+        detectedStage = 'decline';
+        matchedKeyword = kw;
+        break;
+      }
+    }
+  }
+
+  if (detectedStage === 'unknown') {
+    // Check maturity (often larger companies with specific keywords)
+    for (const kw of maturityKeywords) {
+      if (description.includes(kw) || companyName.includes(kw)) {
+        detectedStage = 'maturity';
+        matchedKeyword = kw;
+        break;
+      }
+    }
+  }
+
+  if (detectedStage === 'unknown') {
+    // Check growth (common for scaling companies)
+    for (const kw of growthKeywords) {
+      if (description.includes(kw)) {
+        detectedStage = 'growth';
+        matchedKeyword = kw;
+        break;
+      }
+    }
+  }
+
+  if (detectedStage === 'unknown') {
+    // Check expansion
+    for (const kw of expansionKeywords) {
+      if (description.includes(kw)) {
+        detectedStage = 'expansion';
+        matchedKeyword = kw;
+        break;
+      }
+    }
+  }
+
+  if (detectedStage === 'unknown') {
+    // Check startup
+    for (const kw of startupKeywords) {
+      if (description.includes(kw)) {
+        detectedStage = 'startup';
+        matchedKeyword = kw;
+        break;
+      }
+    }
+  }
+
+  if (detectedStage === 'unknown') {
+    // Check seed
+    for (const kw of seedKeywords) {
+      if (description.includes(kw)) {
+        detectedStage = 'seed';
+        matchedKeyword = kw;
+        break;
+      }
+    }
+  }
+
+  // Fallback to headcount-based estimation if no keywords matched
+  if (detectedStage === 'unknown' && companySize > 0) {
+    if (companySize > 1000) {
+      detectedStage = 'maturity';
+    } else if (companySize > 200) {
+      detectedStage = 'growth';
+    } else if (companySize > 50) {
+      detectedStage = 'startup';
+    } else {
+      detectedStage = 'seed';
+    }
   }
 
   // User preferences for company stages
@@ -830,20 +964,31 @@ function scoreBusinessLifecycle(jobPayload, userProfile) {
     'startup': 'Early Stage/Startup',
     'growth': 'Growth Stage',
     'maturity': 'Mature/Enterprise',
-    'expansion': 'Expansion',
+    'expansion': 'Expansion Phase',
     'decline': 'Decline/Restructuring',
     'unknown': 'Unknown'
   };
+
+  // Build detailed rationale
+  let rationale = '';
+  if (detectedStage === 'unknown') {
+    rationale = 'Company lifecycle stage not determined from available info';
+  } else if (matchedKeyword) {
+    rationale = `Detected "${matchedKeyword}" indicating ${stageLabels[detectedStage]} phase`;
+  } else if (companySize > 0) {
+    rationale = `Based on company size (~${companySize} employees): ${stageLabels[detectedStage]}`;
+  } else {
+    rationale = `Company appears to be in ${stageLabels[detectedStage]} phase`;
+  }
 
   return {
     criteria: 'Business Lifecycle',
     criteria_description: 'Company lifecycle stage (Seed → Startup → Growth → Maturity → Expansion)',
     actual_value: stageLabels[detectedStage] || 'Unknown',
     score: Math.round(score),
-    rationale: detectedStage === 'unknown'
-      ? 'Company lifecycle stage not determined from available info'
-      : `Company appears to be in ${stageLabels[detectedStage]} phase`,
+    rationale,
     detected_stage: detectedStage,
+    matched_keyword: matchedKeyword || null,
     missing_data: detectedStage === 'unknown'
   };
 }

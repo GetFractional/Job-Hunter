@@ -118,7 +118,7 @@ async function handleCreateRecord(jobData, scoreData = null) {
   // - "Overall Fit Score" (Number): Overall 0-100 score
   // - "Preference Fit Score" (Number): Job-to-User 0-50 score (how well job meets user's needs)
   // - "Role Fit Score" (Number): User-to-Job 0-50 score (how well user matches job)
-  // - "Fit Recommendation" (Single Select): STRONG FIT, GOOD FIT, MODERATE FIT, WEAK FIT, POOR FIT, HARD NO
+  // - "Fit Recommendation" (Single Select): Must match existing options in Airtable
   // - "Matched Skills" (Long Text): Skills that matched between user and job
   // - "Missing Skills" (Long Text): Skills the job requires that user may lack
   // - "Triggered Dealbreakers" (Long Text): Any deal-breakers that were triggered
@@ -127,7 +127,25 @@ async function handleCreateRecord(jobData, scoreData = null) {
       airtablePayload.fields['Overall Fit Score'] = scoreData.overall_score;
     }
     if (scoreData.overall_label) {
-      airtablePayload.fields['Fit Recommendation'] = scoreData.overall_label;
+      // Map the label to valid Airtable select options
+      // Airtable select fields have predefined options that must match exactly
+      const validFitOptions = ['STRONG FIT', 'GOOD FIT', 'MODERATE FIT', 'FAIR FIT', 'WEAK FIT', 'POOR FIT', 'HARD NO'];
+      let fitLabel = scoreData.overall_label.toUpperCase().trim();
+
+      // If the exact label isn't valid, map to a valid option
+      if (!validFitOptions.includes(fitLabel)) {
+        // Try to find the closest match
+        if (fitLabel.includes('STRONG')) fitLabel = 'STRONG FIT';
+        else if (fitLabel.includes('GOOD')) fitLabel = 'GOOD FIT';
+        else if (fitLabel.includes('MODERATE') || fitLabel.includes('FAIR')) fitLabel = 'GOOD FIT'; // Safe fallback
+        else if (fitLabel.includes('WEAK')) fitLabel = 'WEAK FIT';
+        else if (fitLabel.includes('POOR')) fitLabel = 'POOR FIT';
+        else if (fitLabel.includes('HARD') || fitLabel.includes('NO')) fitLabel = 'HARD NO';
+        else fitLabel = 'GOOD FIT'; // Ultimate fallback
+        console.log(`[Job Hunter BG] Mapped "${scoreData.overall_label}" to "${fitLabel}" for Airtable`);
+      }
+
+      airtablePayload.fields['Fit Recommendation'] = fitLabel;
     }
     if (scoreData.job_to_user_fit?.score !== undefined) {
       airtablePayload.fields['Preference Fit Score'] = scoreData.job_to_user_fit.score;
