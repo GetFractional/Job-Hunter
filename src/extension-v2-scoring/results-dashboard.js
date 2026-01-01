@@ -14,7 +14,7 @@
  * @param {Function} onSendToAirtable - Callback for "Send to Job Hunter" button
  * @param {Function} onEditProfile - Callback for "Edit Profile" button
  */
-function showResultsModal(scoreResult, jobData, onSendToAirtable, onEditProfile) {
+async function showResultsModal(scoreResult, jobData, onSendToAirtable, onEditProfile) {
   // Remove existing modal if present
   removeResultsModal();
 
@@ -25,11 +25,25 @@ function showResultsModal(scoreResult, jobData, onSendToAirtable, onEditProfile)
   // Inject the modal HTML
   modalContainer.innerHTML = getModalHTML();
 
-  // Inject the styles
-  const styleEl = document.createElement('style');
-  styleEl.id = 'jh-results-styles';
-  styleEl.textContent = getModalStyles();
-  document.head.appendChild(styleEl);
+  // Inject the styles - fetch from CSS file if not already loaded
+  if (!document.getElementById('jh-results-styles')) {
+    const styleEl = document.createElement('style');
+    styleEl.id = 'jh-results-styles';
+
+    // Fetch CSS file from extension
+    try {
+      const cssUrl = chrome.runtime.getURL('results-dashboard.css');
+      const response = await fetch(cssUrl);
+      const cssText = await response.text();
+      styleEl.textContent = cssText;
+    } catch (error) {
+      console.error('[Results Dashboard] Failed to load CSS:', error);
+      // Fallback to inline styles
+      styleEl.textContent = getModalStyles();
+    }
+
+    document.head.appendChild(styleEl);
+  }
 
   // Add modal to page
   document.body.appendChild(modalContainer);
