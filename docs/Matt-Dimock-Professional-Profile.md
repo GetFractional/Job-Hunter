@@ -58,52 +58,71 @@ Based on the **Wealth Dynamics Mechanic Profile**, I operate fundamentally diffe
 
 *Use these exact metrics and "Problem → Solution → Result" frames for ALL assets. This is the proof of leverage.*
 
-### 2.1 Current Role: Director of Growth & RevOps
+### 2.1 Consulting & Side Work: Get Fractional (Current)
 
-**HireHawk** | *March 2025 – Present (Remote, Austin, TX)*
+**Get Fractional** | *Oct 2022 – Present (Remote; part-time consulting as-needed)*
 
-**The Problem:**
-- Manual recruiting workflow unscalable, expensive, time-consuming (60+ day Time-to-Fill SLA)
-- No standardized GTM strategy or RevOps infrastructure
-- Brand positioning unclear; website conversion rate suboptimal
+**Nature of Work:**
+- Growth systems consulting focused on lifecycle, CRO, SEO, measurement, and automation
+- Select client engagements; scoped to stay lightweight while maintaining full-time leadership readiness
 
-**The Solution:**
-- **Branding & Positioning:** Created HireHawk brand from zero: ICP research, competitor analysis, buyer research surveys. Optimized website copy for SEO, AEO, and CRO targeting recruiting/staffing decision-makers.
-- **RevOps Infrastructure:** Architected entire CRM using Zoho One; built sales pipeline architecture, data models, automations, e-sign integrations, billing logic, and BI dashboards for real-time visibility.
-- **AI-Powered Recruiting Engine:** Orchestrated custom AI-driven recruiting engine connecting custom GPTs, n8n workflows, CrewAI agents, and custom Chrome extension that transforms manual recruiter work into guided, systemized process.
-- **Email Outbound Automation:** Built outbound email infrastructure with capacity for millions of sends annually at sub-$1k CAC.
-- **Operating Framework:** Implemented Lean Startup-inspired Notion system (Objectives → Key Results → hypotheses → experiments → metrics → decisions) enabling leadership prioritization and rapid iteration.
+**Current / Recent Example Engagement (OC Ramps):**
+- Website development coordination, SEO strategy and execution, email marketing, and promotional campaigns
+- Conversion-focused site and offer improvements to increase revenue per session and reduce operational friction
 
-**The Result:**
-- ✅ Reduced Time-to-Fill from **60+ days to sub-21 days SLA** (65% improvement)
-- ✅ Achieved **sub-$1k CAC** on email outbound at scale (scalable to millions of sends annually)
-- ✅ Deployed repeatable OKR framework tied to data-driven shipping decisions
-- ✅ Positioned HireHawk as AI-powered recruiting infrastructure provider
+**Purpose in Career Timeline:**
+- Bridges the transition period after AffordableInsuranceQuotes.com and during Dealer Acceleration Group
+- Keeps tooling current and provides a steady stream of real-world execution contexts
+- Not positioned as a primary employer unless explicitly requested (part-time consulting)
 
 ### 2.2 Director of Growth & Retention
 
-**Prosper Wireless & Prosper Network** | *Sept 2023 – Nov 2025 (Remote, 2 years 2 months)*
+**Prosper Wireless** | *Sept 2023 – Nov 2025 (Remote, 2 years 2 months)*
 
 **The Problem:**
-- High-volume telecom provider ($45M ARR) needed to scale customer acquisition (ACP/LifeLine program) without exploding headcount or CAC
-- No lifecycle engagement infrastructure; churn was unmeasured
-- Agent onboarding manual and inefficient
+- High-volume telecom provider needed scalable infrastructure to support rapid growth in ACP/LifeLine enrollment without scaling headcount at the same rate
+- Core enrollment motion was direct sales-led; marketing ops, enablement, and systems needed to support field teams at volume
+- Lifecycle engagement and churn instrumentation were under-developed
+- Agent onboarding and training were manual and inconsistent
 
-**The Solution:**
-- **Acquisition Funnel Architecture:** Designed and launched custom ACP → LifeLine enrollment funnels; integrated device upsells to improve monetization per user.
-- **Lifecycle Engagement System:** Architected lifecycle engagement infrastructure (Braze) managing 600K+ customer base, reducing churn and increasing LTV through automated nurture 
-sequences and multi-channel campaigns
-- **Retention Program:** Created "Prosper Perks"—rewards program boosting engagement and billing eligibility simultaneously.
-- **Partnership Infrastructure:** Negotiated contracts with major carriers (Spectrum, Frontier, Comcast) at CPA rates up to $300/order. Built affiliate infrastructure (TUNE, Impact); onboarded 20+ offer partners. Founded Prosper Network to expand field sales into new verticals.
-- **Training & Enablement:** Reduced agent onboarding operational burden 50% by deploying automated training system (LearnDash/WordPress), enabling faster sales team scaling
-- **Analytics & Intelligence:** Co-developed Metabase dashboards for full-funnel KPI reporting and leadership visibility.
+**The Solution (What I Actually Owned / Supported):**
+- **Enrollment funnel systems:** Built and supported a custom enrollment funnel, then pivoted to refining the **Telgoo5** enrollment system used for primary activations to improve throughput, compliance, and operational reliability
+- **Enablement & training:** Deployed online training, certification, and onboarding funnel (LearnDash + WordPress + automation) to reduce onboarding burden and improve consistency across distributed teams
+- **Lifecycle engagement infrastructure:** Architected lifecycle engagement foundations (e.g., Braze / Sliide) to enable scalable multi-channel communications across a 600K+ customer base
+- **Partner operations:** Negotiated and operationalized carrier/ISP and channel partnerships with CPA terms up to $300 per order; built tracking and performance visibility across 20+ partners
+- **Reporting:** Co-developed Metabase dashboards for full-funnel KPI visibility and leadership decisioning cadence
 
 **The Result:**
-- ✅ Enabled revenue scale from **$45M to $120M** in 12 months (167% growth) through sales enablement, lifecycle infrastructure, partnership development
-- ✅ Activated **600,000+ low-income households** (fastest growing ACP provider 2023)
+- ✅ **Supported** scale from **~$45M → $120M+** in a direct-sales model by building the enablement, lifecycle, reporting, and partner operating systems that made scaling operationally possible
+- ✅ Enabled multi-channel lifecycle communications supporting **600K+** customers/activations
 - ✅ Reduced agent onboarding operational burden by ~50%
-- ✅ Built repeatable partnership framework securing $300/order CPA
-- ✅ Established data-driven decisioning infrastructure
+- ✅ Established repeatable partner framework securing CPA economics up to **$300 per order**
+- ✅ Implemented data visibility foundations (dashboards + definitions) to reduce guesswork and accelerate iteration
+
+**Role End Context:**
+- Role ended in a company-wide reduction in force after ACP-driven revenue contraction and broader restructuring
+
+#### 2.2.1 Internal Venture (Within Prosper Wireless): HireHawk
+
+**HireHawk** | *Venture Lead (Internal) | March 2025 – Nov 2025 (Remote)*
+
+**The Problem:**
+- Recruiting workflow was manual and unscalable (60+ day time-to-fill)
+- No standardized GTM strategy or RevOps infrastructure
+- Brand positioning and website conversion path needed clarity
+
+**The Solution:**
+- **Brand & positioning:** Built the HireHawk brand and website foundation; executed ICP and competitor research; optimized messaging for SEO/AEO/CRO
+- **RevOps infrastructure:** Architected the CRM and operating stack (Zoho One, Deel) including pipeline stages, data model, automations, e-sign, and billing logic
+- **AI-enabled recruiting engine:** Built an AI-driven recruiting engine using Workable, n8n, CrewAI, and a custom Chrome extension to systematize sourcing, screening, and workflow steps
+- **Outbound foundations:** Built outbound email capability designed for scalable volume with CAC targets and deliverability constraints considered from day one
+- **Operating cadence:** Implemented a Lean Startup-style experiment and prioritization system to tie work shipped to measurable outcomes
+
+**The Result:**
+- ✅ Reduced time-to-fill from **60+ days to <21 days**
+- ✅ Established repeatable recruiting operating system and enabling tech stack
+- ✅ Delivered GTM and RevOps foundation aligned to an outsourcing model
+
 
 ### 2.3 Chief Marketing Officer
 
@@ -199,38 +218,44 @@ sequences and multi-channel campaigns
 
 ### 2.7 Entrepreneurial Experience: Dealer Acceleration Group (Startup)
 
-**Dealer Acceleration Group** | *Jan 2022 – Dec 2022 (1 year)*
+**Dealer Acceleration Group** | *Jan 2022 – Dec 2022 (Remote; 1 year)*
 
-**Context & Lessons:**
-- Co-founded startup with same leadership team from Affordable Insurance Quotes to replicate our growth model across other verticals.
-- Raised capital; tested three distinct business models targeting dealer/B2B markets.
-- The pandemic strained product-market fit traction in initial model, so shifted strategy when market dynamics changed.
-- Leadership team took pay cuts to extend runway while testing new directions.
-- Company concluded operations after 12 months when investor funding was reduced due to incomplete product-market fit validation across final model.
+**Origin Story:**
+- Formed with the executive team from AffordableInsuranceQuotes.co after an angel investor expressed interest in making a “small bet” on the team
+- Raised **$300,000** to test and validate a new dealer-adjacent insurance and fintech business
+
+**What We Built and Tested (3 pivots in 12 months):**
+
+1) **ADR + GAP Insurance (Initial Thesis)**
+- Started with two products: **ADR (Auto Deductible Reimbursement)** and **GAP insurance**
+- Found the margins we could offer were not incentive enough for distribution partners, limiting scalable adoption
+
+2) **Ancillary Underwriter / Private-Label Product Attempt**
+- Secured access to one of the nation’s largest underwriters for ancillary products through a warm connection and reached senior stakeholders responsible for greenlighting
+- Strategy: develop our own product, outsource fulfillment, and earn materially higher margins
+- Outcome: initiative was **not greenlit**, forcing a pivot
+
+3) **Verifacto Partnership (B2B SaaS Resell)**
+- Structured partnership with **Verifacto** to resell:
+  - **Loan Management System** to loan companies
+  - **Dealer Management System** to dealerships
+- Also secured access to resell Verifacto’s data as leads
+- Monetization blocker: the lead dataset lacked usable consent, preventing compliant outbound monetization
 
 **Key Lessons Learned & Applied:**
-- ✅ Deepened understanding of market validation and pivot decision-making
-- ✅ Gained experience in capital efficiency and runway extension strategies
-- ✅ Strengthened ability to lead through uncertainty and incomplete data
-- ✅ Enhanced appreciation for the importance of product-market fit before scaling
-- ✅ Applied lessons directly to rapid experimentation frameworks used at subsequent roles (Prosper Wireless, HireHawk)
+- ✅ Market validation rigor: test willingness-to-pay and partner economics before investing heavily in build
+- ✅ Distribution reality check: incentives must be strong enough to unlock channel adoption
+- ✅ Compliance as a growth constraint: data consent quality can be the difference between “asset” and “liability”
+- ✅ Pivot discipline: move quickly when the unit economics or adoption signals fail
 
-**Why This Matters:** 
-This experience crystallized the difference between "growth at all costs" and "sustainable growth built on real product-market fit." At Prosper Wireless and HireHawk, I applied this learning by building data-driven experimentation frameworks (OKRs, Metabase dashboards) to rapidly experiment. The discipline learned here further improved my ability to separate signal from noise in growth metrics.
+**Why This Matters:**
+This year sharpened my ability to evaluate business models through unit economics and distribution constraints, and it strengthened my “systems-first” approach to building repeatable growth engines.
+
 
 ### 2.8 Consulting & Side Work: Get Fractional
 
-**Get Fractional** | *Oct 2022 – Present (Remote; side consulting as-needed)*
+*See **2.1** for the current canonical Get Fractional summary (this section retained for backward compatibility in prompts and older references).*
 
-**Nature of Work:**
-- Internet marketing consulting company providing strategic guidance and campaign management for select clients
-- *Current engagement:* OC Ramps (largest skate ramp manufacturer globally) — manage website development, SEO strategy, email marketing, and promotional campaigns; consult on overall marketing strategy
-- Typical scope: Marketing strategy consulting, campaign execution, system setup
-
-**Purpose in Career Timeline:**
-- Bridges employment gap (Dec 2021 – Sept 2023) during Dealer Acceleration Group wind-down and Prosper Wireless onboarding
-- Provides ongoing strategic consulting while employed at primary roles
-- Limited focus; not a primary business (side work as opportunities arise)
 
 ---
 
@@ -328,7 +353,7 @@ This experience crystallized the difference between "growth at all costs" and "s
 
 **Partnership Marketing** (Identification, Deal Structuring, Co-Marketing, Joint Webinars, Referral Networks)
 - *Specialties:* Partner identification and fit assessment, deal structuring and negotiation, co-marketing execution, joint webinar and campaign planning, referral network development
-- *Proof:* Built multi-partner webinar infrastructure at Breakthrough Academy. Secured major carrier partnerships at Prosper Wireless (Spectrum, Frontier, Comcast; $300/order CPA). Founded Prosper Network (field sales expansion).
+- *Proof:* Built multi-partner webinar infrastructure at Breakthrough Academy. Secured major carrier partnerships at Prosper Wireless (Spectrum, Frontier, Comcast; $300/order CPA). Founded Prosper Network (to enable field sales expansion through government and private party contracts).
 - *Companies:* Breakthrough Academy, Prosper Wireless
 - *Lessons Applied:* Win-win deal structures, co-op marketing playbooks, partner success metrics
 
@@ -839,8 +864,9 @@ When wrapping up a cover letter or positioning statement:
 
 *For reference when creating resumes or answering "walk me through your career" questions.*
 
-**2025 – Present:** Director of Growth & RevOps, HireHawk (Remote)
-**2023 – 2025:** Director of Growth & Retention, Prosper Wireless (Remote)
+**2023 – 2025:** Director of Growth & Retention, Prosper Wireless (Remote)  
+&nbsp;&nbsp;• **Internal Venture (within Prosper):** Venture Lead (Internal), HireHawk (Mar 2025 – Nov 2025, Remote)
+
 **2022 – Present:** Consultant, Get Fractional (Remote, part-time)
 **2022 – 2022:** Co-Founder, Dealer Acceleration Group (Remote)
 **2020 – 2021:** CMO / COO, Affordable Insurance Quotes.com™ (Nashville, TN)
