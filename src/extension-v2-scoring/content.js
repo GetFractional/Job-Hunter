@@ -837,115 +837,92 @@ function extractCompanyHeadcountData() {
       console.log('[Job Hunter] ⚠ Premium company growth widget not found on page');
     }
 
-    // Method 1: Try LinkedIn company sidebar / insights section on job posting
-    const companyInfoSelectors = [
-      '[data-testid="company-info"]',
-      '.job-details-jobs-unified-top-card__company-size',
-      '.jobs-unified-top-card__company-size',
-      '.jobs-company__company-description',
-      '.job-details-premium-company-insights',
-      '.job-details-company-insights',
-      '.company-size',
-      '.jobs-company-info',
-      '.job-details-about-company',
-      '[data-test-company-size]',
-      '.jobs-unified-top-card__job-insight',
-      '.job-details-jobs-unified-top-card__job-insight',
-      '.t-14.t-black--light.t-normal' // Company size text on some pages
-    ];
+    // FALLBACK METHODS: Only run if widget didn't find data
+    // Method 1: Try LinkedIn company sidebar / insights section on job posting (FALLBACK ONLY)
+    if (!result.currentHeadcount || !result.headcountGrowthRate) {
+      console.log('[Job Hunter] Using fallback methods for missing data...');
 
-    let companySidebarText = '';
-    for (const selector of companyInfoSelectors) {
-      const elements = document.querySelectorAll(selector);
-      elements.forEach(el => {
-        if (el?.innerText) {
-          companySidebarText += ' ' + el.innerText;
-        }
-      });
-    }
+      const companyInfoSelectors = [
+        '[data-testid="company-info"]',
+        '.job-details-jobs-unified-top-card__company-size',
+        '.jobs-unified-top-card__company-size',
+        '.jobs-company__company-description',
+        '.job-details-premium-company-insights',
+        '.job-details-company-insights',
+        '.company-size',
+        '.jobs-company-info',
+        '.job-details-about-company',
+        '[data-test-company-size]',
+        '.jobs-unified-top-card__job-insight',
+        '.job-details-jobs-unified-top-card__job-insight',
+        '.t-14.t-black--light.t-normal' // Company size text on some pages
+      ];
 
-    // Method 2: Also check the full page text for company data
-    const pageText = document.body.innerText || '';
-
-    // Combined text to search
-    const combinedText = companySidebarText + ' ' + pageText;
-
-    // Pattern 1: "1,001-5,000 employees" or "1,001 - 5,000 employees"
-    const rangePattern = /(\d{1,3}(?:,\d{3})*)\s*(?:-|to)\s*(\d{1,3}(?:,\d{3})*)\s+employees?/i;
-    const rangeMatch = combinedText.match(rangePattern);
-
-    // Pattern 2: "500+ employees" or "250 employees"
-    const singlePattern = /(\d{1,3}(?:,\d{3})*)\+?\s+employees?/i;
-    const singleMatch = combinedText.match(singlePattern);
-
-    // Extract headcount (use midpoint for ranges)
-    if (rangeMatch) {
-      const lower = parseInt(rangeMatch[1].replace(/,/g, ''), 10);
-      const upper = parseInt(rangeMatch[2].replace(/,/g, ''), 10);
-      result.currentHeadcount = Math.floor((lower + upper) / 2);
-      result.headcountDataFound = true;
-    } else if (singleMatch) {
-      result.currentHeadcount = parseInt(singleMatch[1].replace(/,/g, ''), 10);
-      result.headcountDataFound = true;
-    }
-
-    // Pattern 3: Growth rate patterns
-    // "5% employee growth" / "+5% over last 6 months" / "8% headcount growth"
-    const growthPatterns = [
-      /([+-]?\d+(?:\.\d+)?)\s*%\s+(?:employee\s+)?growth/i,
-      /([+-]?\d+(?:\.\d+)?)\s*%\s+(?:increase|growth|over)/i,
-      /headcount[:\s]+([+-]?\d+(?:\.\d+)?)\s*%/i,
-      /growing\s+(?:at\s+)?([+-]?\d+(?:\.\d+)?)\s*%/i,
-      /([+-]?\d+(?:\.\d+)?)\s*%\s+(?:yoy|year.over.year)/i,
-      /employee\s+growth[:\s]+([+-]?\d+(?:\.\d+)?)\s*%/i
-    ];
-
-    for (const pattern of growthPatterns) {
-      const match = combinedText.match(pattern);
-      if (match) {
-        const rate = parseFloat(match[1]);
-        if (!isNaN(rate) && rate >= -100 && rate <= 500) { // Reasonable growth range
-          result.headcountGrowthRate = rate;
-          result.headcountGrowthText = match[0];
-          result.headcountDataFound = true;
-          break;
-        }
-      }
-    }
-
-    // Pattern 4: Check for LinkedIn-specific employee count display
-    // Sometimes LinkedIn shows "10,001+ employees" on company pages
-    const linkedInEmployeePattern = /(\d{1,3}(?:,\d{3})*)\+?\s*employees\b/i;
-    if (result.currentHeadcount === null) {
-      const linkedInMatch = pageText.match(linkedInEmployeePattern);
-      if (linkedInMatch) {
-        result.currentHeadcount = parseInt(linkedInMatch[1].replace(/,/g, ''), 10);
-        result.headcountDataFound = true;
-      }
-    }
-
-    // Pattern 5: Check for company description with size indicators
-    const sizeIndicators = [
-      { pattern: /fortune\s+500/i, estimate: 10000 },
-      { pattern: /fortune\s+1000/i, estimate: 5000 },
-      { pattern: /large\s+enterprise/i, estimate: 5000 },
-      { pattern: /global\s+company/i, estimate: 1000 },
-      { pattern: /startup/i, estimate: 50 },
-      { pattern: /early[-\s]?stage/i, estimate: 25 }
-    ];
-
-    if (result.currentHeadcount === null) {
-      for (const indicator of sizeIndicators) {
-        if (indicator.pattern.test(combinedText)) {
-          // Don't override with estimate if we found actual number
-          if (result.currentHeadcount === null) {
-            // This is just an estimate - don't mark as found
-            console.log('[Job Hunter] Estimated company size from indicator:', indicator.pattern, '~', indicator.estimate);
+      let companySidebarText = '';
+      for (const selector of companyInfoSelectors) {
+        const elements = document.querySelectorAll(selector);
+        elements.forEach(el => {
+          if (el?.innerText) {
+            companySidebarText += ' ' + el.innerText;
           }
-          break;
+        });
+      }
+
+      // Method 2: Also check the full page text for company data
+      const pageText = document.body.innerText || '';
+
+      // Combined text to search
+      const combinedText = companySidebarText + ' ' + pageText;
+
+      // Pattern 1: "1,001-5,000 employees" or "1,001 - 5,000 employees"
+      const rangePattern = /(\d{1,3}(?:,\d{3})*)\s*(?:-|to)\s*(\d{1,3}(?:,\d{3})*)\s+employees?/i;
+      const rangeMatch = combinedText.match(rangePattern);
+
+      // Pattern 2: "500+ employees" or "250 employees"
+      const singlePattern = /(\d{1,3}(?:,\d{3})*)\+?\s+employees?/i;
+      const singleMatch = combinedText.match(singlePattern);
+
+      // Extract headcount (use midpoint for ranges) - ONLY if not already found
+      if (!result.currentHeadcount) {
+        if (rangeMatch) {
+          const lower = parseInt(rangeMatch[1].replace(/,/g, ''), 10);
+          const upper = parseInt(rangeMatch[2].replace(/,/g, ''), 10);
+          result.currentHeadcount = Math.floor((lower + upper) / 2);
+          result.headcountDataFound = true;
+          console.log('[Job Hunter] Fallback: Extracted headcount from range:', result.currentHeadcount);
+        } else if (singleMatch) {
+          result.currentHeadcount = parseInt(singleMatch[1].replace(/,/g, ''), 10);
+          result.headcountDataFound = true;
+          console.log('[Job Hunter] Fallback: Extracted headcount from single:', result.currentHeadcount);
         }
       }
-    }
+
+      // Pattern 3: Growth rate patterns - ONLY if not already found
+      if (!result.headcountGrowthRate) {
+        const growthPatterns = [
+          /([+-]?\d+(?:\.\d+)?)\s*%\s+(?:employee\s+)?growth/i,
+          /([+-]?\d+(?:\.\d+)?)\s*%\s+(?:increase|growth|over)/i,
+          /headcount[:\s]+([+-]?\d+(?:\.\d+)?)\s*%/i,
+          /growing\s+(?:at\s+)?([+-]?\d+(?:\.\d+)?)\s*%/i,
+          /([+-]?\d+(?:\.\d+)?)\s*%\s+(?:yoy|year.over.year)/i,
+          /employee\s+growth[:\s]+([+-]?\d+(?:\.\d+)?)\s*%/i
+        ];
+
+        for (const pattern of growthPatterns) {
+          const match = combinedText.match(pattern);
+          if (match) {
+            const rate = parseFloat(match[1]);
+            if (!isNaN(rate) && rate >= -100 && rate <= 500) { // Reasonable growth range
+              result.headcountGrowthRate = rate;
+              result.headcountGrowthText = match[0];
+              result.headcountDataFound = true;
+              console.log('[Job Hunter] Fallback: Extracted growth rate:', result.headcountGrowthRate + '%');
+              break;
+            }
+          }
+        }
+      }
+    } // End of fallback methods conditional
 
   } catch (error) {
     console.error('[Job Hunter] Error extracting headcount data:', error);

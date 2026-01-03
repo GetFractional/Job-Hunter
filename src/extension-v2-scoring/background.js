@@ -287,7 +287,13 @@ async function upsertCompany(credentials, jobData) {
     });
 
     if (!updateResponse.ok) {
-      throw new Error(`Failed to update company: ${updateResponse.status}`);
+      const errorBody = await updateResponse.json().catch(() => ({}));
+      console.error('[Job Hunter BG] ❌ Company UPDATE failed (422):', {
+        status: updateResponse.status,
+        error: errorBody.error,
+        sentPayload: companyFields
+      });
+      throw new Error(`Failed to update company: ${updateResponse.status} - ${JSON.stringify(errorBody.error)}`);
     }
 
     const updateData = await updateResponse.json();
@@ -311,7 +317,13 @@ async function upsertCompany(credentials, jobData) {
     });
 
     if (!createResponse.ok) {
-      throw new Error(`Failed to create company: ${createResponse.status}`);
+      const errorBody = await createResponse.json().catch(() => ({}));
+      console.error('[Job Hunter BG] ❌ Company CREATE failed (422):', {
+        status: createResponse.status,
+        error: errorBody.error,
+        sentPayload: companyFields
+      });
+      throw new Error(`Failed to create company: ${createResponse.status} - ${JSON.stringify(errorBody.error)}`);
     }
 
     const createData = await createResponse.json();
