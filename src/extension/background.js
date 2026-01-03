@@ -21,19 +21,67 @@ const AIRTABLE_API_BASE = 'https://api.airtable.com/v0';
 const TABLE_NAME = 'Jobs%20Pipeline';
 
 /**
+ * Keep the service worker alive to prevent it from becoming inactive
+ * Chrome shuts down service workers after 30 seconds of inactivity
+ */
+let keepAliveInterval = null;
+
+function startKeepAlive() {
+  if (keepAliveInterval) return;
+
+  // Send a message to ourselves every 20 seconds to stay alive
+  keepAliveInterval = setInterval(() => {
+    chrome.runtime.getPlatformInfo(() => {
+      // This is just to keep the service worker active
+      // No need to do anything with the result
+    });
+  }, 20000);
+
+  console.log('[Job Hunter BG] Keep-alive started');
+}
+
+function stopKeepAlive() {
+  if (keepAliveInterval) {
+    clearInterval(keepAliveInterval);
+    keepAliveInterval = null;
+    console.log('[Job Hunter BG] Keep-alive stopped');
+  }
+}
+
+// Start keep-alive when service worker starts
+startKeepAlive();
+
+/**
  * Listen for messages from content scripts
  */
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  console.log('[Job Hunter BG] Message received:', request.action);
+
+  // Respond to ping requests (used to check if service worker is alive)
+  if (request.action === 'jobHunter.ping') {
+    sendResponse({ alive: true });
+    return true;
+  }
+
   // Handle job capture requests
   if (request.action === 'jobHunter.createAirtableRecord') {
-    console.log('[Job Hunter BG] Received message:', request.action);
+    console.log('[Job Hunter BG] Processing job capture request');
     handleCreateRecord(request.job)
-      .then(result => sendResponse(result))
-      .catch(error => sendResponse({ success: false, error: error.message }));
+      .then(result => {
+        console.log('[Job Hunter BG] Sending response:', result.success ? 'success' : 'failure');
+        sendResponse(result);
+      })
+      .catch(error => {
+        console.error('[Job Hunter BG] Error in handleCreateRecord:', error);
+        sendResponse({ success: false, error: error.message });
+      });
 
     // Return true to indicate we'll send response asynchronously
     return true;
   }
+
+  // Unknown action
+  return false;
 });
 
 /**
