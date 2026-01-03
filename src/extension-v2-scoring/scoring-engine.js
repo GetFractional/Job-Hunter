@@ -28,24 +28,25 @@ const JOB_TO_USER_WEIGHTS = {
   workplaceType: 0.18,    // Remote/Hybrid/On-site alignment
   equityBonus: 0.15,      // Whether equity/bonus is present
   benefits: 0.12,         // Benefits package (health, 401k, PTO, etc.)
-  companyStage: 0.10,     // Company maturity level
+  // companyStage: 0.10,  // REMOVED - Company maturity level
   businessLifecycle: 0.10, // Company stage (Seed/Startup/Growth/Maturity)
   orgStability: 0.08,     // Headcount growth/decline trends - MOVED from User-to-Job
   hiringUrgency: 0.05     // Urgency signals from job posting
+  // Note: Weights now sum to 0.90 (was 1.0) - this is intentional after removing companyStage
 };
 
 /**
  * Weights for User-to-Job fit criteria (how well YOU match the JOB requirements)
  * These determine how well the user matches the job's requirements
  * Must sum to 1.0
- * NOTE: revOpsComponent is weighted heavily (0.25) as this is the user's core differentiator
  */
 const USER_TO_JOB_WEIGHTS = {
   roleType: 0.25,         // Title/seniority alignment with target roles
-  revOpsComponent: 0.25,  // Percentage of JD about RevOps/infrastructure (CRITICAL - user's differentiator)
+  // revOpsComponent: 0.25,  // REMOVED - Operations & Systems Focus criterion removed per user request
   skillMatch: 0.25,       // Keyword overlap with user's core skills
   industryAlignment: 0.15, // Industry match (exact/adjacent/new)
   experienceLevel: 0.10   // Years of experience alignment - REPLACES orgComplexity
+  // Note: Weights now sum to 0.75 (was 1.0) - this is intentional after removing revOpsComponent
 };
 
 /**
@@ -182,7 +183,7 @@ function calculateJobToUserFit(jobPayload, userProfile) {
     scoreWorkplaceType(jobPayload, userProfile),
     scoreEquityBonus(jobPayload, userProfile),
     scoreBenefits(jobPayload, userProfile),
-    scoreCompanyStage(jobPayload, userProfile),
+    // scoreCompanyStage - REMOVED per user request
     scoreBusinessLifecycle(jobPayload, userProfile),
     scoreOrgStability(jobPayload, userProfile),
     scoreHiringUrgency(jobPayload, userProfile)
@@ -194,7 +195,7 @@ function calculateJobToUserFit(jobPayload, userProfile) {
     JOB_TO_USER_WEIGHTS.workplaceType,
     JOB_TO_USER_WEIGHTS.equityBonus,
     JOB_TO_USER_WEIGHTS.benefits,
-    JOB_TO_USER_WEIGHTS.companyStage,
+    // JOB_TO_USER_WEIGHTS.companyStage - REMOVED per user request
     JOB_TO_USER_WEIGHTS.businessLifecycle,
     JOB_TO_USER_WEIGHTS.orgStability,
     JOB_TO_USER_WEIGHTS.hiringUrgency
@@ -234,7 +235,7 @@ function calculateJobToUserFit(jobPayload, userProfile) {
 function calculateUserToJobFit(jobPayload, userProfile) {
   const criteria = [
     scoreRoleType(jobPayload, userProfile),
-    scoreRevOpsComponent(jobPayload, userProfile),
+    // scoreRevOpsComponent - REMOVED per user request (Operations & Systems Focus)
     scoreSkillMatch(jobPayload, userProfile),
     scoreIndustryAlignment(jobPayload, userProfile),
     scoreExperienceLevel(jobPayload, userProfile)
@@ -243,7 +244,7 @@ function calculateUserToJobFit(jobPayload, userProfile) {
   // Calculate weighted average
   const weights = [
     USER_TO_JOB_WEIGHTS.roleType,
-    USER_TO_JOB_WEIGHTS.revOpsComponent,
+    // USER_TO_JOB_WEIGHTS.revOpsComponent - REMOVED per user request
     USER_TO_JOB_WEIGHTS.skillMatch,
     USER_TO_JOB_WEIGHTS.industryAlignment,
     USER_TO_JOB_WEIGHTS.experienceLevel
@@ -611,49 +612,114 @@ function scoreEquityBonus(jobPayload, userProfile) {
 function scoreBenefits(jobPayload, userProfile) {
   const description = (jobPayload.descriptionText || jobPayload.job_description_text || '').toLowerCase();
 
-  // Benefits categories and their patterns
-  const benefitCategories = {
-    health: {
-      patterns: [/health\s*(insurance|care|coverage|benefits)/i, /medical\s*(insurance|coverage|benefits)/i, /dental/i, /vision/i],
-      weight: 0.30,
-      label: 'Health/Medical'
+  // Individual benefits with detection patterns
+  // Each benefit has a weight based on importance
+  const individualBenefits = {
+    medical: {
+      patterns: [/medical\s*(insurance|coverage|benefits|plan)/i, /health\s*(insurance|coverage|benefits|plan)/i],
+      weight: 12,
+      label: 'Medical',
+      icon: '🏥'
     },
-    retirement: {
-      patterns: [/401\s*\(?\s*k\)?/i, /retirement\s*(plan|benefits)/i, /pension/i, /matching\s+contribution/i],
-      weight: 0.20,
-      label: '401k/Retirement'
+    dental: {
+      patterns: [/dental\s*(insurance|coverage|benefits|plan)/i],
+      weight: 8,
+      label: 'Dental',
+      icon: '🦷'
+    },
+    vision: {
+      patterns: [/vision\s*(insurance|coverage|benefits|plan)/i, /eye\s+care/i],
+      weight: 6,
+      label: 'Vision',
+      icon: '👁️'
+    },
+    '401k': {
+      patterns: [/401\s*\(?\s*k\)?/i, /retirement\s*(plan|match|matching|contribution)/i, /pension/i],
+      weight: 12,
+      label: '401k',
+      icon: '💰'
+    },
+    hsa_fsa: {
+      patterns: [/\bhsa\b/i, /\bfsa\b/i, /health\s+savings/i, /flexible\s+spending/i],
+      weight: 6,
+      label: 'HSA/FSA',
+      icon: '💳'
     },
     pto: {
-      patterns: [/pto/i, /paid\s+time\s+off/i, /unlimited\s+pto/i, /vacation\s+(days?|time|policy)/i, /flexible\s+pto/i],
-      weight: 0.20,
-      label: 'PTO/Vacation'
+      patterns: [/\bpto\b/i, /paid\s+time\s+off/i, /unlimited\s+(pto|vacation)/i, /vacation\s+(days?|time|policy)/i, /flexible\s+pto/i],
+      weight: 10,
+      label: 'PTO',
+      icon: '🏖️'
     },
-    parental: {
-      patterns: [/parental\s+leave/i, /maternity\s+leave/i, /paternity\s+leave/i, /family\s+leave/i],
-      weight: 0.15,
-      label: 'Parental Leave'
+    paid_parental: {
+      patterns: [/parental\s+leave/i, /maternity\s+leave/i, /paternity\s+leave/i, /family\s+leave/i, /paid\s+(maternity|paternity)/i],
+      weight: 8,
+      label: 'Paid Parental',
+      icon: '👶'
     },
-    other: {
-      patterns: [/life\s+insurance/i, /disability\s+insurance/i, /wellness/i, /gym\s+(membership|reimbursement)/i, /professional\s+development/i, /tuition\s+reimbursement/i, /stipend/i],
-      weight: 0.15,
-      label: 'Other Benefits'
+    tuition: {
+      patterns: [/tuition\s+(reimbursement|assistance|support)/i, /education\s+(reimbursement|assistance|benefit)/i],
+      weight: 6,
+      label: 'Tuition Reimbursement',
+      icon: '🎓'
+    },
+    learning_stipend: {
+      patterns: [/learning\s+(stipend|budget|allowance)/i, /professional\s+development/i, /training\s+(budget|stipend)/i, /conference\s+budget/i],
+      weight: 6,
+      label: 'Learning Stipend',
+      icon: '📚'
+    },
+    wfh_reimbursement: {
+      patterns: [/work\s+from\s+home\s+(stipend|reimbursement|budget)/i, /home\s+office\s+(stipend|reimbursement|setup)/i, /remote\s+work\s+(stipend|budget)/i, /equipment\s+allowance/i],
+      weight: 6,
+      label: 'WFH Reimbursement',
+      icon: '🏡'
+    },
+    relocation: {
+      patterns: [/relocation\s+(assistance|package|support|reimbursement)/i, /moving\s+(assistance|reimbursement)/i],
+      weight: 8,
+      label: 'Relocation',
+      icon: '📦'
     }
   };
 
-  // Count matched benefits
+  // Detect which benefits are mentioned
   const matchedBenefits = [];
+  const benefitBadges = [];
   let totalScore = 0;
 
-  for (const [category, config] of Object.entries(benefitCategories)) {
+  for (const [key, config] of Object.entries(individualBenefits)) {
     const hasMatch = config.patterns.some(pattern => pattern.test(description));
     if (hasMatch) {
       matchedBenefits.push(config.label);
-      totalScore += 50 * config.weight; // Each category contributes proportionally
+      benefitBadges.push({ label: config.label, icon: config.icon });
+      totalScore += config.weight;
     }
   }
 
-  // Scale score based on how many categories matched
-  const normalizedScore = Math.min(50, Math.round(totalScore));
+  // Get user's preferred benefits (if available)
+  const preferredBenefits = userProfile?.preferences?.benefits || [];
+  const hasPreferences = preferredBenefits.length > 0;
+
+  // If user has preferences, adjust score based on match percentage
+  let finalScore = totalScore;
+  if (hasPreferences && matchedBenefits.length > 0) {
+    // Count how many preferred benefits are matched
+    const preferredMatches = matchedBenefits.filter(b =>
+      preferredBenefits.some(pref => b.toLowerCase().includes(pref.toLowerCase()))
+    ).length;
+
+    // Bonus for matching preferred benefits
+    const matchPercentage = (preferredMatches / preferredBenefits.length) * 100;
+    if (matchPercentage >= 80) {
+      finalScore = Math.min(100, totalScore * 1.2); // 20% bonus
+    } else if (matchPercentage >= 50) {
+      finalScore = Math.min(100, totalScore * 1.1); // 10% bonus
+    }
+  }
+
+  // Cap at 100 points (was 50)
+  const normalizedScore = Math.min(100, Math.round(finalScore));
 
   // Build actual value
   let actualValue = 'Not specified';
@@ -663,12 +729,14 @@ function scoreBenefits(jobPayload, userProfile) {
 
   // Build rationale
   let rationale = '';
-  if (matchedBenefits.length >= 4) {
-    rationale = 'Comprehensive benefits package mentioned';
-  } else if (matchedBenefits.length >= 2) {
-    rationale = `Some benefits mentioned: ${matchedBenefits.join(', ')}`;
-  } else if (matchedBenefits.length === 1) {
-    rationale = `Only ${matchedBenefits[0]} mentioned`;
+  if (matchedBenefits.length >= 8) {
+    rationale = `Excellent benefits package: ${matchedBenefits.length}/11 benefits mentioned`;
+  } else if (matchedBenefits.length >= 5) {
+    rationale = `Comprehensive benefits: ${matchedBenefits.length}/11 benefits mentioned`;
+  } else if (matchedBenefits.length >= 3) {
+    rationale = `Good benefits: ${matchedBenefits.length}/11 benefits mentioned`;
+  } else if (matchedBenefits.length >= 1) {
+    rationale = `Limited benefits: ${matchedBenefits.length}/11 benefits mentioned`;
   } else {
     rationale = 'No benefits information provided (common for job listings)';
   }
@@ -680,102 +748,16 @@ function scoreBenefits(jobPayload, userProfile) {
     score: normalizedScore,
     rationale,
     matched_benefits: matchedBenefits,
+    benefit_badges: benefitBadges, // For UI display
     missing_data: matchedBenefits.length === 0
   };
 }
 
 /**
- * Score company stage/maturity (0-50)
- * Uses headcount as proxy when revenue/funding data unavailable
- * @param {Object} jobPayload - Job data with company_stage, company_headcount, company_revenue
- * @param {Object} userProfile - User preferences with must_haves
- * @returns {Object} Criterion score result
+ * REMOVED: scoreCompanyStage function - "Company Maturity" criterion removed per user request
+ * This criterion has been removed. Business lifecycle scoring is now handled by scoreBusinessLifecycle instead.
  */
-function scoreCompanyStage(jobPayload, userProfile) {
-  const stage = jobPayload.company_stage || '';
-  const headcount = jobPayload.company_headcount;
-  const revenue = jobPayload.company_revenue;
-  const mustHaves = userProfile?.preferences?.must_haves || [];
-  const requiresSeriesBPlus = mustHaves.includes('series_b_or_later');
-
-  let score = 0;
-  let rationale = '';
-  let actualValue = 'Unknown';
-
-  // Determine company stage from available data
-  if (stage) {
-    actualValue = formatCompanyStage(stage);
-
-    // Score based on explicit stage
-    if (['late_stage_private', 'public', 'enterprise'].includes(stage)) {
-      score = 50;
-      rationale = 'Late-stage or enterprise company';
-    } else if (['series_c', 'series_d', 'growth'].includes(stage)) {
-      score = 45;
-      rationale = 'Growth-stage company (Series C+)';
-    } else if (stage === 'series_b') {
-      score = 40;
-      rationale = 'Series B company - meets minimum threshold';
-    } else if (stage === 'series_a') {
-      score = requiresSeriesBPlus ? 20 : 30;
-      rationale = requiresSeriesBPlus
-        ? 'Series A - below your Series B+ requirement'
-        : 'Series A company';
-    } else if (['seed', 'pre_seed', 'pre_revenue'].includes(stage)) {
-      score = requiresSeriesBPlus ? 5 : 15;
-      rationale = 'Early-stage company - higher risk';
-    }
-  }
-  // Fallback: use headcount as proxy
-  else if (headcount !== null && headcount !== undefined) {
-    actualValue = `~${headcount} employees`;
-
-    if (headcount >= 500) {
-      score = 45;
-      rationale = 'Large company (500+ employees) suggests maturity';
-    } else if (headcount >= 200) {
-      score = 40;
-      rationale = 'Mid-size company (200-500) suggests established';
-    } else if (headcount >= 50) {
-      score = 30;
-      rationale = 'Growth company (50-200 employees)';
-    } else {
-      score = 15;
-      rationale = 'Small company (<50 employees) - early stage';
-    }
-  }
-  // Fallback: use revenue
-  else if (revenue !== null && revenue !== undefined) {
-    if (revenue >= 100000000) {
-      actualValue = `$${formatSalary(revenue)} ARR`;
-      score = 50;
-      rationale = 'High revenue ($100M+) indicates stability';
-    } else if (revenue >= 10000000) {
-      actualValue = `$${formatSalary(revenue)} ARR`;
-      score = 40;
-      rationale = 'Solid revenue ($10M+) indicates traction';
-    } else {
-      actualValue = `$${formatSalary(revenue)} ARR`;
-      score = 25;
-      rationale = 'Lower revenue - earlier stage';
-    }
-  }
-  // No data available
-  else {
-    score = 25;
-    rationale = 'Company stage unknown; assuming moderate';
-    actualValue = 'Not available';
-  }
-
-  return {
-    criteria: 'Company Maturity',
-    criteria_description: 'The company\'s growth stage and stability (startup vs. established enterprise)',
-    actual_value: actualValue,
-    score: Math.round(score),
-    rationale,
-    missing_data: !stage && !headcount && !revenue
-  };
-}
+// function scoreCompanyStage(jobPayload, userProfile) { ... } REMOVED
 
 /**
  * Score business lifecycle stage (0-50)
@@ -1006,14 +988,25 @@ function scoreOrgStability(jobPayload, userProfile) {
 
   console.log('[Scoring] Org Stability input:', {
     headcountGrowthText,
-    jobPayload_keys: Object.keys(jobPayload)
+    headcountGrowthText_type: typeof headcountGrowthText,
+    headcountGrowthText_value: JSON.stringify(headcountGrowthText),
+    isNull: headcountGrowthText === null,
+    isEmpty: headcountGrowthText === '',
+    hasJobPayloadKeys: Object.keys(jobPayload).length
   });
 
   // Parse growth percentage from text like "+5% over last 6 months" or "-3% decline"
   let growthRate = null;
-  const growthMatch = headcountGrowthText.match(/([+-]?\d+(?:\.\d+)?)\s*%/);
-  if (growthMatch) {
-    growthRate = parseFloat(growthMatch[1]);
+  if (headcountGrowthText && typeof headcountGrowthText === 'string') {
+    const growthMatch = headcountGrowthText.match(/([+-]?\d+(?:\.\d+)?)\s*%/);
+    if (growthMatch) {
+      growthRate = parseFloat(growthMatch[1]);
+      console.log('[Scoring] ✓ Parsed growth rate from text:', growthRate, '%');
+    } else {
+      console.log('[Scoring] ⚠ Growth text provided but no percentage found:', headcountGrowthText);
+    }
+  } else {
+    console.log('[Scoring] ℹ️ No headcount growth text available (null/empty/invalid)');
   }
 
   // Also check description for signals
@@ -1229,77 +1222,10 @@ function scoreRoleType(jobPayload, userProfile) {
 }
 
 /**
- * Score RevOps component strength (0-50)
- * Measures what % of JD focuses on RevOps/infrastructure vs. brand/content
- * @param {Object} jobPayload - Job data with job_description_text
- * @param {Object} userProfile - User preferences
- * @returns {Object} Criterion score result
+ * REMOVED: scoreRevOpsComponent function - "Operations & Systems Focus" criterion removed per user request
+ * This criterion has been removed as it's no longer needed for scoring.
  */
-function scoreRevOpsComponent(jobPayload, userProfile) {
-  const description = (jobPayload.descriptionText || jobPayload.job_description_text || '').toLowerCase();
-  const mustHaves = userProfile?.preferences?.must_haves || [];
-  const preferRevOps = mustHaves.includes('growth_revops_lifecycle_focus');
-
-  if (!description) {
-    return {
-      criteria: 'Operations & Systems Focus',
-      criteria_description: 'How much of the role involves RevOps, marketing ops, data/CRM systems vs. pure creative/brand work',
-      actual_value: 'Cannot assess',
-      score: 25,
-      rationale: 'No job description available to analyze',
-      missing_data: true
-    };
-  }
-
-  // Count RevOps keyword matches
-  const words = description.split(/\s+/);
-  const totalWords = words.length;
-
-  let revOpsMatches = 0;
-  REVOPS_KEYWORDS.forEach(keyword => {
-    // Count occurrences (case-insensitive)
-    const regex = new RegExp(keyword.replace(/[-]/g, '[-\\s]?'), 'gi');
-    const matches = (description.match(regex) || []).length;
-    revOpsMatches += matches;
-  });
-
-  // Calculate percentage (normalize by word count)
-  const revOpsPercentage = Math.min(100, (revOpsMatches / Math.max(1, totalWords / 20)) * 100);
-
-  let score = 0;
-  let rationale = '';
-  let actualValue = '';
-
-  if (revOpsPercentage >= 30) {
-    score = 50;
-    rationale = 'Strong RevOps focus (30%+ of JD)';
-    actualValue = 'High (30%+)';
-  } else if (revOpsPercentage >= 20) {
-    score = 40;
-    rationale = 'Good RevOps component (20-30%)';
-    actualValue = 'Good (20-30%)';
-  } else if (revOpsPercentage >= 10) {
-    score = 30;
-    rationale = 'Moderate RevOps mentions (10-20%)';
-    actualValue = 'Moderate (10-20%)';
-  } else if (revOpsPercentage > 0) {
-    score = preferRevOps ? 15 : 20;
-    rationale = 'Limited RevOps focus (<10%)';
-    actualValue = 'Low (<10%)';
-  } else {
-    score = preferRevOps ? 10 : 15;
-    rationale = 'No clear RevOps component detected';
-    actualValue = 'None detected';
-  }
-
-  return {
-    criteria: 'Operations & Systems Focus',
-    criteria_description: 'How much of the role involves RevOps, marketing ops, data/CRM systems vs. pure creative/brand work',
-    actual_value: actualValue,
-    score: Math.round(score),
-    rationale
-  };
-}
+// function scoreRevOpsComponent(jobPayload, userProfile) { ... } REMOVED
 
 /**
  * Score skill match (0-50)

@@ -241,14 +241,16 @@ async function upsertCompany(credentials, jobData) {
 async function upsertContact(credentials, jobData, companyRecordId) {
   const hiringManager = jobData.hiringManagerDetails;
 
-  if (!hiringManager?.name) {
-    throw new Error('Hiring manager name is required for contact creation');
-  }
+  // Default to "John Doe" when no hiring manager is found
+  let firstName = 'John';
+  let lastName = 'Doe';
 
-  // Parse first and last name
-  const nameParts = hiringManager.name.trim().split(' ');
-  const firstName = nameParts[0] || '';
-  const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
+  if (hiringManager?.name) {
+    // Parse actual hiring manager name
+    const nameParts = hiringManager.name.trim().split(' ');
+    firstName = nameParts[0] || 'John';
+    lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Doe';
+  }
 
   // Search for existing contact by LinkedIn URL (if available) or by name + company
   let searchFormula;
@@ -280,11 +282,12 @@ async function upsertContact(credentials, jobData, companyRecordId) {
   const contactFields = {
     'First Name': firstName,
     'Last Name': lastName,
-    'Companies': [companyRecordId] // LINKED RECORD - Links to Companies table
+    'Companies': [companyRecordId], // LINKED RECORD - Links to Companies table
+    'Contact Type': 'Hiring Manager' // Always set to Hiring Manager by default
   };
 
   // Add optional fields
-  if (hiringManager.title) {
+  if (hiringManager?.title) {
     contactFields['Role / Title'] = hiringManager.title;
   }
   if (jobData.hiringManagerLinkedInUrl) {
