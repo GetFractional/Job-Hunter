@@ -700,6 +700,43 @@ function extractCompanyHeadcountData() {
   };
 
   try {
+    // Method 0: LinkedIn Premium Company Growth Widget (MOST RELIABLE)
+    // Look for the specific "Company-wide" growth stat
+    const companyGrowthItems = document.querySelectorAll('.jobs-premium-company-growth__stat-item');
+    for (const item of companyGrowthItems) {
+      const labels = item.querySelectorAll('p');
+      let isCompanyWide = false;
+      let growthText = '';
+
+      labels.forEach(label => {
+        const text = label.textContent?.trim() || '';
+        if (text.toLowerCase() === 'company-wide') {
+          isCompanyWide = true;
+        }
+      });
+
+      if (isCompanyWide) {
+        // Extract the percentage from the bold text
+        const percentageEl = item.querySelector('.t-16.t-black--light.t-bold');
+        if (percentageEl) {
+          growthText = percentageEl.textContent?.trim() || '';
+          const percentMatch = growthText.match(/([+-]?\d+(?:\.\d+)?)\s*%/);
+          if (percentMatch) {
+            const rate = parseFloat(percentMatch[1]);
+            // Check if it's an increase or decrease based on CSS class
+            const hasIncrease = item.querySelector('.jobs-premium-company-growth__number-with-arrow--increase');
+            const hasDecrease = item.querySelector('.jobs-premium-company-growth__number-with-arrow--decrease');
+
+            result.headcountGrowthRate = hasDecrease ? -Math.abs(rate) : rate;
+            result.headcountGrowthText = `Company-wide ${result.headcountGrowthRate >= 0 ? '+' : ''}${result.headcountGrowthRate}% (2yr)`;
+            result.headcountDataFound = true;
+            console.log('[Job Hunter] ✓ Found company growth from LinkedIn premium widget:', result.headcountGrowthText);
+            break;
+          }
+        }
+      }
+    }
+
     // Method 1: Try LinkedIn company sidebar / insights section on job posting
     const companyInfoSelectors = [
       '[data-testid="company-info"]',
