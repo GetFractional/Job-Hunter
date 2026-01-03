@@ -746,6 +746,28 @@ function renderCriteriaItems(criteria, type = 'j2u') {
       `;
     }
 
+    // Show matched benefits as badges with icons if available
+    let benefitBadgesHtml = '';
+    if (c.benefit_badges && c.benefit_badges.length > 0) {
+      const totalBenefits = 11; // Total number of tracked benefits
+      const matchedCount = c.benefit_badges.length;
+      const maxDisplay = 5;
+      const displayBenefits = c.benefit_badges.slice(0, maxDisplay);
+      const remaining = matchedCount - maxDisplay;
+
+      benefitBadgesHtml = `
+        <div class="jh-fp-benefits-summary">
+          <span class="jh-fp-benefits-count">Benefits: ${matchedCount}/${totalBenefits}</span>
+        </div>
+        <div class="jh-fp-benefit-badges">
+          ${displayBenefits.map(benefit =>
+            `<span class="jh-fp-benefit-badge" title="${escapeHtml(benefit.label)}">${benefit.icon} ${escapeHtml(benefit.label)}</span>`
+          ).join('')}
+          ${remaining > 0 ? `<span class="jh-fp-benefit-more">+${remaining} more</span>` : ''}
+        </div>
+      `;
+    }
+
     // Shorten long criteria names
     let criteriaName = c.criteria || '';
     const nameMap = {
@@ -770,6 +792,7 @@ function renderCriteriaItems(criteria, type = 'j2u') {
         </div>
         ${c.actual_value ? `<span class="jh-fp-criterion-value">${escapeHtml(c.actual_value)}</span>` : ''}
         ${skillTagsHtml}
+        ${benefitBadgesHtml}
       </div>
     `;
   }).join('');
@@ -2122,6 +2145,43 @@ function getPanelStyles() {
     }
 
     .jh-fp-skill-more {
+      font-size: 9px;
+      padding: 1px 5px;
+      color: #868e96;
+    }
+
+    /* Benefits badges in criteria */
+    .jh-fp-benefits-summary {
+      margin-top: 4px;
+      margin-bottom: 2px;
+    }
+
+    .jh-fp-benefits-count {
+      font-size: 10px;
+      font-weight: 600;
+      color: #495057;
+    }
+
+    .jh-fp-benefit-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3px;
+      margin-top: 4px;
+    }
+
+    .jh-fp-benefit-badge {
+      font-size: 9px;
+      padding: 1px 5px;
+      background: #fff4e6;
+      color: #d9480f;
+      border-radius: 8px;
+      border: 1px solid #ffd8a8;
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .jh-fp-benefit-more {
       font-size: 9px;
       padding: 1px 5px;
       color: #868e96;
