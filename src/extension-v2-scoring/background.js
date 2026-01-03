@@ -85,12 +85,44 @@ function ensureNumber(value) {
  * Listen for messages from content scripts
  */
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  // Ping check for service worker health
+  if (request.action === 'jobHunter.ping') {
+    sendResponse({ alive: true });
+    return true;
+  }
+
   // Handle job capture requests (with optional score data)
   if (request.action === 'jobHunter.createAirtableRecord') {
-    console.log('[Job Hunter BG] Received message:', request.action);
+    console.log('[Job Hunter BG] ⚡ Received job capture request');
+
+    // CRITICAL: Respond immediately to prevent timeout
+    // Content script has 5-second timeout, but Airtable API calls can take longer
+    sendResponse({
+      success: null,
+      processing: true,
+      message: 'Processing job capture in background...'
+    });
+
+    // Process asynchronously in background (don't await)
+    const startTime = Date.now();
+    console.log('[Job Hunter BG] 🚀 Starting background processing at', new Date().toISOString());
+
     handleCreateTripleRecord(request.job, request.score)
-      .then(result => sendResponse(result))
-      .catch(error => sendResponse({ success: false, error: error.message }));
+      .then(result => {
+        const elapsed = Date.now() - startTime;
+        console.log('[Job Hunter BG] ✅ Background processing complete in', elapsed, 'ms');
+        console.log('[Job Hunter BG] Result:', result);
+
+        // Could optionally notify content script here if needed
+        // chrome.tabs.sendMessage(sender.tab.id, { action: 'jobCaptureComplete', result });
+      })
+      .catch(error => {
+        const elapsed = Date.now() - startTime;
+        console.error('[Job Hunter BG] ❌ Background processing failed in', elapsed, 'ms');
+        console.error('[Job Hunter BG] Error:', error.message);
+      });
+
+    // Return true to indicate we handled the message
     return true;
   }
 

@@ -34,7 +34,8 @@ let profileData = {
     employment_type_preferred: 'full_time',
     employment_types_acceptable: ['full_time'],
     deal_breakers: ['on_site', 'less_than_150k_base'],
-    must_haves: []
+    must_haves: [],
+    benefits: []
   },
   background: {
     current_title: '',
@@ -711,6 +712,10 @@ function collectFormData() {
     t => !profileData.preferences.workplace_types_acceptable.includes(t)
   );
 
+  // Benefits preferences (from checkboxes)
+  const benefitsCheckboxes = document.querySelectorAll('input[name="benefits_preferred"]:checked');
+  profileData.preferences.benefits = Array.from(benefitsCheckboxes).map(cb => cb.value);
+
   // Tab 2: Background
   profileData.background.current_title = elements.currentTitle.value.trim();
   profileData.background.years_experience = parseInt(elements.yearsExperience.value, 10) || 0;
@@ -806,6 +811,11 @@ function populateFormFromProfile() {
   // Workplace types checkboxes
   document.querySelectorAll('input[name="workplace_types_acceptable"]').forEach(cb => {
     cb.checked = (profileData.preferences.workplace_types_acceptable || []).includes(cb.value);
+  });
+
+  // Benefits preferences checkboxes
+  document.querySelectorAll('input[name="benefits_preferred"]').forEach(cb => {
+    cb.checked = (profileData.preferences.benefits || []).includes(cb.value);
   });
 
   // Tab 2: Background

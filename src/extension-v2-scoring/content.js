@@ -594,6 +594,51 @@ function extractLinkedInJobData() {
     let hiringManagerName = nameEl?.textContent?.trim() || null;
     let hiringManagerTitle = titleEl?.textContent?.trim() || null;
 
+    // CRITICAL: Validate that we extracted a person's name, not company info
+    if (hiringManagerName) {
+      const isValidPersonName = (name) => {
+        if (!name) return false;
+
+        // Reject if contains "followers" (company info)
+        if (/followers?/i.test(name)) {
+          console.log('[Job Hunter] ⚠ Rejected hiring manager name (contains "followers"):', name);
+          return false;
+        }
+
+        // Reject if contains large numbers with commas (like "51,078" from follower counts)
+        if (/\d{1,3}(?:,\d{3})+/.test(name)) {
+          console.log('[Job Hunter] ⚠ Rejected hiring manager name (contains large numbers):', name);
+          return false;
+        }
+
+        // Reject if contains K/M suffix (follower counts like "1.2M")
+        if (/\d+(?:\.\d+)?[KM]\b/i.test(name)) {
+          console.log('[Job Hunter] ⚠ Rejected hiring manager name (contains K/M suffix):', name);
+          return false;
+        }
+
+        // Reject if too long (person names rarely exceed 50 chars)
+        if (name.length > 50) {
+          console.log('[Job Hunter] ⚠ Rejected hiring manager name (too long):', name);
+          return false;
+        }
+
+        // Reject if contains "employees" (company headcount info)
+        if (/employees?/i.test(name)) {
+          console.log('[Job Hunter] ⚠ Rejected hiring manager name (contains "employees"):', name);
+          return false;
+        }
+
+        return true;
+      };
+
+      if (!isValidPersonName(hiringManagerName)) {
+        hiringManagerName = null;
+        titleEl = null;
+        hiringManagerTitle = null;
+      }
+    }
+
     // Clean up hiring manager title - remove connection degree text
     if (hiringManagerTitle) {
       hiringManagerTitle = cleanHiringManagerTitle(hiringManagerTitle);
