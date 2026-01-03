@@ -43,18 +43,20 @@ function sanitizeString(value) {
 
 /**
  * Convert headcount number to size category for Airtable Single Select
+ * CRITICAL: Must match EXACT values in Airtable Companies table Size field
  * @param {number} headcount - Employee count
- * @returns {string|null} Size category
+ * @returns {string|null} Size category matching Airtable schema
  */
 function mapHeadcountToSize(headcount) {
   if (!headcount || headcount <= 0) return null;
-  if (headcount <= 50) return '1-50 employees';
-  if (headcount <= 200) return '51-200 employees';
-  if (headcount <= 500) return '201-500 employees';
-  if (headcount <= 1000) return '501-1,000 employees';
-  if (headcount <= 5000) return '1,001-5,000 employees';
-  if (headcount <= 10000) return '5,001-10,000 employees';
-  return '10,001+ employees';
+  if (headcount <= 10) return '1-10';
+  if (headcount <= 50) return '11-50';
+  if (headcount <= 200) return '51-200';
+  if (headcount <= 500) return '201-500';
+  if (headcount <= 1000) return '501-1000';
+  if (headcount <= 5000) return '1001-5000';
+  if (headcount <= 10000) return '5001-10000';
+  return '10000+';
 }
 
 /**
