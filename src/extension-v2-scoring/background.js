@@ -445,20 +445,21 @@ async function createJob(credentials, jobData, scoreData, companyRecordId, conta
     // Extract matched and missing skills from breakdown
     const skillsBreakdown = scoreData.user_to_job_fit?.breakdown?.find(b => b.criteria === 'Skills Overlap');
     if (skillsBreakdown?.matched_skills && skillsBreakdown.matched_skills.length > 0) {
-      // Convert array to Multiple Select format (if field is Multiple Select) or comma-separated text
-      jobFields['Matched Skills'] = skillsBreakdown.matched_skills;
+      // Convert array to comma-separated string for Long text field
+      jobFields['Matched Skills'] = skillsBreakdown.matched_skills.join(', ');
     }
     if (skillsBreakdown?.unmatched_skills && skillsBreakdown.unmatched_skills.length > 0) {
-      jobFields['Missing Skills'] = skillsBreakdown.unmatched_skills;
+      // Convert array to comma-separated string for Long text field
+      jobFields['Missing Skills'] = skillsBreakdown.unmatched_skills.join(', ');
     }
 
     // Store deal-breaker reason if triggered
     if (scoreData.deal_breaker_triggered) {
-      // Convert to Multiple Select format if needed
+      // Convert to comma-separated string for Long text field
       const dealbreakers = Array.isArray(scoreData.deal_breaker_triggered)
         ? scoreData.deal_breaker_triggered
         : [scoreData.deal_breaker_triggered];
-      jobFields['Triggered Dealbreakers'] = dealbreakers;
+      jobFields['Triggered Dealbreakers'] = dealbreakers.join(', ');
     }
   }
 

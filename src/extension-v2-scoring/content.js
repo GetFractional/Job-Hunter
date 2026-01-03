@@ -143,12 +143,13 @@ function handleLinkedIn() {
     if (jobCard) {
       // Reset scored URL to force re-scoring
       lastScoredUrl = '';
-      // Delay to let the job detail panel update
+      // Delay to let the job detail panel update and avoid LinkedIn 999 rate limiting
+      // Increased from 800ms to 1200ms for more reliable DOM rendering
       setTimeout(() => {
         if (isLinkedInJobPage()) {
           triggerAutoScore('LinkedIn');
         }
-      }, 800);
+      }, 1200);
     }
   });
 
@@ -179,7 +180,8 @@ function handleLinkedIn() {
       );
 
       if (hasSignificantChange) {
-        // Debounce to avoid excessive re-scoring
+        // Debounce to avoid excessive re-scoring and LinkedIn 999 rate limiting
+        // Increased from 600ms to 1000ms for better stability
         if (contentChangeDebounce) clearTimeout(contentChangeDebounce);
         contentChangeDebounce = setTimeout(() => {
           const currentJobId = extractLinkedInJobId(location.href);
@@ -188,7 +190,7 @@ function handleLinkedIn() {
             lastScoredUrl = '';
             triggerAutoScore('LinkedIn');
           }
-        }, 600);
+        }, 1000);
       }
     };
 
