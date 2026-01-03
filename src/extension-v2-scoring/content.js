@@ -688,14 +688,18 @@ function extractLinkedInJobData() {
     const companyHeadcountData = extractCompanyHeadcountData();
     if (companyHeadcountData.currentHeadcount !== null) {
       data.companyHeadcount = companyHeadcountData.currentHeadcount;
+      console.log('[Job Hunter] ✓ Headcount extracted:', companyHeadcountData.currentHeadcount, 'employees');
     }
     if (companyHeadcountData.headcountGrowthRate !== null) {
       data.companyHeadcountGrowth = `${companyHeadcountData.headcountGrowthRate >= 0 ? '+' : ''}${companyHeadcountData.headcountGrowthRate}%`;
-    }
-    if (companyHeadcountData.headcountDataFound) {
-      console.log('[Job Hunter] Headcount extracted:', companyHeadcountData.currentHeadcount, 'Growth:', companyHeadcountData.headcountGrowthRate + '%');
+      console.log('[Job Hunter] ✓ Growth rate extracted:', data.companyHeadcountGrowth, '(2-year company-wide)');
     } else {
-      console.log('[Job Hunter] Headcount data not visible (company page may need visit)');
+      // Explicitly set to null/undefined when no growth data exists
+      data.companyHeadcountGrowth = null;
+      console.log('[Job Hunter] ⚠ No growth data found - companyHeadcountGrowth set to null');
+    }
+    if (!companyHeadcountData.currentHeadcount && !companyHeadcountData.headcountGrowthRate) {
+      console.log('[Job Hunter] ℹ️ No company headcount/growth data available on this page');
     }
 
   } catch (error) {

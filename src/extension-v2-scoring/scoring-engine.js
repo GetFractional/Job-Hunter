@@ -988,14 +988,25 @@ function scoreOrgStability(jobPayload, userProfile) {
 
   console.log('[Scoring] Org Stability input:', {
     headcountGrowthText,
-    jobPayload_keys: Object.keys(jobPayload)
+    headcountGrowthText_type: typeof headcountGrowthText,
+    headcountGrowthText_value: JSON.stringify(headcountGrowthText),
+    isNull: headcountGrowthText === null,
+    isEmpty: headcountGrowthText === '',
+    hasJobPayloadKeys: Object.keys(jobPayload).length
   });
 
   // Parse growth percentage from text like "+5% over last 6 months" or "-3% decline"
   let growthRate = null;
-  const growthMatch = headcountGrowthText.match(/([+-]?\d+(?:\.\d+)?)\s*%/);
-  if (growthMatch) {
-    growthRate = parseFloat(growthMatch[1]);
+  if (headcountGrowthText && typeof headcountGrowthText === 'string') {
+    const growthMatch = headcountGrowthText.match(/([+-]?\d+(?:\.\d+)?)\s*%/);
+    if (growthMatch) {
+      growthRate = parseFloat(growthMatch[1]);
+      console.log('[Scoring] ✓ Parsed growth rate from text:', growthRate, '%');
+    } else {
+      console.log('[Scoring] ⚠ Growth text provided but no percentage found:', headcountGrowthText);
+    }
+  } else {
+    console.log('[Scoring] ℹ️ No headcount growth text available (null/empty/invalid)');
   }
 
   // Also check description for signals
