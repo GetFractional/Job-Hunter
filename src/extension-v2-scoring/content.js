@@ -482,7 +482,9 @@ function extractLinkedInJobData() {
 
     // Hiring Manager Title selectors - expanded list with more robust patterns
     const hiringManagerTitleSelectors = [
-      // Primary selectors
+      // Primary selectors - matching actual LinkedIn HTML structure
+      '.hirer-card__hirer-information .linked-area .text-body-small',
+      '.linked-area .text-body-small.t-black',
       '.hirer-card__hirer-information .t-14',
       '.jobs-poster__headline',
       '.jobs-poster .t-14',
@@ -503,6 +505,7 @@ function extractLinkedInJobData() {
       '.job-poster__headline',
       '.artdeco-entity-lockup__subtitle',
       '.hirer-subtitle',
+      '.linked-area div',
       '[class*="hiring-team"] [class*="subtitle"]',
       '[class*="poster"] [class*="headline"]'
     ];

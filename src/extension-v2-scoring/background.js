@@ -280,7 +280,7 @@ async function upsertContact(credentials, jobData, companyRecordId) {
   const contactFields = {
     'First Name': firstName,
     'Last Name': lastName,
-    'Company': [companyRecordId] // Link to Company record
+    'Companies': [companyRecordId] // LINKED RECORD - Links to Companies table
   };
 
   // Add optional fields
@@ -312,7 +312,15 @@ async function upsertContact(credentials, jobData, companyRecordId) {
     });
 
     if (!updateResponse.ok) {
-      throw new Error(`Failed to update contact: ${updateResponse.status}`);
+      const errorBody = await updateResponse.json().catch(() => ({}));
+      console.error('[Job Hunter BG] ❌ Contact update failed:', {
+        status: updateResponse.status,
+        statusText: updateResponse.statusText,
+        errorMessage: errorBody.error?.message || 'No error message',
+        invalidFields: errorBody.error?.invalidFieldsByName || {},
+        sentPayload: contactFields
+      });
+      throw new Error(`Failed to update contact: ${updateResponse.status} - ${errorBody.error?.message || 'Unknown error'}`);
     }
 
     const updateData = await updateResponse.json();
@@ -336,7 +344,15 @@ async function upsertContact(credentials, jobData, companyRecordId) {
     });
 
     if (!createResponse.ok) {
-      throw new Error(`Failed to create contact: ${createResponse.status}`);
+      const errorBody = await createResponse.json().catch(() => ({}));
+      console.error('[Job Hunter BG] ❌ Contact creation failed:', {
+        status: createResponse.status,
+        statusText: createResponse.statusText,
+        errorMessage: errorBody.error?.message || 'No error message',
+        invalidFields: errorBody.error?.invalidFieldsByName || {},
+        sentPayload: contactFields
+      });
+      throw new Error(`Failed to create contact: ${createResponse.status} - ${errorBody.error?.message || 'Unknown error'}`);
     }
 
     const createData = await createResponse.json();
@@ -359,7 +375,8 @@ async function createJob(credentials, jobData, scoreData, companyRecordId, conta
   // Field names must match exactly what's defined in Airtable
   const jobFields = {
     'Job Title': jobData.jobTitle,
-    'Company Name': [companyRecordId], // Link to Company record
+    'Company Name': jobData.companyName, // TEXT field - company name as string
+    'Companies': [companyRecordId], // LINKED RECORD field - array of record IDs
     'Job URL': jobData.jobUrl || '',
     'Location': jobData.location || '',
     'Source': jobData.source || 'LinkedIn',
@@ -367,8 +384,7 @@ async function createJob(credentials, jobData, scoreData, companyRecordId, conta
     'Status': 'Captured'
   };
 
-  // Link to Contact record if available (using canonical field name)
-  // Note: The spec mentions both "Contacts" and "Contacts (Linked Jobs)" - using "Contacts" as canonical
+  // Link to Contact record if available
   if (contactRecordId) {
     jobFields['Contacts'] = [contactRecordId];
   }
