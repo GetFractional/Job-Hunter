@@ -23,6 +23,10 @@ if (window.jobHunterInjected) {
 } else {
   window.jobHunterInjected = true;
   initJobHunter();
+  // Initialize Outreach Mode if on LinkedIn profile with outreachID parameter
+  if (typeof window.JobHunterOutreach !== 'undefined') {
+    window.JobHunterOutreach.init();
+  }
 }
 
 /**

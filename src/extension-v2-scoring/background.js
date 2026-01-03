@@ -4,7 +4,8 @@
  * Handles communication between content scripts and Airtable API:
  * - Listens for messages from content.js
  * - Retrieves credentials from Chrome local storage
- * - POSTs job data to Airtable Jobs Pipeline table
+ * - Creates/updates records in Companies, Contacts, and Jobs Pipeline tables (CRM model)
+ * - Handles Outreach Mode record fetching and updates
  * - Returns success/failure response to content script
  */
 
@@ -17,8 +18,13 @@ const STORAGE_KEYS = {
 // Airtable API base URL
 const AIRTABLE_API_BASE = 'https://api.airtable.com/v0';
 
-// Table name in Airtable (URL encoded)
-const TABLE_NAME = 'Jobs%20Pipeline';
+// Table names in Airtable (URL encoded)
+const TABLES = {
+  JOBS_PIPELINE: 'Jobs%20Pipeline',
+  COMPANIES: 'Companies',
+  CONTACTS: 'Contacts',
+  OUTREACH_LOG: 'Outreach%20Log'
+};
 
 /**
  * Listen for messages from content scripts
@@ -27,11 +33,27 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // Handle job capture requests (with optional score data)
   if (request.action === 'jobHunter.createAirtableRecord') {
     console.log('[Job Hunter BG] Received message:', request.action);
-    handleCreateRecord(request.job, request.score)
+    handleCreateTripleRecord(request.job, request.score)
       .then(result => sendResponse(result))
       .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
 
-    // Return true to indicate we'll send response asynchronously
+  // Handle Outreach Log record fetch
+  if (request.action === 'jobHunter.fetchOutreachRecord') {
+    console.log('[Job Hunter BG] Fetching Outreach Log record:', request.recordId);
+    handleFetchOutreachRecord(request.recordId)
+      .then(result => sendResponse(result))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+
+  // Handle Outreach Log "Mark as Sent" update
+  if (request.action === 'jobHunter.markOutreachSent') {
+    console.log('[Job Hunter BG] Marking outreach as sent:', request.recordId);
+    handleMarkOutreachSent(request.recordId, request.contactRecordId)
+      .then(result => sendResponse(result))
+      .catch(error => sendResponse({ success: false, error: error.message }));
     return true;
   }
 
@@ -48,13 +70,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 /**
- * Create a new record in Airtable Jobs Pipeline table
+ * Create triple records in Airtable: Company, Contact (if hiring manager exists), and Job
+ * Implements CRM-style relational data model
+ *
  * @param {Object} jobData - Job data extracted from the page
  * @param {Object} scoreData - Optional score data from scoring engine
- * @returns {Promise<Object>} Result with success status and record ID or error
+ * @returns {Promise<Object>} Result with success status and record IDs
  */
-async function handleCreateRecord(jobData, scoreData = null) {
-  console.log('[Job Hunter BG] Creating Airtable record:', jobData);
+async function handleCreateTripleRecord(jobData, scoreData = null) {
+  console.log('[Job Hunter BG] Creating triple record (Company, Contact, Job):', jobData);
   if (scoreData) {
     console.log('[Job Hunter BG] Including score data:', scoreData.overall_score, scoreData.overall_label);
   }
@@ -78,183 +102,483 @@ async function handleCreateRecord(jobData, scoreData = null) {
     return { success: false, error: 'Company name is required' };
   }
 
-  // Build the Airtable record payload
-  // Field names must match exactly what's defined in Airtable
-  const airtablePayload = {
-    fields: {
-      'Job Title': jobData.jobTitle,
-      'Company Name': jobData.companyName,
-      'Job URL': jobData.jobUrl || '',
-      'Location': jobData.location || '',
-      'Source': jobData.source || 'LinkedIn',
-      'Job Description': jobData.descriptionText || '',
-      'Status': 'Captured'
+  try {
+    // STEP A: Upsert Company record
+    const companyRecordId = await upsertCompany(credentials, jobData);
+    console.log('[Job Hunter BG] Company record ID:', companyRecordId);
+
+    // STEP B: Upsert Contact record (if hiring manager data exists)
+    let contactRecordId = null;
+    if (jobData.hiringManagerDetails?.name) {
+      contactRecordId = await upsertContact(credentials, jobData, companyRecordId);
+      console.log('[Job Hunter BG] Contact record ID:', contactRecordId);
+    } else {
+      console.log('[Job Hunter BG] No hiring manager data, skipping Contact creation');
     }
+
+    // STEP C: Create Job record with links to Company and Contact
+    const jobRecordId = await createJob(credentials, jobData, scoreData, companyRecordId, contactRecordId);
+    console.log('[Job Hunter BG] Job record created:', jobRecordId);
+
+    return {
+      success: true,
+      recordId: jobRecordId,
+      companyRecordId,
+      contactRecordId,
+      baseId: credentials.baseId,
+      table: 'Jobs Pipeline'
+    };
+
+  } catch (error) {
+    console.error('[Job Hunter BG] Error creating triple record:', error);
+    return {
+      success: false,
+      error: error.message || 'Failed to create records'
+    };
+  }
+}
+
+/**
+ * Upsert (create or update) a Company record in Airtable
+ * Uses Company Name as the unique identifier for upsert logic
+ *
+ * @param {Object} credentials - Airtable credentials
+ * @param {Object} jobData - Job data containing company info
+ * @returns {Promise<string>} Company record ID
+ */
+async function upsertCompany(credentials, jobData) {
+  const companyName = jobData.companyName.trim();
+
+  // First, search for existing company by name
+  const searchUrl = `${AIRTABLE_API_BASE}/${credentials.baseId}/${TABLES.COMPANIES}?filterByFormula=${encodeURIComponent(`{Company Name}='${companyName.replace(/'/g, "\\'")}'`)}`;
+
+  const searchResponse = await fetchWithRetry(searchUrl, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${credentials.pat}`,
+      'Content-Type': 'application/json'
+    }
+  });
+
+  if (!searchResponse.ok) {
+    throw new Error(`Failed to search for company: ${searchResponse.status}`);
+  }
+
+  const searchData = await searchResponse.json();
+  const existingRecord = searchData.records?.[0];
+
+  // Build company payload
+  const companyFields = {
+    'Company Name': companyName
   };
 
+  // Add optional fields if available
+  if (jobData.companyPageUrl) {
+    companyFields['LinkedIn URL'] = jobData.companyPageUrl;
+  }
+  if (jobData.location) {
+    companyFields['Location'] = jobData.location;
+  }
+  // Note: Industry, Size, Type, Website would need to be extracted from job description or company page
+  // For now, we'll leave them empty and they can be enriched later
+
+  if (existingRecord) {
+    // Update existing company record
+    console.log('[Job Hunter BG] Updating existing company:', existingRecord.id);
+    const updateUrl = `${AIRTABLE_API_BASE}/${credentials.baseId}/${TABLES.COMPANIES}/${existingRecord.id}`;
+
+    const updateResponse = await fetchWithRetry(updateUrl, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${credentials.pat}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ fields: companyFields })
+    });
+
+    if (!updateResponse.ok) {
+      throw new Error(`Failed to update company: ${updateResponse.status}`);
+    }
+
+    const updateData = await updateResponse.json();
+    return updateData.id;
+
+  } else {
+    // Create new company record
+    console.log('[Job Hunter BG] Creating new company');
+    const createUrl = `${AIRTABLE_API_BASE}/${credentials.baseId}/${TABLES.COMPANIES}`;
+
+    const createResponse = await fetchWithRetry(createUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${credentials.pat}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ fields: companyFields })
+    });
+
+    if (!createResponse.ok) {
+      throw new Error(`Failed to create company: ${createResponse.status}`);
+    }
+
+    const createData = await createResponse.json();
+    return createData.id;
+  }
+}
+
+/**
+ * Upsert (create or update) a Contact record in Airtable
+ * Uses LinkedIn URL as unique identifier, falls back to First Name + Last Name + Company
+ *
+ * @param {Object} credentials - Airtable credentials
+ * @param {Object} jobData - Job data containing hiring manager info
+ * @param {string} companyRecordId - ID of the linked Company record
+ * @returns {Promise<string>} Contact record ID
+ */
+async function upsertContact(credentials, jobData, companyRecordId) {
+  const hiringManager = jobData.hiringManagerDetails;
+
+  if (!hiringManager?.name) {
+    throw new Error('Hiring manager name is required for contact creation');
+  }
+
+  // Parse first and last name
+  const nameParts = hiringManager.name.trim().split(' ');
+  const firstName = nameParts[0] || '';
+  const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
+
+  // Search for existing contact by LinkedIn URL (if available) or by name + company
+  let searchFormula;
+  if (jobData.hiringManagerLinkedInUrl) {
+    searchFormula = `{LinkedIn URL}='${jobData.hiringManagerLinkedInUrl.replace(/'/g, "\\'")}'`;
+  } else {
+    // Search by first name + last name + company link
+    searchFormula = `AND({First Name}='${firstName.replace(/'/g, "\\'")}', {Last Name}='${lastName.replace(/'/g, "\\'")}')`;
+  }
+
+  const searchUrl = `${AIRTABLE_API_BASE}/${credentials.baseId}/${TABLES.CONTACTS}?filterByFormula=${encodeURIComponent(searchFormula)}`;
+
+  const searchResponse = await fetchWithRetry(searchUrl, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${credentials.pat}`,
+      'Content-Type': 'application/json'
+    }
+  });
+
+  if (!searchResponse.ok) {
+    throw new Error(`Failed to search for contact: ${searchResponse.status}`);
+  }
+
+  const searchData = await searchResponse.json();
+  const existingRecord = searchData.records?.[0];
+
+  // Build contact payload
+  const contactFields = {
+    'First Name': firstName,
+    'Last Name': lastName,
+    'Company': [companyRecordId] // Link to Company record
+  };
+
+  // Add optional fields
+  if (hiringManager.title) {
+    contactFields['Role / Title'] = hiringManager.title;
+  }
+  if (jobData.hiringManagerLinkedInUrl) {
+    contactFields['LinkedIn URL'] = jobData.hiringManagerLinkedInUrl;
+  }
+  if (jobData.hiringManagerEmail) {
+    contactFields['Email'] = jobData.hiringManagerEmail;
+  }
+  if (jobData.hiringManagerPhone) {
+    contactFields['Phone / WhatsApp'] = jobData.hiringManagerPhone;
+  }
+
+  if (existingRecord) {
+    // Update existing contact record
+    console.log('[Job Hunter BG] Updating existing contact:', existingRecord.id);
+    const updateUrl = `${AIRTABLE_API_BASE}/${credentials.baseId}/${TABLES.CONTACTS}/${existingRecord.id}`;
+
+    const updateResponse = await fetchWithRetry(updateUrl, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${credentials.pat}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ fields: contactFields })
+    });
+
+    if (!updateResponse.ok) {
+      throw new Error(`Failed to update contact: ${updateResponse.status}`);
+    }
+
+    const updateData = await updateResponse.json();
+    return updateData.id;
+
+  } else {
+    // Create new contact record
+    console.log('[Job Hunter BG] Creating new contact');
+    const createUrl = `${AIRTABLE_API_BASE}/${credentials.baseId}/${TABLES.CONTACTS}`;
+
+    const createResponse = await fetchWithRetry(createUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${credentials.pat}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ fields: contactFields })
+    });
+
+    if (!createResponse.ok) {
+      throw new Error(`Failed to create contact: ${createResponse.status}`);
+    }
+
+    const createData = await createResponse.json();
+    return createData.id;
+  }
+}
+
+/**
+ * Create a Job record in Jobs Pipeline table with links to Company and Contact
+ *
+ * @param {Object} credentials - Airtable credentials
+ * @param {Object} jobData - Job data
+ * @param {Object} scoreData - Score data
+ * @param {string} companyRecordId - ID of linked Company record
+ * @param {string|null} contactRecordId - ID of linked Contact record (optional)
+ * @returns {Promise<string>} Job record ID
+ */
+async function createJob(credentials, jobData, scoreData, companyRecordId, contactRecordId) {
+  // Build the Airtable record payload
+  // Field names must match exactly what's defined in Airtable
+  const jobFields = {
+    'Job Title': jobData.jobTitle,
+    'Company Name': [companyRecordId], // Link to Company record
+    'Job URL': jobData.jobUrl || '',
+    'Location': jobData.location || '',
+    'Source': jobData.source || 'LinkedIn',
+    'Job Description': jobData.descriptionText || '',
+    'Status': 'Captured'
+  };
+
+  // Link to Contact record if available (using canonical field name)
+  // Note: The spec mentions both "Contacts" and "Contacts (Linked Jobs)" - using "Contacts" as canonical
+  if (contactRecordId) {
+    jobFields['Contacts'] = [contactRecordId];
+  }
+
   // Add salary fields only if they have values
-  // Airtable expects numbers for number fields, not empty strings
   if (jobData.salaryMin !== null && jobData.salaryMin !== undefined) {
-    airtablePayload.fields['Salary Min'] = jobData.salaryMin;
+    jobFields['Salary Min'] = jobData.salaryMin;
   }
   if (jobData.salaryMax !== null && jobData.salaryMax !== undefined) {
-    airtablePayload.fields['Salary Max'] = jobData.salaryMax;
+    jobFields['Salary Max'] = jobData.salaryMax;
   }
   if (jobData.workplaceType) {
-    airtablePayload.fields['Workplace Type'] = jobData.workplaceType;
+    jobFields['Workplace Type'] = jobData.workplaceType;
   }
   if (jobData.employmentType) {
-    airtablePayload.fields['Employment Type'] = jobData.employmentType;
+    jobFields['Employment Type'] = jobData.employmentType;
   }
   if (jobData.equityMentioned !== undefined) {
-    airtablePayload.fields['Equity Mentioned'] = !!jobData.equityMentioned;
+    jobFields['Equity Mentioned'] = !!jobData.equityMentioned;
+  }
+  if (jobData.bonusMentioned !== undefined) {
+    jobFields['Bonus Mentioned'] = !!jobData.bonusMentioned;
   }
   if (jobData.companyPageUrl) {
-    airtablePayload.fields['Company Page'] = jobData.companyPageUrl;
+    jobFields['Company Page'] = jobData.companyPageUrl;
   }
 
   // Add score data if available
-  // Field mappings match the user's actual Airtable schema:
-  // - "Overall Fit Score" (Number): Overall 0-100 score
-  // - "Preference Fit Score" (Number): Job-to-User 0-50 score (how well job meets user's needs)
-  // - "Role Fit Score" (Number): User-to-Job 0-50 score (how well user matches job)
-  // - "Fit Recommendation" (Single Select): Must match existing options in Airtable
-  // - "Matched Skills" (Long Text): Skills that matched between user and job
-  // - "Missing Skills" (Long Text): Skills the job requires that user may lack
-  // - "Triggered Dealbreakers" (Long Text): Any deal-breakers that were triggered
   if (scoreData) {
     if (scoreData.overall_score !== undefined) {
-      airtablePayload.fields['Overall Fit Score'] = scoreData.overall_score;
+      jobFields['Overall Fit Score'] = scoreData.overall_score;
     }
     if (scoreData.overall_label) {
       // Map the label to valid Airtable select options
-      // Airtable select fields have predefined options that must match exactly
       const validFitOptions = ['STRONG FIT', 'GOOD FIT', 'MODERATE FIT', 'FAIR FIT', 'WEAK FIT', 'POOR FIT', 'HARD NO'];
       let fitLabel = scoreData.overall_label.toUpperCase().trim();
 
-      // If the exact label isn't valid, map to a valid option
       if (!validFitOptions.includes(fitLabel)) {
-        // Try to find the closest match
         if (fitLabel.includes('STRONG')) fitLabel = 'STRONG FIT';
         else if (fitLabel.includes('GOOD')) fitLabel = 'GOOD FIT';
-        else if (fitLabel.includes('MODERATE') || fitLabel.includes('FAIR')) fitLabel = 'GOOD FIT'; // Safe fallback
+        else if (fitLabel.includes('MODERATE') || fitLabel.includes('FAIR')) fitLabel = 'GOOD FIT';
         else if (fitLabel.includes('WEAK')) fitLabel = 'WEAK FIT';
         else if (fitLabel.includes('POOR')) fitLabel = 'POOR FIT';
         else if (fitLabel.includes('HARD') || fitLabel.includes('NO')) fitLabel = 'HARD NO';
-        else fitLabel = 'GOOD FIT'; // Ultimate fallback
+        else fitLabel = 'GOOD FIT';
         console.log(`[Job Hunter BG] Mapped "${scoreData.overall_label}" to "${fitLabel}" for Airtable`);
       }
 
-      airtablePayload.fields['Fit Recommendation'] = fitLabel;
+      jobFields['Fit Recommendation'] = fitLabel;
     }
     if (scoreData.job_to_user_fit?.score !== undefined) {
-      airtablePayload.fields['Preference Fit Score'] = scoreData.job_to_user_fit.score;
+      jobFields['Preference Fit Score'] = scoreData.job_to_user_fit.score;
     }
     if (scoreData.user_to_job_fit?.score !== undefined) {
-      airtablePayload.fields['Role Fit Score'] = scoreData.user_to_job_fit.score;
+      jobFields['Role Fit Score'] = scoreData.user_to_job_fit.score;
     }
+
     // Extract matched and missing skills from breakdown
     const skillsBreakdown = scoreData.user_to_job_fit?.breakdown?.find(b => b.criteria === 'Skills Overlap');
     if (skillsBreakdown?.matched_skills && skillsBreakdown.matched_skills.length > 0) {
-      airtablePayload.fields['Matched Skills'] = skillsBreakdown.matched_skills.join(', ');
+      // Convert array to Multiple Select format (if field is Multiple Select) or comma-separated text
+      jobFields['Matched Skills'] = skillsBreakdown.matched_skills;
     }
     if (skillsBreakdown?.unmatched_skills && skillsBreakdown.unmatched_skills.length > 0) {
-      airtablePayload.fields['Missing Skills'] = skillsBreakdown.unmatched_skills.join(', ');
+      jobFields['Missing Skills'] = skillsBreakdown.unmatched_skills;
     }
-    // Store interpretation summary in a notes field if available
-    if (scoreData.interpretation?.summary) {
-      // Combine summary and action for a complete picture
-      const summaryText = [
-        scoreData.interpretation.summary,
-        scoreData.interpretation.action ? `Action: ${scoreData.interpretation.action}` : ''
-      ].filter(Boolean).join('\n');
-      // Only add if there's a field for it (optional)
-      // airtablePayload.fields['Score Summary'] = summaryText;
-    }
+
     // Store deal-breaker reason if triggered
     if (scoreData.deal_breaker_triggered) {
-      airtablePayload.fields['Triggered Dealbreakers'] = scoreData.deal_breaker_triggered;
+      // Convert to Multiple Select format if needed
+      const dealbreakers = Array.isArray(scoreData.deal_breaker_triggered)
+        ? scoreData.deal_breaker_triggered
+        : [scoreData.deal_breaker_triggered];
+      jobFields['Triggered Dealbreakers'] = dealbreakers;
     }
   }
 
-  // Make the API request
+  // Create the job record
+  const createUrl = `${AIRTABLE_API_BASE}/${credentials.baseId}/${TABLES.JOBS_PIPELINE}`;
+
+  const createResponse = await fetchWithRetry(createUrl, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${credentials.pat}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ fields: jobFields })
+  });
+
+  if (!createResponse.ok) {
+    const errorText = await createResponse.text();
+    console.error('[Job Hunter BG] Job creation error:', errorText);
+    throw new Error(`Failed to create job: ${createResponse.status}`);
+  }
+
+  const createData = await createResponse.json();
+  return createData.id;
+}
+
+/**
+ * Fetch an Outreach Log record by ID
+ * Used in Outreach Mode to display outreach message
+ *
+ * @param {string} recordId - Airtable record ID
+ * @returns {Promise<Object>} Outreach Log record data
+ */
+async function handleFetchOutreachRecord(recordId) {
+  const credentials = await getCredentials();
+
+  if (!credentials.baseId || !credentials.pat) {
+    return { success: false, error: 'Airtable credentials not configured' };
+  }
+
   try {
-    console.log('[Job Hunter BG] Sending request to Airtable...', {
-      baseId: credentials.baseId,
-      table: 'Jobs Pipeline'
+    const url = `${AIRTABLE_API_BASE}/${credentials.baseId}/${TABLES.OUTREACH_LOG}/${recordId}`;
+
+    const response = await fetchWithRetry(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${credentials.pat}`,
+        'Content-Type': 'application/json'
+      }
     });
-    const response = await fetchWithRetry(
-      `${AIRTABLE_API_BASE}/${credentials.baseId}/${TABLE_NAME}`,
-      {
-        method: 'POST',
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch outreach record: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    return {
+      success: true,
+      record: data
+    };
+
+  } catch (error) {
+    console.error('[Job Hunter BG] Error fetching outreach record:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+/**
+ * Mark an Outreach Log record as sent
+ * Updates both Outreach Log and linked Contact record
+ *
+ * @param {string} outreachRecordId - Outreach Log record ID
+ * @param {string} contactRecordId - Contact record ID (from linked Contact field)
+ * @returns {Promise<Object>} Success status
+ */
+async function handleMarkOutreachSent(outreachRecordId, contactRecordId) {
+  const credentials = await getCredentials();
+
+  if (!credentials.baseId || !credentials.pat) {
+    return { success: false, error: 'Airtable credentials not configured' };
+  }
+
+  try {
+    const now = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+
+    // Update Outreach Log record
+    const outreachUrl = `${AIRTABLE_API_BASE}/${credentials.baseId}/${TABLES.OUTREACH_LOG}/${outreachRecordId}`;
+
+    const outreachResponse = await fetchWithRetry(outreachUrl, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${credentials.pat}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        fields: {
+          'Outreach Status': 'Sent',
+          'Sent Date': now
+        }
+      })
+    });
+
+    if (!outreachResponse.ok) {
+      throw new Error(`Failed to update outreach record: ${outreachResponse.status}`);
+    }
+
+    // Update Contact record if contactRecordId is provided
+    if (contactRecordId) {
+      const contactUrl = `${AIRTABLE_API_BASE}/${credentials.baseId}/${TABLES.CONTACTS}/${contactRecordId}`;
+
+      const contactResponse = await fetchWithRetry(contactUrl, {
+        method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${credentials.pat}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(airtablePayload)
-      }
-    );
-
-    console.log('[Job Hunter BG] Airtable response status:', response.status);
-
-    if (response.ok) {
-      const data = await response.json();
-      console.log('[Job Hunter BG] Record created successfully:', {
-        recordId: data.id,
-        baseId: credentials.baseId,
-        table: 'Jobs Pipeline'
+        body: JSON.stringify({
+          fields: {
+            'Last Outreach Date': now
+            // Note: Next Follow-Up Date could be calculated based on Follow-Up Interval if needed
+          }
+        })
       });
-      return {
-        success: true,
-        recordId: data.id,
-        baseId: credentials.baseId,
-        table: 'Jobs Pipeline'
-      };
-    }
 
-    // Handle specific error cases
-    let errorData = {};
-    try {
-      // Clone before reading to keep original response available if needed
-      const cloned = response.clone();
-      const text = await cloned.text();
-      try {
-        errorData = JSON.parse(text);
-      } catch {
-        errorData = { error: { message: text || 'No error message returned' } };
+      if (!contactResponse.ok) {
+        console.warn('[Job Hunter BG] Failed to update contact record, but outreach was marked as sent');
       }
-    } catch (parseErr) {
-      console.warn('[Job Hunter BG] Could not parse Airtable error body:', parseErr);
-    }
-
-    console.error('[Job Hunter BG] Airtable API error:', response.status, errorData);
-
-    if (response.status === 401) {
-      return { success: false, error: 'Invalid API token. Check your settings.' };
-    }
-    if (response.status === 403) {
-      return { success: false, error: 'Access denied. Check token permissions.' };
-    }
-    if (response.status === 404) {
-      return { success: false, error: 'Table not found. Ensure "Jobs Pipeline" exists.' };
-    }
-    if (response.status === 422) {
-      // Validation error - likely field name mismatch
-      const fieldError = errorData.error?.message || 'Invalid field data';
-      return { success: false, error: `Validation error: ${fieldError}` };
     }
 
     return {
-      success: false,
-      error: errorData.error?.message || `API error: ${response.status}`,
-      status: response.status
+      success: true,
+      message: 'Outreach marked as sent'
     };
 
   } catch (error) {
-    console.error('[Job Hunter BG] Network error:', error);
+    console.error('[Job Hunter BG] Error marking outreach as sent:', error);
     return {
       success: false,
-      error: 'Network error. Check your internet connection.'
+      error: error.message
     };
   }
 }
@@ -334,4 +658,4 @@ function delay(ms) {
 }
 
 // Log when service worker starts
-console.log('[Job Hunter BG] Background service worker initialized');
+console.log('[Job Hunter BG] Background service worker initialized with CRM support');

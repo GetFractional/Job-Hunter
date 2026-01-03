@@ -26,7 +26,123 @@
 
 ## 📊 TABLE SCHEMA
 
-### TABLE 1: Jobs Pipeline (Primary Table)
+### TABLE 1: Companies (CRM Hub)
+
+**Purpose**: Central repository for all companies - tracks organizations for job opportunities and networking
+
+**Fields:**
+
+| Field Name | Type | Description | Required | Example |
+|------------|------|-------------|----------|---------|
+| `Company Name` | Single Line Text | Company name (PRIMARY) | Yes | "TechCorp" |
+| `Website` | URL | Company website | No | https://techcorp.com |
+| `LinkedIn URL` | URL | Company LinkedIn page | No | https://linkedin.com/company/techcorp |
+| `Industry` | Single Select | Industry/sector | No | SaaS, FinTech, E-commerce |
+| `Location` | Single Line Text | HQ or primary location | No | "San Francisco, CA" |
+| `Size` | Single Select | Company size | No | 1-10, 11-50, 51-200, 201-500, 501-1000, 1000+ |
+| `Type` | Single Select | Company stage/type | No | Startup, Growth, Enterprise, Public |
+| `Company Description` | Long Text | Company overview | No | "Leading SaaS platform..." |
+| `Job Listings` | Link to Records | Links to Jobs Pipeline | No | → Multiple job records |
+| `Contacts` | Link to Records | Links to Contacts table | No | → Multiple contact records |
+| `Outreach Log` | Link to Records | Links to Outreach Log | No | → Multiple outreach records |
+| `Company Overview (AI)` | Long Text | AI-generated company analysis | No | [AI summary] |
+| `Notes` | Long Text | Research notes | No | "Met founder at conference..." |
+| `Created Time` | Created Time | Auto-populated | Yes | 2024-12-06 10:30 AM |
+| `Last Modified` | Last Modified Time | Auto-populated | Yes | 2024-12-06 2:45 PM |
+
+**Views:**
+1. **All Companies** (Grid): All records, sorted by Created (newest first)
+2. **Active Opportunities** (Grid): Companies with linked jobs in pipeline
+3. **Target Companies** (Grid): Companies with notes or high interest
+
+---
+
+### TABLE 2: Contacts (Hiring Managers & Network)
+
+**Purpose**: Track hiring managers, recruiters, and professional contacts for outreach and relationship management
+
+**Fields:**
+
+| Field Name | Type | Description | Required | Example |
+|------------|------|-------------|----------|---------|
+| `First Name` | Single Line Text | Contact first name (PRIMARY) | Yes | "Sarah" |
+| `Last Name` | Single Line Text | Contact last name | No | "Johnson" |
+| `Full Name` | Formula | `{First Name} & " " & {Last Name}` | Auto | "Sarah Johnson" |
+| `Role / Title` | Single Line Text | Job title | No | "VP of Engineering" |
+| `Company` | Link to Record | Link to Companies table | No | → Company record |
+| `Contact Type` | Single Select | Type of contact | No | Hiring Manager, Recruiter, Referral, Network |
+| `Status` | Single Select | Relationship status | No | New, Contacted, Responded, Meeting Scheduled, Connected |
+| `Email` | Email | Contact email | No | sarah@techcorp.com |
+| `Phone / WhatsApp` | Phone Number | Contact phone | No | +1-555-0123 |
+| `LinkedIn URL` | URL | LinkedIn profile | No | https://linkedin.com/in/sarahjohnson |
+| `Last Outreach Date` | Date | Last time contacted | No | 2024-12-06 |
+| `Next Follow-Up Date` | Date | When to follow up next | No | 2024-12-13 |
+| `Follow-Up Interval (Days)` | Number | Days between follow-ups | No | 7 |
+| `Contacted Via` | Multiple Select | Communication channels used | No | Email, LinkedIn, Phone |
+| `Relationship Strength` | Single Select | Connection strength | No | Cold, Warm, Hot, Connected |
+| `Introduced By` | Single Line Text | Referral source | No | "John Smith" |
+| `Hiring Influence Level` | Single Select | Decision-making power | No | Decision Maker, Influencer, Gatekeeper, Unknown |
+| `Next Task / Action` | Long Text | Next steps | No | "Send follow-up email..." |
+| `Generated Assets` | Link to Records | Links to Generated Assets | No | → Outreach messages, etc. |
+| `Outreach Log` | Link to Records | Links to Outreach Log | No | → Multiple outreach records |
+| `Created Time` | Created Time | Auto-populated | Yes | 2024-12-06 10:30 AM |
+| `Last Modified` | Last Modified Time | Auto-populated | Yes | 2024-12-06 2:45 PM |
+| `Days Since Last Outreach` | Formula | `DATETIME_DIFF(TODAY(), {Last Outreach Date}, 'days')` | Auto | 7 |
+| `Next Follow-Up Trigger` | Formula | Trigger for follow-up reminders | Auto | Based on intervals |
+| `Relationship Age` | Formula | Days since first contact | Auto | 30 |
+
+**Views:**
+1. **All Contacts** (Grid): All records, sorted by Last Modified
+2. **Active Outreach** (Grid): Contacts with outreach in progress
+3. **Follow-Up Due** (Grid): Filtered by Next Follow-Up Date ≤ TODAY()
+4. **Hiring Managers** (Grid): Contact Type = "Hiring Manager"
+5. **Hot Leads** (Grid): Relationship Strength = "Hot"
+
+---
+
+### TABLE 3: Outreach Log (Action Tracking)
+
+**Purpose**: Track all outreach interactions with contacts - emails, messages, calls, follow-ups
+
+**Fields:**
+
+| Field Name | Type | Description | Required | Example |
+|------------|------|-------------|----------|---------|
+| `Outreach ID` | Autonumber | Primary key | Yes | 1, 2, 3... |
+| `Contact` | Link to Record | Link to Contacts table | Yes | → Contact record |
+| `First Name (from Outreach Message)` | Lookup | From Contact | Auto | "Sarah" |
+| `Role / Title (from Outreach Message)` | Lookup | From Contact | Auto | "VP of Engineering" |
+| `Company (from Outreach Message)` | Lookup | From Contact → Company | Auto | "TechCorp" |
+| `Email (from Outreach Message)` | Lookup | From Contact | Auto | sarah@techcorp.com |
+| `Phone / WhatsApp (from Outreach Message)` | Lookup | From Contact | Auto | +1-555-0123 |
+| `LinkedIn URL (from Outreach Message)` | Lookup | From Contact | Auto | https://linkedin.com/in/sarah |
+| `Last Outreach Date (from Outreach Message)` | Lookup | From Contact | Auto | 2024-12-06 |
+| `Outreach Channel` | Single Select | How outreach was sent | Yes | Email, LinkedIn, Phone, InMail |
+| `Outreach Status` | Single Select | Current status | Yes | Draft, Ready, Sent, Responded, No Response |
+| `Outreach Message` | Long Text | Message content | Yes | "Hi Sarah, I noticed..." |
+| `Sent Date` | Date | When message was sent | No | 2024-12-06 |
+| `Response Date` | Date | When response received | No | 2024-12-08 |
+| `Response` | Long Text | Response content | No | "Thanks for reaching out..." |
+| `Open URL` | Button | Opens LinkedIn + outreachID param | Auto | Formula: `{LinkedIn URL} & "?outreachID=" & RECORD_ID()` |
+| `Created Time` | Created Time | Auto-populated | Yes | 2024-12-06 10:30 AM |
+| `Last Modified` | Last Modified Time | Auto-populated | Yes | 2024-12-06 2:45 PM |
+
+**Views:**
+1. **All Outreach** (Grid): All records, sorted by Created (newest first)
+2. **Ready to Send** (Grid): Status = "Ready"
+3. **Sent - Awaiting Response** (Grid): Status = "Sent", Response Date is empty
+4. **Responded** (Grid): Status = "Responded"
+5. **By Channel** (Grid): Grouped by Outreach Channel
+
+**Special Feature: Open URL Button**
+- The `Open URL` button field uses formula: `{LinkedIn URL (from Outreach Message)} & "?outreachID=" & RECORD_ID()`
+- When clicked, opens LinkedIn profile with `?outreachID=recXXXXXXXXXXXXXXX` parameter
+- Job Hunter extension detects this parameter and enters "Outreach Mode"
+- Displays outreach message with copy button and "Mark as Sent" CTA
+
+---
+
+### TABLE 4: Jobs Pipeline (Primary Table)
 
 **Purpose**: Core job records - one row per job opportunity
 
@@ -36,7 +152,10 @@
 |------------|------|-------------|----------|---------|
 | `Job ID` | Auto Number | Primary key | Yes | 1, 2, 3... |
 | `Job Title` | Single Line Text | Role title | Yes | "VP of Growth" |
-| `Company Name` | Single Line Text | Company name | Yes | "TechCorp" |
+| `Company Name` | Link to Record | Link to Companies table | Yes | → Company record |
+| `Companies` | Link to Record | Link to Companies (duplicate field) | No | → Company record |
+| `Contacts` | Link to Record | Link to hiring manager in Contacts | No | → Contact record |
+| `Contacts (Linked Jobs)` | Link to Record | Link to Contacts (alternate field name) | No | → Contact record |
 | `Company Page` | URL | Company page on the job platform | No | https://linkedin.com/company/techcorp |
 | `Job URL` | URL | Original job posting URL | Yes | https://linkedin.com/jobs/... |
 | `Location` | Single Line Text | Job location | No | "San Francisco, CA" |
@@ -51,6 +170,7 @@
 | `Research Brief` | Link to Record | Link to Research Briefs table | No | → Research record |
 | `Generated Assets` | Link to Records | Links to Generated Assets table | No | → Multiple asset records |
 | `Application Tracking` | Link to Records | Links to Application Tracking table | No | → Multiple asset records |
+| `Outreach Log` | Link to Records | Links to Outreach Log table | No | → Multiple outreach records |
 | `Applied Date` | Date | When application was submitted | No | 2024-12-10 |
 | `Interview Date` | Date | When interview is scheduled | No | 2024-12-15 |
 | `Outcome` | Single Select | Final result | No | Offer, No Response, Rejected |
@@ -207,22 +327,76 @@
 ---
 
 ## 🔗 TABLE RELATIONSHIPS
+
+### CRM Data Model (Companies, Contacts, Jobs)
 ```
-Jobs Pipeline (Primary)
+Companies (Central Hub)
+    ↓ (One-to-Many)
+Contacts (Hiring Managers, Recruiters, Network)
+    ↓ (One-to-Many)
+Jobs Pipeline (Job Opportunities)
     ↓ (One-to-One)
 Research Briefs
     ↓ (One-to-Many)
 Generated Assets (6 assets per job)
     ↓ (One-to-Many)
 Application Tracking (Multiple events per job)
-    ↓ (Aggregates to)
-Monthly Analytics (Summary of all jobs)
+
+Companies ↔ Outreach Log (Many-to-Many via Contacts)
+Contacts ↔ Outreach Log (One-to-Many)
+Jobs Pipeline ↔ Outreach Log (One-to-Many)
+```
+
+### Relational Structure
+```
+┌─────────────┐
+│  Companies  │ (Central entity)
+└─────┬───────┘
+      │ 1:N
+      ▼
+┌─────────────┐         ┌──────────────┐
+│  Contacts   │────────>│ Outreach Log │
+└─────┬───────┘  1:N    └──────────────┘
+      │ 1:N
+      ▼
+┌──────────────────┐
+│  Jobs Pipeline   │
+└────────┬─────────┘
+         │ 1:1
+         ▼
+┌──────────────────┐
+│ Research Briefs  │
+└────────┬─────────┘
+         │ 1:N
+         ▼
+┌──────────────────┐
+│ Generated Assets │
+└──────────────────┘
+         │ 1:N
+         ▼
+┌─────────────────────┐
+│ Application Tracking│
+└─────────────────────┘
+         │ Aggregates
+         ▼
+┌──────────────────┐
+│ Monthly Analytics│
+└──────────────────┘
 ```
 
 **Link Field Behavior:**
+- **Companies → Contacts**: One-to-many (company has multiple contacts)
+- **Companies → Jobs Pipeline**: One-to-many (company has multiple job opportunities) via `Company Name` link field
+- **Contacts → Companies**: Many-to-one (contact belongs to one company) via `Company` link field
+- **Contacts → Jobs Pipeline**: One-to-many (contact is hiring manager for multiple jobs) via `Contacts` link field
+- **Contacts → Outreach Log**: One-to-many (contact has multiple outreach interactions) via `Contact` link field
+- **Jobs Pipeline → Companies**: Many-to-one via `Company Name` link field
+- **Jobs Pipeline → Contacts**: Many-to-one via `Contacts` link field (hiring manager)
 - **Jobs Pipeline → Research Briefs**: One-to-one (each job has one research brief)
 - **Jobs Pipeline → Generated Assets**: One-to-many (each job has 6+ assets)
 - **Jobs Pipeline → Application Tracking**: One-to-many (each job has multiple events)
+- **Jobs Pipeline → Outreach Log**: One-to-many (job can have multiple outreach interactions)
+- **Outreach Log → Contacts**: Many-to-one (outreach targets one contact) via `Contact` link field
 - **Research Briefs → Jobs Pipeline**: Lookup field to pull company name, job title
 - **Generated Assets → Jobs Pipeline**: Lookup field to pull company name, job title
 

@@ -10,13 +10,15 @@ Transform hours of manual work per application → 15 minutes with consistent qu
 
 Job Hunter OS is a systematized job search automation system designed to help land $200K+ remote Growth/RevOps/Lifecycle leadership roles. It combines:
 
-- **Chrome Extension**: Captures job data from LinkedIn/Indeed with one click
-- **Airtable Database**: Central data storage with 5 interconnected tables
+- **Chrome Extension**: Captures job data from LinkedIn/Indeed with one click + Outreach Mode for hiring managers
+- **Airtable CRM**: Relational database (8 tables) tracking Companies, Contacts, Jobs, and Outreach
 - **n8n Workflows**: Automated research and asset generation pipelines
 - **AI Integration**: Perplexity (research) + OpenAI (asset generation)
 - **Google Drive**: Organized storage of all generated materials
 
 **Output per job**: 6 personalized assets in <5 minutes (research brief, 90-day plan, tailored resume, cover letter, interview prep, outreach message)
+
+**CRM Features**: Automatic company/contact record creation, hiring manager tracking, outreach workflow with LinkedIn integration
 
 ---
 
@@ -100,6 +102,42 @@ claudeUse starter prompts from Implementation Roadmap
 3. **Wait 3-5 minutes** (automation runs)
 4. **Review assets in Airtable/Drive**
 5. **Apply with confidence**
+
+### CRM & Outreach Mode
+
+Job Hunter now includes a full CRM system for managing contacts and outreach:
+
+#### Automatic Record Creation
+When you capture a job, the extension automatically creates/updates:
+- **Company record** in the Companies table
+- **Contact record** for the hiring manager (if detected)
+- **Job record** in Jobs Pipeline (linked to both)
+
+#### Outreach Mode Workflow
+
+1. **In Airtable Outreach Log table**: Create outreach records for hiring managers
+2. **Add outreach message**: Write or paste your personalized outreach message
+3. **Click "Open URL" button**: Opens the contact's LinkedIn profile with a special parameter
+4. **Extension detects Outreach Mode**: Shows a special UI overlay with:
+   - Contact details (name, title, company, email)
+   - Your outreach message with a "Copy" button
+   - "Mark as Sent" button to track status
+5. **Send your message on LinkedIn**: Copy the message and send via LinkedIn
+6. **Click "Mark as Sent"**: Updates both Outreach Log and Contact records with sent date
+7. **Track responses**: Update the Response field when you hear back
+
+#### Airtable Button Setup
+
+To enable "Open URL" functionality in your Outreach Log table:
+
+1. Add a **Button** field called `Open URL`
+2. Use this formula:
+   ```
+   {LinkedIn URL (from Outreach Message)} & "?outreachID=" & RECORD_ID()
+   ```
+3. When clicked, it will open the LinkedIn profile in Outreach Mode
+
+**Note**: The `outreachID` parameter must be ONLY the Airtable record ID (format: `recXXXXXXXXXXXXXXX`). Do not add any prefix like "1" before the record ID.
 
 ### Asset Quality
 

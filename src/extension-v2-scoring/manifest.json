@@ -28,13 +28,14 @@
   "content_scripts": [
     {
       "matches": [
-        "*://*.linkedin.com/jobs/*",
+        "*://*.linkedin.com/*",
         "*://*.indeed.com/*"
       ],
       "js": [
         "scoring-engine.js",
         "results-dashboard.js",
         "floating-panel.js",
+        "outreach-mode.js",
         "content.js"
       ],
       "run_at": "document_idle"
