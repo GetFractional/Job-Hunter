@@ -331,33 +331,40 @@ function updateJobHighlights(panel, jobData, scoreResult) {
     }
   }
 
-  // Hiring Manager (with optional job title)
+  // Hiring Manager
   if (hiringManagerEl) {
     const managerDetails = jobData.hiringManagerDetails;
-    const managerName = managerDetails?.name || jobData.hiringManager;
+    let managerName = null;
+
+    // Extract just the name, no title or company info
+    if (managerDetails && managerDetails.name) {
+      managerName = managerDetails.name;
+    } else if (jobData.hiringManager) {
+      // Fallback: extract name from full string (format might be "Name, Title")
+      const nameParts = jobData.hiringManager.split(',');
+      managerName = nameParts[0].trim();
+    }
 
     if (managerName) {
-      // Display format: "👤 Name" or "👤 Name, Title"
-      const displayText = managerDetails?.title
-        ? `👤 ${managerDetails.name}, ${managerDetails.title}`
-        : `👤 ${managerName}`;
+      // Display format: "👤 Hiring Manager: Name" (name only, no title/company)
+      const displayText = `👤 Hiring Manager: ${managerName}`;
 
       hiringManagerEl.textContent = displayText;
       hiringManagerEl.classList.add('jh-fp-has-value');
       hiringManagerEl.classList.remove('jh-fp-neutral');
 
-      // Tooltip with full details
+      // Tooltip with title if available
       const tooltipText = managerDetails?.title
-        ? `Hiring Manager: ${managerDetails.name}\nTitle: ${managerDetails.title}`
-        : `Hiring Manager: ${managerName}`;
+        ? `${managerName} (${managerDetails.title})`
+        : managerName;
       hiringManagerEl.setAttribute('data-tooltip', tooltipText);
     } else {
-      // Show fallback message instead of hiding
-      hiringManagerEl.textContent = '👤 Hiring Manager: Not found on page';
+      // Show "Unknown" instead of "Not found"
+      hiringManagerEl.textContent = '👤 Hiring Manager: Unknown';
       hiringManagerEl.classList.remove('jh-fp-has-value');
       hiringManagerEl.classList.add('jh-fp-neutral');
       hiringManagerEl.style.display = 'inline-flex'; // Ensure it's visible
-      hiringManagerEl.setAttribute('data-tooltip', 'Hiring manager not detected on this job posting');
+      hiringManagerEl.setAttribute('data-tooltip', 'Hiring manager not listed in job posting');
     }
   }
 }
@@ -761,7 +768,7 @@ function renderCriteriaItems(criteria, type = 'j2u') {
         </div>
         <div class="jh-fp-benefit-badges">
           ${displayBenefits.map(benefit =>
-            `<span class="jh-fp-benefit-badge" title="${escapeHtml(benefit.label)}">${benefit.icon} ${escapeHtml(benefit.label)}</span>`
+            `<span class="jh-fp-benefit-badge" title="${escapeHtml(benefit.label)}">${escapeHtml(benefit.label)}</span>`
           ).join('')}
           ${remaining > 0 ? `<span class="jh-fp-benefit-more">+${remaining} more</span>` : ''}
         </div>

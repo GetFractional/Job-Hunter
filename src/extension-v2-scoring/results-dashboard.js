@@ -315,13 +315,23 @@ function updateJobMetadata(jobData) {
   const hiringManagerRow = document.getElementById('jh-hiring-manager-row');
   const hiringManagerValue = document.getElementById('jh-hiring-manager-value');
   if (hiringManagerValue) {
-    const manager = jobData.hiringManager;
-    if (manager) {
-      hiringManagerValue.textContent = manager;
+    // Extract only the name from hiringManagerDetails if available, otherwise use the full string
+    let managerDisplay = null;
+    if (jobData.hiringManagerDetails && jobData.hiringManagerDetails.name) {
+      managerDisplay = jobData.hiringManagerDetails.name;
+    } else if (jobData.hiringManager) {
+      // Fallback to full hiringManager string, but extract just name if it has ", Title" format
+      const nameParts = jobData.hiringManager.split(',');
+      managerDisplay = nameParts[0].trim();
+    }
+
+    if (managerDisplay) {
+      hiringManagerValue.textContent = managerDisplay;
       hiringManagerValue.classList.add('jh-has-value');
     } else {
-      hiringManagerValue.textContent = 'Not listed';
-      if (hiringManagerRow) hiringManagerRow.style.display = 'none';
+      hiringManagerValue.textContent = 'Unknown';
+      hiringManagerValue.classList.remove('jh-has-value');
+      // Keep the row visible to show "Unknown" status
     }
   }
 }

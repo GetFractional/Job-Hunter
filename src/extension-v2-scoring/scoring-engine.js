@@ -507,9 +507,12 @@ function scoreWorkplaceType(jobPayload, userProfile) {
 
 /**
  * Score bonus and equity presence (0-50)
- * Scores bonus and equity based on user's separate preferences for each
+ * NEW DYNAMIC SCORING:
+ * - 0 points if neither bonus nor equity mentioned
+ * - 25 points if one is mentioned
+ * - 50 points if both are mentioned
  * @param {Object} jobPayload - Job data with equity_mentioned, bonus_mentioned
- * @param {Object} userProfile - User preferences with bonus_preference and equity_preference
+ * @param {Object} userProfile - User preferences (for context/rationale only)
  * @returns {Object} Criterion score result
  */
 function scoreEquityBonus(jobPayload, userProfile) {
@@ -517,88 +520,43 @@ function scoreEquityBonus(jobPayload, userProfile) {
   const bonusMentioned = jobPayload.bonusMentioned || jobPayload.bonus_mentioned || false;
   const bonusPercent = jobPayload.bonus_estimated_percent;
 
-  // Get separate preferences (with fallback to old combined field for migration)
-  const bonusPref = userProfile?.preferences?.bonus_preference ||
-    userProfile?.preferences?.bonus_and_equity_preference || 'preferred';
-  const equityPref = userProfile?.preferences?.equity_preference ||
-    (userProfile?.preferences?.bonus_and_equity_preference === 'required' ? 'preferred' : 'optional');
-
-  // Weight for each component (bonus slightly higher based on user preference patterns)
-  const bonusWeight = 0.55;
-  const equityWeight = 0.45;
-
-  // Score bonus (0-50 scale for this component)
-  // FIX: Score 0 when not mentioned - we can't assume bonus exists if not stated
-  let bonusScore = 0;
-  let bonusRationale = '';
-  if (bonusMentioned) {
-    bonusScore = 50;
-    bonusRationale = bonusPercent ? `${Math.round(bonusPercent * 100)}% bonus mentioned` : 'Bonus mentioned';
-  } else {
-    // When not mentioned, score 0 regardless of preference
-    // User's preference affects how they FEEL about 0, not the score itself
-    bonusScore = 0;
-    if (bonusPref === 'required') {
-      bonusRationale = 'No bonus mentioned (you require it)';
-    } else if (bonusPref === 'preferred') {
-      bonusRationale = 'No bonus mentioned (you prefer it)';
-    } else {
-      bonusRationale = 'No bonus mentioned';
-    }
-  }
-
-  // Score equity (0-50 scale for this component)
-  // FIX: Score 0 when not mentioned - we can't assume equity exists if not stated
-  let equityScore = 0;
-  let equityRationale = '';
-  if (equityMentioned) {
-    equityScore = 50;
-    equityRationale = 'Equity/stock options mentioned';
-  } else {
-    // When not mentioned, score 0 regardless of preference
-    equityScore = 0;
-    if (equityPref === 'required') {
-      equityRationale = 'No equity mentioned (you require it)';
-    } else if (equityPref === 'preferred') {
-      equityRationale = 'No equity mentioned (you prefer it)';
-    } else {
-      equityRationale = 'No equity mentioned';
-    }
-  }
-
-  // Combine scores based on weights
-  const combinedScore = (bonusScore * bonusWeight) + (equityScore * equityWeight);
-
-  // Build actual value string
-  const parts = [];
-  if (bonusMentioned) {
-    parts.push(bonusPercent ? `${Math.round(bonusPercent * 100)}% bonus` : 'Bonus');
-  }
-  if (equityMentioned) {
-    parts.push('Equity');
-  }
-  const actualValue = parts.length > 0 ? parts.join(' + ') : 'Neither mentioned';
-
-  // Build combined rationale
+  // NEW DYNAMIC SCORING LOGIC
+  let score = 0;
   let rationale = '';
-  if (bonusMentioned && equityMentioned) {
-    rationale = 'Both bonus and equity mentioned - great total comp potential';
-  } else if (bonusMentioned) {
-    rationale = `Bonus: ${bonusRationale}. Equity: ${equityRationale}`;
-  } else if (equityMentioned) {
-    rationale = `Equity: ${equityRationale}. Bonus: ${bonusRationale}`;
+  let actualValue = '';
+
+  const bothCount = (bonusMentioned ? 1 : 0) + (equityMentioned ? 1 : 0);
+
+  if (bothCount === 0) {
+    // Neither mentioned: 0 points
+    score = 0;
+    actualValue = 'Neither mentioned';
+    rationale = 'No bonus or equity mentioned in job description';
+  } else if (bothCount === 1) {
+    // One mentioned: 25 points
+    score = 25;
+    if (bonusMentioned && !equityMentioned) {
+      actualValue = bonusPercent ? `${Math.round(bonusPercent * 100)}% bonus` : 'Bonus';
+      rationale = 'Bonus mentioned, but no equity';
+    } else {
+      actualValue = 'Equity';
+      rationale = 'Equity mentioned, but no bonus';
+    }
   } else {
-    rationale = `${bonusRationale}. ${equityRationale}`;
+    // Both mentioned: 50 points
+    score = 50;
+    const bonusPart = bonusPercent ? `${Math.round(bonusPercent * 100)}% bonus` : 'Bonus';
+    actualValue = `${bonusPart} + Equity`;
+    rationale = 'Both bonus and equity mentioned - excellent total comp package';
   }
 
   return {
     criteria: 'Bonus & Equity',
-    criteria_description: 'Whether the job mentions performance bonuses and/or equity compensation based on your preferences',
+    criteria_description: 'Whether the job mentions performance bonuses and/or equity compensation (0=neither, 25=one, 50=both)',
     actual_value: actualValue,
-    score: Math.round(combinedScore),
+    score: score,
     rationale,
-    bonus_score: Math.round(bonusScore),
-    equity_score: Math.round(equityScore)
+    max_score: 50
   };
 }
 
@@ -614,72 +572,62 @@ function scoreBenefits(jobPayload, userProfile) {
 
   // Individual benefits with detection patterns
   // Each benefit has a weight based on importance
+  // Icons removed for consistent text-only badge styling
   const individualBenefits = {
     medical: {
       patterns: [/medical\s*(insurance|coverage|benefits|plan)/i, /health\s*(insurance|coverage|benefits|plan)/i],
       weight: 12,
-      label: 'Medical',
-      icon: '🏥'
+      label: 'Medical'
     },
     dental: {
       patterns: [/dental\s*(insurance|coverage|benefits|plan)/i],
       weight: 8,
-      label: 'Dental',
-      icon: '🦷'
+      label: 'Dental'
     },
     vision: {
       patterns: [/vision\s*(insurance|coverage|benefits|plan)/i, /eye\s+care/i],
       weight: 6,
-      label: 'Vision',
-      icon: '👁️'
+      label: 'Vision'
     },
     '401k': {
       patterns: [/401\s*\(?\s*k\)?/i, /retirement\s*(plan|match|matching|contribution)/i, /pension/i],
       weight: 12,
-      label: '401k',
-      icon: '💰'
+      label: '401k'
     },
     hsa_fsa: {
       patterns: [/\bhsa\b/i, /\bfsa\b/i, /health\s+savings/i, /flexible\s+spending/i],
       weight: 6,
-      label: 'HSA/FSA',
-      icon: '💳'
+      label: 'HSA/FSA'
     },
     pto: {
       patterns: [/\bpto\b/i, /paid\s+time\s+off/i, /unlimited\s+(pto|vacation)/i, /vacation\s+(days?|time|policy)/i, /flexible\s+pto/i],
       weight: 10,
-      label: 'PTO',
-      icon: '🏖️'
+      label: 'PTO'
     },
     paid_parental: {
       patterns: [/parental\s+leave/i, /maternity\s+leave/i, /paternity\s+leave/i, /family\s+leave/i, /paid\s+(maternity|paternity)/i],
       weight: 8,
-      label: 'Paid Parental',
-      icon: '👶'
+      label: 'Paid Parental'
     },
     tuition: {
       patterns: [/tuition\s+(reimbursement|assistance|support)/i, /education\s+(reimbursement|assistance|benefit)/i],
       weight: 6,
-      label: 'Tuition Reimbursement',
-      icon: '🎓'
+      label: 'Tuition Reimbursement'
     },
     learning_stipend: {
-      patterns: [/learning\s+(stipend|budget|allowance)/i, /professional\s+development/i, /training\s+(budget|stipend)/i, /conference\s+budget/i],
+      patterns: [/learning\s+(stipend|budget|allowance)/i, /professional\s+development/i, /training\s+(budget|stipend)/i, /conference\s+budget)/i],
       weight: 6,
-      label: 'Learning Stipend',
-      icon: '📚'
+      label: 'Learning Stipend'
     },
     wfh_reimbursement: {
       patterns: [/work\s+from\s+home\s+(stipend|reimbursement|budget)/i, /home\s+office\s+(stipend|reimbursement|setup)/i, /remote\s+work\s+(stipend|budget)/i, /equipment\s+allowance/i],
       weight: 6,
-      label: 'WFH Reimbursement',
-      icon: '🏡'
+      label: 'WFH Reimbursement'
     },
     relocation: {
       patterns: [/relocation\s+(assistance|package|support|reimbursement)/i, /moving\s+(assistance|reimbursement)/i],
       weight: 8,
-      label: 'Relocation',
-      icon: '📦'
+      label: 'Relocation'
     }
   };
 
@@ -692,7 +640,7 @@ function scoreBenefits(jobPayload, userProfile) {
     const hasMatch = config.patterns.some(pattern => pattern.test(description));
     if (hasMatch) {
       matchedBenefits.push(config.label);
-      benefitBadges.push({ label: config.label, icon: config.icon });
+      benefitBadges.push({ label: config.label }); // Icon removed for consistent text-only styling
       totalScore += config.weight;
     }
   }

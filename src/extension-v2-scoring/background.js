@@ -335,6 +335,19 @@ async function upsertCompany(credentials, jobData) {
     console.log('[Job Hunter BG] ✓ Website:', jobData.website);
   }
 
+  // Company Type (exists in Companies schema - Single Select)
+  // Valid options must match Airtable dropdown (e.g., "Public Company", "Privately Held", etc.)
+  if (jobData.companyType) {
+    companyFields['Type'] = sanitizeString(jobData.companyType);
+    console.log('[Job Hunter BG] ✓ Company Type:', jobData.companyType);
+  }
+
+  // Company Description (exists in Companies schema - Long Text)
+  if (jobData.companyDescription) {
+    companyFields['Company Description'] = sanitizeString(jobData.companyDescription);
+    console.log('[Job Hunter BG] ✓ Company Description:', jobData.companyDescription.substring(0, 100) + '...');
+  }
+
   // Size (exists in Companies schema - Single Select)
   // Map from headcount if available
   const totalEmployees = ensureNumber(jobData.companyHeadcount || jobData.totalEmployees);

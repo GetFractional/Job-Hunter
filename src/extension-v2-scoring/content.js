@@ -644,6 +644,17 @@ function extractLinkedInJobData() {
       hiringManagerTitle = cleanHiringManagerTitle(hiringManagerTitle);
     }
 
+    // CRITICAL: Extract LinkedIn URL from hiring manager link element
+    let hiringManagerLinkedInUrl = null;
+    if (nameEl && nameEl.tagName === 'A' && nameEl.href) {
+      // Clean the LinkedIn profile URL
+      const linkedInUrlMatch = nameEl.href.match(/linkedin\.com\/in\/([^/?]+)/);
+      if (linkedInUrlMatch) {
+        hiringManagerLinkedInUrl = `https://www.linkedin.com/in/${linkedInUrlMatch[1]}/`;
+        console.log('[Job Hunter] ✓ Hiring Manager LinkedIn URL extracted:', hiringManagerLinkedInUrl);
+      }
+    }
+
     // Store as structured object
     if (hiringManagerName) {
       data.hiringManager = hiringManagerTitle
@@ -653,10 +664,12 @@ function extractLinkedInJobData() {
         name: hiringManagerName,
         title: hiringManagerTitle
       };
+      data.hiringManagerLinkedInUrl = hiringManagerLinkedInUrl; // NEW: Store LinkedIn URL
       console.log('[Job Hunter] ✓ Hiring Manager extracted:', data.hiringManager);
       console.log('[Job Hunter] Hiring Manager Details:', {
         name: hiringManagerName,
         title: hiringManagerTitle,
+        linkedInUrl: hiringManagerLinkedInUrl,
         foundInContainer: !!hiringTeamContainer,
         nameSelector: nameEl?.className || 'unknown',
         titleSelector: titleEl?.className || 'unknown'
@@ -762,21 +775,74 @@ function extractLinkedInJobData() {
       }
     }
 
-    // Extract Followers from "About the company" section
+    // Extract company metadata from "About the company" section
     const aboutCompanySection = document.querySelector('.jobs-company__company-description');
     if (aboutCompanySection) {
-      const followersText = aboutCompanySection.textContent || '';
-      const followersMatch = followersText.match(/(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:K|M)?\s*followers?/i);
+      const aboutText = aboutCompanySection.textContent || '';
+
+      // Extract Followers
+      const followersMatch = aboutText.match(/(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:K|M)?\s*followers?/i);
       if (followersMatch) {
         let followersValue = followersMatch[1].replace(/,/g, '');
         // Handle K (thousands) and M (millions) suffixes
-        if (followersText.match(/\d+\s*K\s*followers?/i)) {
+        if (aboutText.match(/\d+\s*K\s*followers?/i)) {
           followersValue = parseFloat(followersValue) * 1000;
-        } else if (followersText.match(/\d+\s*M\s*followers?/i)) {
+        } else if (aboutText.match(/\d+\s*M\s*followers?/i)) {
           followersValue = parseFloat(followersValue) * 1000000;
         }
         data.companyFollowers = parseInt(followersValue, 10);
         console.log('[Job Hunter] ✓ Followers extracted:', data.companyFollowers);
+      }
+
+      // Extract Company Type (Public, Private, etc.)
+      // LinkedIn shows company type like "Public Company", "Privately Held", "Partnership", etc.
+      const typePatterns = [
+        /\b(Public Company|Publicly Traded)\b/i,
+        /\b(Privately Held|Private Company)\b/i,
+        /\b(Self-Owned|Self-employed)\b/i,
+        /\b(Government Agency)\b/i,
+        /\b(Nonprofit|Non-profit)\b/i,
+        /\b(Educational Institution|Educational)\b/i,
+        /\b(Partnership)\b/i,
+        /\b(Sole Proprietorship)\b/i
+      ];
+
+      for (const pattern of typePatterns) {
+        const typeMatch = aboutText.match(pattern);
+        if (typeMatch) {
+          data.companyType = typeMatch[1];
+          console.log('[Job Hunter] ✓ Company Type extracted:', data.companyType);
+          break;
+        }
+      }
+
+      // Extract Company Description (usually the first paragraph in the about section)
+      const descriptionEl = aboutCompanySection.querySelector('p, div.inline-show-more-text');
+      if (descriptionEl) {
+        const description = descriptionEl.textContent?.trim();
+        if (description && description.length > 30) { // Only capture if substantive
+          data.companyDescription = description;
+          console.log('[Job Hunter] ✓ Company Description extracted:', description.substring(0, 100) + '...');
+        }
+      }
+    }
+
+    // Extract Website from company page link (if we have company page URL)
+    if (data.companyPageUrl) {
+      // Try to find website link in the "About" section or company card
+      const websiteSelectors = [
+        '.jobs-company__company-description a[href*="http"]:not([href*="linkedin.com"])',
+        '.org-top-card-secondary-content__website a',
+        'a[data-tracking-control-name="organization_guest_web-site-link"]'
+      ];
+
+      for (const selector of websiteSelectors) {
+        const websiteEl = document.querySelector(selector);
+        if (websiteEl && websiteEl.href && !websiteEl.href.includes('linkedin.com')) {
+          data.website = websiteEl.href;
+          console.log('[Job Hunter] ✓ Website extracted:', data.website);
+          break;
+        }
       }
     }
 
