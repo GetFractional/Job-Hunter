@@ -615,7 +615,7 @@ function scoreBenefits(jobPayload, userProfile) {
       label: 'Tuition Reimbursement'
     },
     learning_stipend: {
-      patterns: [/learning\s+(stipend|budget|allowance)/i, /professional\s+development/i, /training\s+(budget|stipend)/i, /conference\s+budget)/i],
+      patterns: [/learning\s+(stipend|budget|allowance)/i, /professional\s+development/i, /training\s+(budget|stipend)/i, /conference\s+budget/i],
       weight: 6,
       label: 'Learning Stipend'
     },
