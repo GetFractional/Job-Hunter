@@ -31,14 +31,29 @@ const TABLES = {
 // ===========================
 
 /**
- * Sanitize string values for Airtable - removes double quotes that cause 422 errors
+ * Sanitize string values for Airtable - removes quotes and escapes that cause 422 errors
+ * CRITICAL: Handles multiple levels of stringification (e.g., "\"MODERATE FIT\"" → "MODERATE FIT")
  * @param {string} value - String to sanitize
  * @returns {string} Sanitized string
  */
 function sanitizeString(value) {
   if (typeof value !== 'string') return value;
-  // Remove leading/trailing quotes that might cause double-stringification
-  return value.replace(/^"|"$/g, '').trim();
+
+  // Remove ALL quote characters (both regular and escaped) recursively
+  let sanitized = value;
+  let previousValue;
+
+  // Keep removing quotes until no more are found (handles nested stringification)
+  do {
+    previousValue = sanitized;
+    sanitized = sanitized
+      .replace(/^["']+|["']+$/g, '')  // Remove leading/trailing quotes
+      .replace(/\\"/g, '')             // Remove escaped quotes \"
+      .replace(/\\'/g, '')             // Remove escaped single quotes \'
+      .trim();
+  } while (sanitized !== previousValue && sanitized.length > 0);
+
+  return sanitized;
 }
 
 /**
@@ -113,16 +128,34 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     handleCreateTripleRecord(request.job, request.score)
       .then(result => {
         const elapsed = Date.now() - startTime;
-        console.log('[Job Hunter BG] ✅ Background processing complete in', elapsed, 'ms');
-        console.log('[Job Hunter BG] Result:', result);
+        console.log('[Job Hunter BG] ✅ Background processing COMPLETE in', elapsed, 'ms');
+        console.log('[Job Hunter BG] SUCCESS - Result:', result);
 
-        // Could optionally notify content script here if needed
-        // chrome.tabs.sendMessage(sender.tab.id, { action: 'jobCaptureComplete', result });
+        // CRITICAL: Notify content script of SUCCESS so button can update
+        chrome.tabs.sendMessage(sender.tab.id, {
+          action: 'jobCaptureComplete',
+          success: true,
+          recordId: result.recordId,
+          companyRecordId: result.companyRecordId,
+          contactRecordId: result.contactRecordId,
+          message: 'Job successfully captured to Airtable!'
+        }).catch(err => {
+          console.log('[Job Hunter BG] ⚠️ Could not notify content script of success (tab may be closed)');
+        });
       })
       .catch(error => {
         const elapsed = Date.now() - startTime;
-        console.error('[Job Hunter BG] ❌ Background processing failed in', elapsed, 'ms');
-        console.error('[Job Hunter BG] Error:', error.message);
+        console.error('[Job Hunter BG] ❌ Background processing FAILED in', elapsed, 'ms');
+        console.error('[Job Hunter BG] ERROR:', error.message);
+
+        // CRITICAL: Notify content script of FAILURE so button can show error
+        chrome.tabs.sendMessage(sender.tab.id, {
+          action: 'jobCaptureComplete',
+          success: false,
+          error: error.message || 'Failed to save job to Airtable'
+        }).catch(err => {
+          console.log('[Job Hunter BG] ⚠️ Could not notify content script of error (tab may be closed)');
+        });
       });
 
     // Return true to indicate we handled the message
@@ -195,20 +228,32 @@ async function handleCreateTripleRecord(jobData, scoreData = null) {
   try {
     // STEP A: Upsert Company record
     const companyRecordId = await upsertCompany(credentials, jobData);
-    console.log('[Job Hunter BG] Company record ID:', companyRecordId);
+    console.log('[Job Hunter BG] ✓ Company record ID:', companyRecordId);
+
+    // HUMAN-SPEED DELAY: Prevent LinkedIn throttling (critical for account safety)
+    console.log('[Job Hunter BG] ⏳ Waiting 1.5s before next API call...');
+    await delay(1500);
 
     // STEP B: Upsert Contact record (if hiring manager data exists)
     let contactRecordId = null;
     if (jobData.hiringManagerDetails?.name) {
       contactRecordId = await upsertContact(credentials, jobData, companyRecordId);
-      console.log('[Job Hunter BG] Contact record ID:', contactRecordId);
+      if (contactRecordId) {
+        console.log('[Job Hunter BG] ✓ Contact record ID:', contactRecordId);
+
+        // HUMAN-SPEED DELAY: Prevent LinkedIn throttling
+        console.log('[Job Hunter BG] ⏳ Waiting 1.5s before next API call...');
+        await delay(1500);
+      } else {
+        console.log('[Job Hunter BG] ℹ️ Contact creation skipped (validation rejected fake contact)');
+      }
     } else {
-      console.log('[Job Hunter BG] No hiring manager data, skipping Contact creation');
+      console.log('[Job Hunter BG] ℹ️ No hiring manager data, skipping Contact creation');
     }
 
     // STEP C: Create Job record with links to Company and Contact
     const jobRecordId = await createJob(credentials, jobData, scoreData, companyRecordId, contactRecordId);
-    console.log('[Job Hunter BG] Job record created:', jobRecordId);
+    console.log('[Job Hunter BG] ✓ Job record created:', jobRecordId);
 
     return {
       success: true,
@@ -381,10 +426,52 @@ async function upsertContact(credentials, jobData, companyRecordId) {
     return null;
   }
 
+  // CRITICAL: Validate this is a real person name, not a generic placeholder or company name
+  const invalidNames = [
+    'hiring manager',
+    'hiring team',
+    'recruiter',
+    'hr manager',
+    'human resources',
+    'talent acquisition',
+    'john doe',
+    'jane doe',
+    'unknown',
+    'n/a',
+    'na',
+    'not available'
+  ];
+
+  const normalizedName = hiringManager.name.toLowerCase().trim();
+  const normalizedCompanyName = jobData.companyName.toLowerCase().trim();
+
+  // CRITICAL: Reject if hiring manager name equals company name (fake contact detection)
+  if (normalizedName === normalizedCompanyName) {
+    console.log('[Job Hunter BG] ❌ REJECTED fake contact - hiring manager name matches company name:', hiringManager.name);
+    return null;
+  }
+
+  if (invalidNames.includes(normalizedName)) {
+    console.log('[Job Hunter BG] ❌ REJECTED invalid hiring manager name:', hiringManager.name);
+    return null;
+  }
+
   // Parse actual hiring manager name
   const nameParts = hiringManager.name.trim().split(' ');
   const firstName = sanitizeString(nameParts[0] || '');
   const lastName = sanitizeString(nameParts.length > 1 ? nameParts.slice(1).join(' ') : '');
+
+  // CRITICAL: Reject if no last name (likely a company name, not a person)
+  if (!lastName || lastName.length === 0) {
+    console.log('[Job Hunter BG] ❌ REJECTED potential fake contact - no last name (single word name):', hiringManager.name);
+    return null;
+  }
+
+  // Validate we have at least a first name after sanitization
+  if (!firstName || firstName.length < 2) {
+    console.log('[Job Hunter BG] ❌ REJECTED invalid hiring manager name after parsing:', hiringManager.name);
+    return null;
+  }
 
   // Search for existing contact by LinkedIn URL (if available) or by name + company
   let searchFormula;
@@ -521,17 +608,43 @@ async function createJob(credentials, jobData, scoreData, companyRecordId, conta
     'Status': 'Captured'
   };
 
-  // Link to Contact record if available
+  // Link to Contact record if available (OPTIONAL - job can exist without contact)
   if (contactRecordId) {
     jobFields['Contacts'] = [contactRecordId];
+    console.log('[Job Hunter BG] ✓ Linking job to contact:', contactRecordId);
+  } else {
+    console.log('[Job Hunter BG] ℹ️ No contact to link - job will be created without hiring manager');
   }
 
-  // Add salary fields only if they have values
-  if (jobData.salaryMin !== null && jobData.salaryMin !== undefined) {
-    jobFields['Salary Min'] = jobData.salaryMin;
+  // Add salary fields only if they have valid numeric values (OPTIONAL - job can exist without salary)
+  try {
+    if (jobData.salaryMin !== null && jobData.salaryMin !== undefined) {
+      const salaryMin = typeof jobData.salaryMin === 'number'
+        ? jobData.salaryMin
+        : parseFloat(String(jobData.salaryMin).replace(/[^0-9.-]/g, ''));
+
+      if (!isNaN(salaryMin) && salaryMin > 0) {
+        jobFields['Salary Min'] = salaryMin;
+        console.log('[Job Hunter BG] ✓ Salary Min:', salaryMin);
+      }
+    }
+  } catch (e) {
+    console.log('[Job Hunter BG] ⚠️ Failed to parse Salary Min:', e.message);
   }
-  if (jobData.salaryMax !== null && jobData.salaryMax !== undefined) {
-    jobFields['Salary Max'] = jobData.salaryMax;
+
+  try {
+    if (jobData.salaryMax !== null && jobData.salaryMax !== undefined) {
+      const salaryMax = typeof jobData.salaryMax === 'number'
+        ? jobData.salaryMax
+        : parseFloat(String(jobData.salaryMax).replace(/[^0-9.-]/g, ''));
+
+      if (!isNaN(salaryMax) && salaryMax > 0) {
+        jobFields['Salary Max'] = salaryMax;
+        console.log('[Job Hunter BG] ✓ Salary Max:', salaryMax);
+      }
+    }
+  } catch (e) {
+    console.log('[Job Hunter BG] ⚠️ Failed to parse Salary Max:', e.message);
   }
   if (jobData.workplaceType) {
     jobFields['Workplace Type'] = jobData.workplaceType;
@@ -549,29 +662,49 @@ async function createJob(credentials, jobData, scoreData, companyRecordId, conta
     jobFields['Company Page'] = jobData.companyPageUrl;
   }
 
-  // Add score data if available
+  // Add score data if available (OPTIONAL - job can exist without scores)
   if (scoreData) {
-    if (scoreData.overall_score !== undefined) {
-      jobFields['Overall Fit Score'] = scoreData.overall_score;
-    }
-    if (scoreData.overall_label) {
-      // Map the label to valid Airtable select options and sanitize
-      const validFitOptions = ['STRONG FIT', 'GOOD FIT', 'MODERATE FIT', 'FAIR FIT', 'WEAK FIT', 'POOR FIT', 'HARD NO'];
-      let fitLabel = sanitizeString(scoreData.overall_label).toUpperCase().trim();
-
-      if (!validFitOptions.includes(fitLabel)) {
-        if (fitLabel.includes('STRONG')) fitLabel = 'STRONG FIT';
-        else if (fitLabel.includes('GOOD')) fitLabel = 'GOOD FIT';
-        else if (fitLabel.includes('MODERATE') || fitLabel.includes('FAIR')) fitLabel = 'GOOD FIT';
-        else if (fitLabel.includes('WEAK')) fitLabel = 'WEAK FIT';
-        else if (fitLabel.includes('POOR')) fitLabel = 'POOR FIT';
-        else if (fitLabel.includes('HARD') || fitLabel.includes('NO')) fitLabel = 'HARD NO';
-        else fitLabel = 'GOOD FIT';
-        console.log(`[Job Hunter BG] Mapped "${scoreData.overall_label}" to "${fitLabel}" for Airtable`);
+    try {
+      if (scoreData.overall_score !== undefined) {
+        jobFields['Overall Fit Score'] = scoreData.overall_score;
+        console.log('[Job Hunter BG] ✓ Overall Fit Score:', scoreData.overall_score);
       }
+    } catch (e) {
+      console.log('[Job Hunter BG] ⚠️ Failed to parse Overall Fit Score:', e.message);
+    }
 
-      // Final sanitization before sending
-      jobFields['Fit Recommendation'] = sanitizeString(fitLabel);
+    try {
+      if (scoreData.overall_label) {
+        // CRITICAL: Sanitize FIRST to remove any quotes/escapes, then process
+        let rawLabel = String(scoreData.overall_label);
+        let fitLabel = sanitizeString(rawLabel).toUpperCase().trim();
+
+        console.log('[Job Hunter BG] 🔍 Processing Fit Recommendation:', {
+          raw: rawLabel,
+          afterSanitization: fitLabel
+        });
+
+        // Map the label to valid Airtable select options
+        const validFitOptions = ['STRONG FIT', 'GOOD FIT', 'MODERATE FIT', 'FAIR FIT', 'WEAK FIT', 'POOR FIT', 'HARD NO'];
+
+        if (!validFitOptions.includes(fitLabel)) {
+          if (fitLabel.includes('STRONG')) fitLabel = 'STRONG FIT';
+          else if (fitLabel.includes('GOOD')) fitLabel = 'GOOD FIT';
+          else if (fitLabel.includes('MODERATE')) fitLabel = 'MODERATE FIT';
+          else if (fitLabel.includes('FAIR')) fitLabel = 'FAIR FIT';
+          else if (fitLabel.includes('WEAK')) fitLabel = 'WEAK FIT';
+          else if (fitLabel.includes('POOR')) fitLabel = 'POOR FIT';
+          else if (fitLabel.includes('HARD') || fitLabel.includes('NO')) fitLabel = 'HARD NO';
+          else fitLabel = 'GOOD FIT';
+          console.log(`[Job Hunter BG] ℹ️ Mapped "${rawLabel}" → "${fitLabel}"`);
+        }
+
+        // CRITICAL: Do NOT sanitize again - it's already been sanitized above
+        jobFields['Fit Recommendation'] = fitLabel;
+        console.log('[Job Hunter BG] ✓ Fit Recommendation:', fitLabel);
+      }
+    } catch (e) {
+      console.log('[Job Hunter BG] ⚠️ Failed to process Fit Recommendation:', e.message);
     }
     if (scoreData.job_to_user_fit?.score !== undefined) {
       jobFields['Preference Fit Score'] = scoreData.job_to_user_fit.score;

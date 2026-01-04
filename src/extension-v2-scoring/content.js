@@ -2099,6 +2099,15 @@ window.sendJobToAirtable = async function sendJobToAirtable(jobData, scoreResult
           return;
         }
 
+        // Handle "processing in background" response (async processing)
+        if (resp && resp.processing) {
+          console.log('[Job Hunter] Job capture processing in background...');
+          // Resolve immediately - actual result will come via jobCaptureComplete message
+          safeResolve({ success: true, processing: true, message: resp.message });
+          return;
+        }
+
+        // Handle immediate success/failure response (legacy path)
         if (resp && resp.success) {
           safeResolve(resp);
         } else {
