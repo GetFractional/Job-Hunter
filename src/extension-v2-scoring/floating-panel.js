@@ -753,18 +753,18 @@ function renderCriteriaItems(criteria, type = 'j2u') {
       `;
     }
 
-    // Show matched benefits as badges with icons if available
+    // Show matched benefits as badges (based on user preferences)
     let benefitBadgesHtml = '';
     if (c.benefit_badges && c.benefit_badges.length > 0) {
-      const totalBenefits = 11; // Total number of tracked benefits
-      const matchedCount = c.benefit_badges.length;
       const maxDisplay = 5;
       const displayBenefits = c.benefit_badges.slice(0, maxDisplay);
-      const remaining = matchedCount - maxDisplay;
+      const remaining = c.benefit_badges.length - maxDisplay;
+      // Use benefits_count from scoring engine (shows "X/Y" based on user preferences)
+      const benefitsCount = c.benefits_count || `${c.benefit_badges.length}/11`;
 
       benefitBadgesHtml = `
         <div class="jh-fp-benefits-summary">
-          <span class="jh-fp-benefits-count">Benefits: ${matchedCount}/${totalBenefits}</span>
+          <span class="jh-fp-benefits-count">Benefits: ${benefitsCount}</span>
         </div>
         <div class="jh-fp-benefit-badges">
           ${displayBenefits.map(benefit =>
