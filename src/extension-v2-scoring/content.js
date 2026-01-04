@@ -37,6 +37,14 @@ function isExtensionContextValid() {
 function handleInvalidContext() {
   console.log('[Job Hunter] Extension was reloaded. Please refresh this page to re-enable Job Hunter.');
   // Optional: Show a subtle notification to the user
+  if (typeof window.JobHunterSidebar !== 'undefined') {
+    try {
+      window.JobHunterSidebar.remove();
+    } catch (e) {
+      // Ignore errors during cleanup
+    }
+  }
+  // Also try legacy floating panel
   if (typeof window.JobHunterFloatingPanel !== 'undefined') {
     try {
       window.JobHunterFloatingPanel.remove();
@@ -52,10 +60,8 @@ if (window.jobHunterInjected) {
 } else {
   window.jobHunterInjected = true;
   initJobHunter();
-  // Initialize Outreach Mode if on LinkedIn profile with outreachID parameter
-  if (typeof window.JobHunterOutreach !== 'undefined') {
-    window.JobHunterOutreach.init();
-  }
+  // Mode detection and sidebar initialization are handled by mode-detection.js
+  // which is loaded before this script via manifest.json content_scripts
 }
 
 /**
@@ -1797,18 +1803,23 @@ function normalizeIndeedLocation(rawLocation) {
 
 /**
  * Initialize auto-scoring for a job page
- * The floating panel handles all UI - no overlay buttons needed
+ * The sidebar rail handles all UI - no overlay buttons needed
  * @param {string} source - 'LinkedIn' or 'Indeed'
  */
 function injectOverlay(source) {
-  // Don't inject if already initialized
-  if (document.getElementById('jh-floating-panel')) {
+  // Don't inject if already initialized (check both new sidebar and legacy floating panel)
+  if (document.getElementById('jh-sidebar-rail') || document.getElementById('jh-floating-panel')) {
     return;
   }
 
   console.log('[Job Hunter] Initializing auto-scoring...');
 
-  // Trigger auto-scoring via floating panel (if profile exists)
+  // Create sidebar if mode detection hasn't already done so
+  if (typeof window.JobHunterSidebar !== 'undefined' && !document.getElementById('jh-sidebar-rail')) {
+    window.JobHunterSidebar.create('jobs');
+  }
+
+  // Trigger auto-scoring (if profile exists)
   triggerAutoScore(source);
 }
 
@@ -2001,8 +2012,16 @@ function openProfileSetup() {
   window.open(profileUrl, '_blank');
 }
 
-// Make functions available globally for floating panel
+// Make functions available globally for sidebar and mode detection
 window.openProfileSetup = openProfileSetup;
+window.showProfileSetupPrompt = showProfileSetupPrompt;
+
+// Export triggerJobScoring for mode-detection.js to call
+window.triggerJobScoring = function() {
+  const hostname = window.location.hostname;
+  const source = hostname.includes('linkedin.com') ? 'LinkedIn' : 'Indeed';
+  triggerAutoScore(source);
+};
 
 // ============================================================================
 // AUTO-SCORING FUNCTIONALITY
@@ -2076,8 +2095,12 @@ async function triggerAutoScore(source) {
       const scoreResult = window.JobHunterScoring.calculateJobFitScore(jobData, userProfile);
       console.log('[Job Hunter] Auto-score result:', scoreResult);
 
-      // Update floating panel
-      if (typeof window.JobHunterFloatingPanel !== 'undefined') {
+      // Update sidebar (new docked rail UI)
+      if (typeof window.JobHunterSidebar !== 'undefined') {
+        window.JobHunterSidebar.updateScore(scoreResult, jobData);
+      }
+      // Fallback: Update floating panel (legacy UI)
+      else if (typeof window.JobHunterFloatingPanel !== 'undefined') {
         window.JobHunterFloatingPanel.updateScore(scoreResult, jobData);
       }
 

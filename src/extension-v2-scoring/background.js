@@ -190,6 +190,46 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     });
     return true;
   }
+
+  // ============================================================================
+  // OUTREACH MODE - NEW MESSAGE HANDLERS
+  // ============================================================================
+
+  // Handle Upsert Contact (from /in/ profile pages)
+  if (request.type === 'JH_UPSERT_CONTACT') {
+    console.log('[Job Hunter BG] Upserting contact from profile:', request.payload.fullName);
+    handleUpsertContactFromProfile(request.payload)
+      .then(result => sendResponse({ success: true, data: result }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+
+  // Handle Fetch Outreach Log by Contact LinkedIn URL
+  if (request.type === 'JH_FETCH_OUTREACH_LOG') {
+    console.log('[Job Hunter BG] Fetching outreach log for:', request.payload.contactLinkedinUrl);
+    handleFetchOutreachLogByContact(request.payload.contactLinkedinUrl)
+      .then(result => sendResponse({ success: true, data: result }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+
+  // Handle Create Outreach Log Entry
+  if (request.type === 'JH_CREATE_OUTREACH_LOG') {
+    console.log('[Job Hunter BG] Creating outreach log entry');
+    handleCreateOutreachLogEntry(request.payload)
+      .then(result => sendResponse({ success: true, data: result }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+
+  // Handle Mark Outreach Sent (new type format)
+  if (request.type === 'JH_MARK_OUTREACH_SENT') {
+    console.log('[Job Hunter BG] Marking outreach as sent:', request.payload.outreachLogRecordId);
+    handleMarkOutreachSent(request.payload.outreachLogRecordId, null)
+      .then(result => sendResponse({ success: true, data: result }))
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
 });
 
 /**
@@ -967,5 +1007,296 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// ============================================================================
+// OUTREACH MODE - NEW IMPLEMENTATION FUNCTIONS
+// ============================================================================
+
+/**
+ * Upsert Contact from LinkedIn profile page
+ * Uses LinkedIn URL as unique identifier
+ *
+ * @param {Object} contactData - Contact data from profile scraping
+ * @returns {Promise<Object>} { contactId, companyId }
+ */
+async function handleUpsertContactFromProfile(contactData) {
+  const credentials = await getCredentials();
+
+  if (!credentials.baseId || !credentials.pat) {
+    throw new Error('Airtable credentials not configured');
+  }
+
+  const { firstName, lastName, fullName, roleTitle, companyName, linkedinUrl, email, phone, location } = contactData;
+
+  // Validate required fields
+  if (!linkedinUrl) {
+    throw new Error('LinkedIn URL is required');
+  }
+
+  // Clean LinkedIn URL (remove query params)
+  const cleanLinkedinUrl = linkedinUrl.split('?')[0];
+
+  // 1. Search for existing contact by LinkedIn URL
+  const contactFilterFormula = encodeURIComponent(`{LinkedIn URL} = '${cleanLinkedinUrl.replace(/'/g, "\\'")}'`);
+  const contactSearchUrl = `${AIRTABLE_API_BASE}/${credentials.baseId}/${TABLES.CONTACTS}?filterByFormula=${contactFilterFormula}`;
+
+  const contactSearchResponse = await fetchWithRetry(contactSearchUrl, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${credentials.pat}`,
+      'Content-Type': 'application/json'
+    }
+  });
+
+  if (!contactSearchResponse.ok) {
+    throw new Error(`Failed to search for contact: ${contactSearchResponse.status}`);
+  }
+
+  const contactSearchData = await contactSearchResponse.json();
+  const existingContact = contactSearchData.records?.[0];
+
+  // 2. Find or create Company
+  let companyId = null;
+  if (companyName) {
+    const companyFilterFormula = encodeURIComponent(`{Company Name} = '${companyName.replace(/'/g, "\\'")}'`);
+    const companySearchUrl = `${AIRTABLE_API_BASE}/${credentials.baseId}/${TABLES.COMPANIES}?filterByFormula=${companyFilterFormula}`;
+
+    const companySearchResponse = await fetchWithRetry(companySearchUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${credentials.pat}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (companySearchResponse.ok) {
+      const companySearchData = await companySearchResponse.json();
+      if (companySearchData.records?.length > 0) {
+        companyId = companySearchData.records[0].id;
+      } else {
+        // Create new company
+        const createCompanyUrl = `${AIRTABLE_API_BASE}/${credentials.baseId}/${TABLES.COMPANIES}`;
+        const createCompanyResponse = await fetchWithRetry(createCompanyUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${credentials.pat}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            fields: { 'Company Name': sanitizeString(companyName) }
+          })
+        });
+
+        if (createCompanyResponse.ok) {
+          const newCompany = await createCompanyResponse.json();
+          companyId = newCompany.id;
+        }
+      }
+    }
+  }
+
+  // 3. Build contact payload
+  const contactFields = {
+    'First Name': sanitizeString(firstName || ''),
+    'Last Name': sanitizeString(lastName || ''),
+    'LinkedIn URL': sanitizeString(cleanLinkedinUrl),
+    'Contact Type': 'Networking' // Default type for profile-captured contacts
+  };
+
+  if (roleTitle) contactFields['Role / Title'] = sanitizeString(roleTitle);
+  if (email) contactFields['Email'] = sanitizeString(email);
+  if (phone) contactFields['Phone / WhatsApp'] = sanitizeString(phone);
+  if (location) contactFields['Location'] = sanitizeString(location);
+  if (companyId) contactFields['Companies'] = [companyId];
+
+  // 4. Update or create contact
+  let contactId;
+  if (existingContact) {
+    // Update existing
+    const updateUrl = `${AIRTABLE_API_BASE}/${credentials.baseId}/${TABLES.CONTACTS}/${existingContact.id}`;
+    const updateResponse = await fetchWithRetry(updateUrl, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${credentials.pat}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ fields: contactFields })
+    });
+
+    if (!updateResponse.ok) {
+      const errorBody = await updateResponse.json().catch(() => ({}));
+      throw new Error(`Failed to update contact: ${errorBody.error?.message || updateResponse.status}`);
+    }
+
+    contactId = existingContact.id;
+    console.log('[Job Hunter BG] Updated existing contact:', contactId);
+  } else {
+    // Create new
+    const createUrl = `${AIRTABLE_API_BASE}/${credentials.baseId}/${TABLES.CONTACTS}`;
+    const createResponse = await fetchWithRetry(createUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${credentials.pat}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ fields: contactFields })
+    });
+
+    if (!createResponse.ok) {
+      const errorBody = await createResponse.json().catch(() => ({}));
+      throw new Error(`Failed to create contact: ${errorBody.error?.message || createResponse.status}`);
+    }
+
+    const newContact = await createResponse.json();
+    contactId = newContact.id;
+    console.log('[Job Hunter BG] Created new contact:', contactId);
+  }
+
+  return { contactId, companyId };
+}
+
+/**
+ * Fetch Outreach Log entries for a contact by LinkedIn URL
+ *
+ * @param {string} contactLinkedinUrl - LinkedIn profile URL
+ * @returns {Promise<Array>} Array of outreach log entries
+ */
+async function handleFetchOutreachLogByContact(contactLinkedinUrl) {
+  const credentials = await getCredentials();
+
+  if (!credentials.baseId || !credentials.pat) {
+    throw new Error('Airtable credentials not configured');
+  }
+
+  // Clean LinkedIn URL
+  const cleanLinkedinUrl = contactLinkedinUrl.split('?')[0];
+
+  // 1. Find Contact by LinkedIn URL
+  const contactFilterFormula = encodeURIComponent(`{LinkedIn URL} = '${cleanLinkedinUrl.replace(/'/g, "\\'")}'`);
+  const contactSearchUrl = `${AIRTABLE_API_BASE}/${credentials.baseId}/${TABLES.CONTACTS}?filterByFormula=${contactFilterFormula}`;
+
+  const contactResponse = await fetchWithRetry(contactSearchUrl, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${credentials.pat}`,
+      'Content-Type': 'application/json'
+    }
+  });
+
+  if (!contactResponse.ok) {
+    throw new Error(`Failed to search for contact: ${contactResponse.status}`);
+  }
+
+  const contactData = await contactResponse.json();
+  if (!contactData.records || contactData.records.length === 0) {
+    return []; // No contact found, return empty array
+  }
+
+  const contactId = contactData.records[0].id;
+
+  // 2. Fetch Outreach Log entries linked to this contact
+  // Use SEARCH function to find records where Contact field contains this contact ID
+  const outreachFilterFormula = encodeURIComponent(`SEARCH('${contactId}', ARRAYJOIN({Contact}, ',')) > 0`);
+  const outreachSearchUrl = `${AIRTABLE_API_BASE}/${credentials.baseId}/${TABLES.OUTREACH_LOG}?filterByFormula=${outreachFilterFormula}&sort[0][field]=Created%20Time&sort[0][direction]=desc`;
+
+  const outreachResponse = await fetchWithRetry(outreachSearchUrl, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${credentials.pat}`,
+      'Content-Type': 'application/json'
+    }
+  });
+
+  if (!outreachResponse.ok) {
+    throw new Error(`Failed to fetch outreach log: ${outreachResponse.status}`);
+  }
+
+  const outreachData = await outreachResponse.json();
+
+  // Map to simpler format for frontend
+  return (outreachData.records || []).map(record => ({
+    id: record.id,
+    channel: record.fields['Outreach Channel'] || 'Unknown',
+    status: record.fields['Outreach Status'] || 'Not Sent',
+    message: record.fields['Outreach Message'] || '',
+    sentDate: record.fields['Sent Date'] || null,
+    responseDate: record.fields['Response Date'] || null,
+    response: record.fields['Response'] || '',
+    createdTime: record.createdTime
+  }));
+}
+
+/**
+ * Create a new Outreach Log entry
+ *
+ * @param {Object} payload - { contactLinkedinUrl, message, channel }
+ * @returns {Promise<Object>} Created record
+ */
+async function handleCreateOutreachLogEntry(payload) {
+  const credentials = await getCredentials();
+
+  if (!credentials.baseId || !credentials.pat) {
+    throw new Error('Airtable credentials not configured');
+  }
+
+  const { contactLinkedinUrl, message, channel } = payload;
+
+  // Clean LinkedIn URL
+  const cleanLinkedinUrl = contactLinkedinUrl.split('?')[0];
+
+  // 1. Find Contact by LinkedIn URL
+  const contactFilterFormula = encodeURIComponent(`{LinkedIn URL} = '${cleanLinkedinUrl.replace(/'/g, "\\'")}'`);
+  const contactSearchUrl = `${AIRTABLE_API_BASE}/${credentials.baseId}/${TABLES.CONTACTS}?filterByFormula=${contactFilterFormula}`;
+
+  const contactResponse = await fetchWithRetry(contactSearchUrl, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${credentials.pat}`,
+      'Content-Type': 'application/json'
+    }
+  });
+
+  if (!contactResponse.ok) {
+    throw new Error(`Failed to search for contact: ${contactResponse.status}`);
+  }
+
+  const contactData = await contactResponse.json();
+  if (!contactData.records || contactData.records.length === 0) {
+    throw new Error('Contact not found. Please sync the contact first.');
+  }
+
+  const contactId = contactData.records[0].id;
+
+  // 2. Create Outreach Log entry
+  const createUrl = `${AIRTABLE_API_BASE}/${credentials.baseId}/${TABLES.OUTREACH_LOG}`;
+  const createResponse = await fetchWithRetry(createUrl, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${credentials.pat}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      fields: {
+        'Contact': [contactId],
+        'Outreach Channel': channel || 'LinkedIn Message',
+        'Outreach Status': 'Not Sent',
+        'Outreach Message': message || ''
+      }
+    })
+  });
+
+  if (!createResponse.ok) {
+    const errorBody = await createResponse.json().catch(() => ({}));
+    throw new Error(`Failed to create outreach log: ${errorBody.error?.message || createResponse.status}`);
+  }
+
+  const newEntry = await createResponse.json();
+  console.log('[Job Hunter BG] Created outreach log entry:', newEntry.id);
+
+  return {
+    id: newEntry.id,
+    createdTime: newEntry.createdTime
+  };
+}
+
 // Log when service worker starts
-console.log('[Job Hunter BG] Background service worker initialized with CRM support');
+console.log('[Job Hunter BG] Background service worker initialized with CRM support + Outreach Mode');

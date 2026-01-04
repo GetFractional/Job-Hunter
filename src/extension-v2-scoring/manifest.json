@@ -34,8 +34,8 @@
       "js": [
         "scoring-engine.js",
         "results-dashboard.js",
-        "floating-panel.js",
-        "outreach-mode.js",
+        "sidebar-rail.js",
+        "mode-detection.js",
         "content.js"
       ],
       "run_at": "document_idle"
