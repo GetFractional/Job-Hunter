@@ -2358,6 +2358,57 @@ function getPanelStyles() {
 }
 
 // ============================================================================
+// MESSAGE LISTENER FOR JOB CAPTURE COMPLETION
+// ============================================================================
+
+/**
+ * Listen for job capture completion from background script
+ * Updates the Hunt Job button to show success or failure
+ */
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'jobCaptureComplete') {
+    console.log('[Floating Panel] Job capture complete:', request.success ? 'SUCCESS' : 'FAILURE');
+
+    const panel = document.getElementById('jh-floating-panel');
+    if (!panel) return;
+
+    const sendBtn = panel.querySelector('.jh-fp-send-btn');
+    if (!sendBtn) return;
+
+    if (request.success) {
+      // Update button to show success
+      sendBtn.textContent = '✅ Captured!';
+      sendBtn.classList.remove('jh-fp-loading');
+      sendBtn.classList.add('jh-fp-success');
+      sendBtn.disabled = false;
+
+      console.log('[Floating Panel] ✓ Button updated to show success');
+
+      // Auto-reset after 3 seconds
+      setTimeout(() => {
+        sendBtn.textContent = 'Hunt Job';
+        sendBtn.classList.remove('jh-fp-success');
+      }, 3000);
+    } else {
+      // Show actual error message
+      const errorMsg = request.error || 'Failed to save job';
+      sendBtn.textContent = '❌ Failed';
+      sendBtn.classList.remove('jh-fp-loading');
+      sendBtn.disabled = false;
+
+      console.error('[Floating Panel] ✗ Button updated to show error:', errorMsg);
+
+      // Auto-reset after 5 seconds
+      setTimeout(() => {
+        sendBtn.textContent = 'Hunt Job';
+      }, 5000);
+    }
+
+    sendResponse({ received: true });
+  }
+});
+
+// ============================================================================
 // EXPORTS
 // ============================================================================
 
