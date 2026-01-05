@@ -1,16 +1,16 @@
 /**
- * Job Hunter OS - Docked Sidebar Rail
+ * Job Hunter OS - Docked Sidebar Rail (Command Center Design)
  *
  * A LinkedIn-native docked right sidebar that displays:
  * - Jobs Mode: Job scoring, company metadata, and actions
  * - Outreach Mode: Contact info, outreach history, and compose
  *
  * Features:
- * - Fixed right sidebar (doesn't cover job description)
- * - LinkedIn-style design language
- * - Mode switching (Jobs <-> Outreach)
- * - Scrollable content area
- * - Sticky action buttons
+ * - Fixed 400px right sidebar with Command Center styling
+ * - Semantic fit color system
+ * - Progress bars for scores
+ * - Roboto typography
+ * - Brand Indigo (#5856D6) CTAs
  */
 
 // ============================================================================
@@ -25,6 +25,49 @@ const sidebarState = {
   currentContactData: null,
   outreachHistory: [],
   isExpanded: true
+};
+
+// ============================================================================
+// FIT LEVEL COLOR SYSTEM
+// ============================================================================
+
+const FIT_COLORS = {
+  'STRONG FIT': {
+    primary: '#059669',
+    background: '#D1FAE5',
+    text: '#059669',
+    border: '#059669'
+  },
+  'GOOD FIT': {
+    primary: '#10B981',
+    background: '#D1FAE5',
+    text: '#059669',
+    border: '#10B981'
+  },
+  'MODERATE FIT': {
+    primary: '#F59E0B',
+    background: '#FEF3C7',
+    text: '#B45309',
+    border: '#F59E0B'
+  },
+  'WEAK FIT': {
+    primary: '#F97316',
+    background: '#FFEDD5',
+    text: '#C2410C',
+    border: '#F97316'
+  },
+  'POOR FIT': {
+    primary: '#EF4444',
+    background: '#FEE2E2',
+    text: '#DC2626',
+    border: '#EF4444'
+  },
+  'HARD NO': {
+    primary: '#991B1B',
+    background: '#FEE2E2',
+    text: '#991B1B',
+    border: '#991B1B'
+  }
 };
 
 // ============================================================================
@@ -120,10 +163,10 @@ function updateSidebarScore(scoreResult, jobData) {
   // Update header section
   updateHeaderSection(sidebar, jobData, scoreResult);
 
-  // Update primary card (fit score + chips)
-  updatePrimaryCard(sidebar, jobData, scoreResult);
+  // Update fit label and score card
+  updateFitScoreCard(sidebar, scoreResult);
 
-  // Update score breakdown
+  // Update score breakdown with progress bars
   updateScoreBreakdown(sidebar, scoreResult);
 
   // Update dealbreakers if any
@@ -141,32 +184,53 @@ function updateSidebarScore(scoreResult, jobData) {
 function updateHeaderSection(sidebar, jobData, scoreResult) {
   const companyEl = sidebar.querySelector('.jh-header-company');
   const titleEl = sidebar.querySelector('.jh-header-title');
-  const employeesEl = sidebar.querySelector('.jh-header-employees');
-  const growthEl = sidebar.querySelector('.jh-header-growth');
-  const applicantsEl = sidebar.querySelector('.jh-header-applicants');
-  const applicants24hEl = sidebar.querySelector('.jh-header-applicants-24h');
   const locationEl = sidebar.querySelector('.jh-header-location');
-  const tenureEl = sidebar.querySelector('.jh-header-tenure');
+
+  // Stats grid elements
+  const employeesEl = sidebar.querySelector('.jh-stat-employees');
+  const followersEl = sidebar.querySelector('.jh-stat-followers');
+  const applicantsEl = sidebar.querySelector('.jh-stat-applicants');
+  const applicants24hEl = sidebar.querySelector('.jh-stat-applicants-24h');
+  const growthEl = sidebar.querySelector('.jh-stat-growth');
+  const tenureEl = sidebar.querySelector('.jh-stat-tenure');
+  const hiringManagerEl = sidebar.querySelector('.jh-stat-hiring-manager');
 
   if (companyEl) companyEl.textContent = jobData.companyName || 'Unknown Company';
   if (titleEl) titleEl.textContent = jobData.jobTitle || 'Unknown Role';
 
-  // Total employees
-  if (employeesEl) {
-    const headcount = jobData.companyHeadcount || jobData.totalEmployees;
-    if (headcount) {
-      employeesEl.textContent = formatNumber(headcount);
-    } else {
-      employeesEl.textContent = '--';
-    }
+  // Build location string
+  if (locationEl) {
+    let locationParts = [];
+    if (jobData.workplaceType) locationParts.push(jobData.workplaceType);
+    if (jobData.location) locationParts.push(jobData.location);
+    locationEl.textContent = locationParts.length > 0 ? locationParts.join(' · ') : '--';
   }
 
-  // Growth percentage
+  // Stats grid values
+  if (employeesEl) {
+    const headcount = jobData.companyHeadcount || jobData.totalEmployees;
+    employeesEl.textContent = headcount ? formatNumber(headcount) : '--';
+  }
+
+  if (followersEl) {
+    const followers = jobData.companyFollowers;
+    followersEl.textContent = followers ? formatNumber(followers) : '--';
+  }
+
+  if (applicantsEl) {
+    const count = jobData.applicantCount;
+    applicantsEl.textContent = (count !== null && count !== undefined) ? `${count}+` : '--';
+  }
+
+  if (applicants24hEl) {
+    // Premium-only data
+    applicants24hEl.textContent = '--';
+  }
+
   if (growthEl) {
     const growth = jobData.companyHeadcountGrowth;
     if (growth) {
       growthEl.textContent = growth;
-      // Color code growth
       growthEl.classList.remove('jh-positive', 'jh-negative');
       if (growth.includes('+')) {
         growthEl.classList.add('jh-positive');
@@ -178,126 +242,61 @@ function updateHeaderSection(sidebar, jobData, scoreResult) {
     }
   }
 
-  // Total applicants
-  if (applicantsEl) {
-    const count = jobData.applicantCount;
-    if (count !== null && count !== undefined) {
-      applicantsEl.textContent = `${count}+`;
-    } else {
-      applicantsEl.textContent = '--';
-    }
-  }
-
-  // Applicants in last 24h (if available - often Premium only)
-  if (applicants24hEl) {
-    // This data is rarely available from LinkedIn standard
-    // Could be populated from Premium insights if available
-    applicants24hEl.textContent = '--';
-  }
-
-  // Location (combine city/state with workplace type)
-  if (locationEl) {
-    let locationText = '--';
-    if (jobData.location) {
-      locationText = jobData.location;
-    }
-    if (jobData.workplaceType) {
-      if (locationText !== '--') {
-        locationText = `${jobData.workplaceType}`;
-      } else {
-        locationText = jobData.workplaceType;
-      }
-    }
-    locationEl.textContent = locationText;
-
-    // Color code remote as positive
-    locationEl.classList.remove('jh-positive');
-    if (jobData.workplaceType?.toLowerCase() === 'remote') {
-      locationEl.classList.add('jh-positive');
-    }
-  }
-
-  // Employee Tenure
   if (tenureEl) {
     const tenure = jobData.medianEmployeeTenure;
-    if (tenure !== null && tenure !== undefined) {
-      tenureEl.textContent = `${tenure} yrs`;
-    } else {
-      tenureEl.textContent = '--';
-    }
+    tenureEl.textContent = (tenure !== null && tenure !== undefined) ? `${tenure} yrs` : '--';
+  }
+
+  if (hiringManagerEl) {
+    const manager = jobData.hiringManagerDetails?.name;
+    hiringManagerEl.textContent = manager || '--';
   }
 }
 
 /**
- * Update the primary card with fit score and recommendation
+ * Update the fit score card with semantic colors
  */
-function updatePrimaryCard(sidebar, jobData, scoreResult) {
-  // Update fit score circle
+function updateFitScoreCard(sidebar, scoreResult) {
+  const fitLabel = scoreResult.overall_label || 'ANALYZING';
+  const fitColors = FIT_COLORS[fitLabel] || FIT_COLORS['MODERATE FIT'];
+
+  // Update fit label chip
+  const fitChip = sidebar.querySelector('.jh-fit-chip');
+  if (fitChip) {
+    fitChip.textContent = fitLabel;
+    fitChip.style.backgroundColor = fitColors.background;
+    fitChip.style.color = fitColors.text;
+    fitChip.style.borderColor = fitColors.border;
+  }
+
+  // Update score circle
   const scoreCircle = sidebar.querySelector('.jh-score-circle');
   const scoreValue = sidebar.querySelector('.jh-score-value');
-  const recommendationChip = sidebar.querySelector('.jh-recommendation-chip');
 
   if (scoreValue) {
-    const score = scoreResult.overall_score || 0;
-    scoreValue.textContent = score;
-
-    // Update circle color based on score
-    if (scoreCircle) {
-      scoreCircle.className = 'jh-score-circle ' + getScoreColorClass(score);
-    }
+    scoreValue.textContent = scoreResult.overall_score || 0;
+    scoreValue.style.color = fitColors.primary;
   }
 
-  // Update recommendation chip
-  if (recommendationChip) {
-    const label = scoreResult.overall_label || 'Analyzing...';
-    let chipText = '';
-    let chipClass = '';
-
-    switch (label) {
-      case 'STRONG FIT':
-        chipText = 'WORTH HUNTING';
-        chipClass = 'jh-chip-strong';
-        break;
-      case 'GOOD FIT':
-        chipText = 'WORTH HUNTING';
-        chipClass = 'jh-chip-good';
-        break;
-      case 'MODERATE FIT':
-        chipText = 'CONSIDER';
-        chipClass = 'jh-chip-moderate';
-        break;
-      case 'WEAK FIT':
-        chipText = 'LOW FIT';
-        chipClass = 'jh-chip-weak';
-        break;
-      case 'POOR FIT':
-      case 'HARD NO':
-        chipText = 'SKIP';
-        chipClass = 'jh-chip-poor';
-        break;
-      default:
-        chipText = label;
-        chipClass = 'jh-chip-moderate';
-    }
-
-    recommendationChip.textContent = chipText;
-    recommendationChip.className = 'jh-recommendation-chip ' + chipClass;
+  if (scoreCircle) {
+    scoreCircle.style.borderColor = fitColors.primary;
+    scoreCircle.style.backgroundColor = fitColors.background;
   }
 }
 
-
 /**
- * Update the score breakdown section
+ * Update the score breakdown section with progress bars
  */
 function updateScoreBreakdown(sidebar, scoreResult) {
   // Job Fit section (job-to-user)
-  const jobFitScore = sidebar.querySelector('.jh-breakdown-job-fit .jh-breakdown-score');
+  const jobFitProgress = sidebar.querySelector('.jh-breakdown-job-fit .jh-section-progress');
   const jobFitList = sidebar.querySelector('.jh-breakdown-job-fit .jh-breakdown-list');
 
-  if (jobFitScore) {
+  if (jobFitProgress) {
     const score = scoreResult.job_to_user_fit?.score || 0;
-    jobFitScore.textContent = `${score}/50`;
-    jobFitScore.className = 'jh-breakdown-score ' + getSubScoreClass(score);
+    const percentage = (score / 50) * 100;
+    jobFitProgress.querySelector('.jh-progress-fill').style.width = `${percentage}%`;
+    jobFitProgress.querySelector('.jh-progress-text').textContent = `${score}/50`;
   }
 
   if (jobFitList && scoreResult.job_to_user_fit?.breakdown) {
@@ -308,13 +307,14 @@ function updateScoreBreakdown(sidebar, scoreResult) {
   }
 
   // Your Fit section (user-to-job)
-  const yourFitScore = sidebar.querySelector('.jh-breakdown-your-fit .jh-breakdown-score');
+  const yourFitProgress = sidebar.querySelector('.jh-breakdown-your-fit .jh-section-progress');
   const yourFitList = sidebar.querySelector('.jh-breakdown-your-fit .jh-breakdown-list');
 
-  if (yourFitScore) {
+  if (yourFitProgress) {
     const score = scoreResult.user_to_job_fit?.score || 0;
-    yourFitScore.textContent = `${score}/50`;
-    yourFitScore.className = 'jh-breakdown-score ' + getSubScoreClass(score);
+    const percentage = (score / 50) * 100;
+    yourFitProgress.querySelector('.jh-progress-fill').style.width = `${percentage}%`;
+    yourFitProgress.querySelector('.jh-progress-text').textContent = `${score}/50`;
   }
 
   if (yourFitList && scoreResult.user_to_job_fit?.breakdown) {
@@ -339,13 +339,13 @@ function updateDealbreakers(sidebar, scoreResult) {
 
     dealbreakersSection.innerHTML = `
       <div class="jh-dealbreaker-alert">
-        <span class="jh-dealbreaker-icon">&#9888;</span>
-        <div class="jh-dealbreaker-content">
-          <strong>Triggered Dealbreakers</strong>
-          <ul class="jh-dealbreaker-list">
-            ${reasons.map(r => `<li>${escapeHtml(r)}</li>`).join('')}
-          </ul>
+        <div class="jh-dealbreaker-header">
+          <span class="jh-dealbreaker-icon">⚠</span>
+          <strong>Dealbreakers Triggered</strong>
         </div>
+        <ul class="jh-dealbreaker-list">
+          ${reasons.map(r => `<li>${escapeHtml(r)}</li>`).join('')}
+        </ul>
       </div>
     `;
     dealbreakersSection.style.display = 'block';
@@ -355,21 +355,20 @@ function updateDealbreakers(sidebar, scoreResult) {
 }
 
 /**
- * Render breakdown items as HTML
+ * Render breakdown items with progress bars
  */
 function renderBreakdownItems(breakdown, type) {
   if (!breakdown || breakdown.length === 0) {
     return '<div class="jh-breakdown-empty">No data available</div>';
   }
 
-  const thresholds = type === 'j2u'
-    ? { high: 35, mid: 15 }
-    : { high: 25, mid: 10 };
+  const maxScore = type === 'j2u' ? 50 : 50;
 
   return breakdown.map(item => {
     const score = item.score || 0;
-    const scoreClass = score >= thresholds.high ? 'jh-score-high' :
-                       score >= thresholds.mid ? 'jh-score-mid' : 'jh-score-low';
+    const criteriaMaxScore = item.max_score || 10;
+    const percentage = (score / criteriaMaxScore) * 100;
+    const isHigh = percentage >= 70;
 
     // Shorten criteria names
     let criteriaName = item.criteria || '';
@@ -379,21 +378,18 @@ function renderBreakdownItems(breakdown, type) {
       'Organizational Stability': 'Org Stability',
       'Industry Experience': 'Industry',
       'Skills Overlap': 'Skills',
-      'Benefits Package': 'Benefits Package',
+      'Benefits Package': 'Benefits',
       'Business Lifecycle': 'Lifecycle',
       'Base Salary': 'Base Salary',
-      'Work Location': 'Work Location',
+      'Work Location': 'Location',
       'Bonus': 'Bonus',
       'Equity': 'Equity',
       'Experience Level': 'Experience'
     };
     criteriaName = nameMap[criteriaName] || criteriaName;
 
-    // Additional info (skill tags, benefits, etc.)
+    // Build extra content based on criteria type
     let extraHtml = '';
-    if (item.actual_value) {
-      extraHtml += `<span class="jh-breakdown-value">${escapeHtml(item.actual_value)}</span>`;
-    }
 
     // Skills display with matched skills as blue badges
     if (item.matched_skills && item.matched_skills.length > 0) {
@@ -410,18 +406,16 @@ function renderBreakdownItems(breakdown, type) {
       `;
     }
 
-    // Benefits Package display with X/Y (Z%) format and badges
-    if (item.criteria === 'Benefits Package') {
+    // Benefits display with X/Y (Z%) format and blue badges for matches
+    if (item.criteria === 'Benefits Package' || item.criteria === 'Benefits') {
       const matched = item.matched_count || 0;
       const total = item.total_preferred || item.total_count || 0;
-      const percentage = total > 0 ? Math.round((matched / total) * 100) : 0;
+      const pct = total > 0 ? Math.round((matched / total) * 100) : 0;
 
-      // Summary line with X/Y (Z%) format
       if (total > 0) {
-        extraHtml += `<span class="jh-benefits-summary">${matched}/${total} preferred benefits (${percentage}%)</span>`;
+        extraHtml += `<div class="jh-benefits-summary">${matched}/${total} preferred (${pct}%)</div>`;
       }
 
-      // Display all benefits with matched ones highlighted as blue badges
       const allBenefits = item.all_benefits || [];
       const matchedBenefits = item.matched_benefits || item.benefit_badges || [];
       const matchedSet = new Set(matchedBenefits.map(b => b.toLowerCase()));
@@ -436,7 +430,6 @@ function renderBreakdownItems(breakdown, type) {
           </div>
         `;
       } else if (matchedBenefits.length > 0) {
-        // Fallback: just show matched benefits if all_benefits not available
         extraHtml += `
           <div class="jh-benefits-tags">
             ${matchedBenefits.map(b => `<span class="jh-benefit-tag jh-matched">${escapeHtml(b)}</span>`).join('')}
@@ -445,29 +438,37 @@ function renderBreakdownItems(breakdown, type) {
       }
     }
 
-    // Bonus display
+    // Bonus display with detection status
     if (item.criteria === 'Bonus') {
       if (item.bonus_detected) {
-        extraHtml += `<span class="jh-breakdown-value">✓ Performance bonus mentioned</span>`;
+        extraHtml += `<div class="jh-detection-status jh-detected">✓ Performance bonus mentioned</div>`;
       } else {
-        extraHtml += `<span class="jh-breakdown-value">No bonus mentioned</span>`;
+        extraHtml += `<div class="jh-detection-status jh-not-detected">No bonus mentioned</div>`;
       }
     }
 
-    // Equity display
+    // Equity display with detection status
     if (item.criteria === 'Equity') {
       if (item.equity_detected) {
-        extraHtml += `<span class="jh-breakdown-value">✓ Equity/stock compensation mentioned</span>`;
+        extraHtml += `<div class="jh-detection-status jh-detected">✓ Equity/stock compensation mentioned</div>`;
       } else {
-        extraHtml += `<span class="jh-breakdown-value">No equity mentioned</span>`;
+        extraHtml += `<div class="jh-detection-status jh-not-detected">No equity mentioned</div>`;
       }
+    }
+
+    // Actual value display for other criteria
+    if (item.actual_value && !['Benefits Package', 'Benefits', 'Bonus', 'Equity', 'Skills Overlap'].includes(item.criteria)) {
+      extraHtml += `<div class="jh-actual-value">${escapeHtml(item.actual_value)}</div>`;
     }
 
     return `
-      <div class="jh-breakdown-item ${scoreClass}" title="${escapeHtml(item.rationale || '')}">
+      <div class="jh-breakdown-item" title="${escapeHtml(item.rationale || '')}">
         <div class="jh-breakdown-row">
           <span class="jh-breakdown-name">${escapeHtml(criteriaName)}</span>
-          <span class="jh-breakdown-item-score">${score}</span>
+          <span class="jh-breakdown-score">${score}/${criteriaMaxScore}</span>
+        </div>
+        <div class="jh-progress-bar">
+          <div class="jh-progress-fill ${isHigh ? 'jh-high' : 'jh-low'}" style="width: ${percentage}%"></div>
         </div>
         ${extraHtml}
       </div>
@@ -513,8 +514,6 @@ function updateSidebarContact(contactData) {
 
 /**
  * Update sync status indicator
- * @param {HTMLElement} sidebar
- * @param {string} status - 'ready' | 'syncing' | 'synced' | 'error'
  */
 function updateSyncStatus(sidebar, status, message = '') {
   const statusEl = sidebar.querySelector('.jh-sync-status');
@@ -532,7 +531,7 @@ function updateSyncStatus(sidebar, status, message = '') {
       statusEl.style.display = 'inline';
       break;
     case 'synced':
-      statusEl.innerHTML = '&#10003; Synced';
+      statusEl.innerHTML = '✓ Synced';
       statusEl.style.display = 'inline';
       break;
     case 'error':
@@ -544,7 +543,6 @@ function updateSyncStatus(sidebar, status, message = '') {
 
 /**
  * Update outreach history list
- * @param {Array} history - Array of outreach log entries
  */
 function updateOutreachHistory(history) {
   const sidebar = document.getElementById('jh-sidebar-rail');
@@ -581,7 +579,6 @@ function updateOutreachHistory(history) {
         </div>
         <div class="jh-outreach-entry-message">
           <p class="jh-outreach-text">${escapeHtml(messagePreview)}</p>
-          ${entry.message && entry.message.length > 100 ? '<button class="jh-btn-link jh-show-more">Show more</button>' : ''}
         </div>
         <div class="jh-outreach-entry-actions">
           <button class="jh-btn jh-btn-sm jh-btn-copy" data-message="${escapeHtml(entry.message || '')}">Copy</button>
@@ -608,7 +605,6 @@ function setupOutreachEntryHandlers(container) {
         btn.textContent = 'Copied!';
         setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
       } catch (err) {
-        // Fallback for older browsers
         const textarea = document.createElement('textarea');
         textarea.value = message;
         document.body.appendChild(textarea);
@@ -617,18 +613,6 @@ function setupOutreachEntryHandlers(container) {
         document.body.removeChild(textarea);
         btn.textContent = 'Copied!';
         setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
-      }
-    });
-  });
-
-  // Show more buttons
-  container.querySelectorAll('.jh-show-more').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const entry = btn.closest('.jh-outreach-entry');
-      const entryId = entry.getAttribute('data-id');
-      const fullEntry = sidebarState.outreachHistory.find(e => e.id === entryId);
-      if (fullEntry) {
-        showFullMessageModal(fullEntry);
       }
     });
   });
@@ -648,7 +632,6 @@ function setupOutreachEntryHandlers(container) {
         });
 
         if (response.success) {
-          // Update local state
           const entry = sidebarState.outreachHistory.find(e => e.id === recordId);
           if (entry) {
             entry.status = 'Sent';
@@ -675,51 +658,25 @@ function setupOutreachEntryHandlers(container) {
 }
 
 /**
- * Show full message in modal
+ * Fetch outreach history for current contact
  */
-function showFullMessageModal(entry) {
-  const existingModal = document.getElementById('jh-message-modal');
-  if (existingModal) existingModal.remove();
+async function fetchOutreachHistory() {
+  if (!sidebarState.currentContactData?.linkedinUrl) return;
 
-  const modal = document.createElement('div');
-  modal.id = 'jh-message-modal';
-  modal.className = 'jh-modal-overlay';
-  modal.innerHTML = `
-    <div class="jh-modal">
-      <button class="jh-modal-close">&times;</button>
-      <h3>${escapeHtml(entry.channel || 'Message')}</h3>
-      <div class="jh-modal-meta">
-        <span class="jh-outreach-status ${entry.status === 'Sent' ? 'jh-status-sent' : 'jh-status-not-sent'}">
-          ${entry.status || 'Not Sent'}
-        </span>
-        ${entry.sentDate ? `<span>Sent: ${formatDate(entry.sentDate)}</span>` : ''}
-      </div>
-      <div class="jh-modal-message">
-        ${escapeHtml(entry.message || '').replace(/\n/g, '<br>')}
-      </div>
-      <div class="jh-modal-actions">
-        <button class="jh-btn jh-btn-copy-modal">Copy Message</button>
-      </div>
-    </div>
-  `;
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: 'JH_FETCH_OUTREACH_LOG',
+      payload: {
+        contactLinkedinUrl: sidebarState.currentContactData.linkedinUrl
+      }
+    });
 
-  // Close handler
-  modal.querySelector('.jh-modal-close').addEventListener('click', () => modal.remove());
-  modal.addEventListener('click', (e) => {
-    if (e.target === modal) modal.remove();
-  });
-
-  // Copy handler
-  modal.querySelector('.jh-btn-copy-modal').addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(entry.message || '');
-      modal.querySelector('.jh-btn-copy-modal').textContent = 'Copied!';
-    } catch (err) {
-      console.error('Copy failed:', err);
+    if (response.success && response.data) {
+      updateOutreachHistory(response.data);
     }
-  });
-
-  document.body.appendChild(modal);
+  } catch (error) {
+    console.error('[Job Hunter Sidebar] Fetch history error:', error);
+  }
 }
 
 // ============================================================================
@@ -746,16 +703,6 @@ function setupSidebarEventHandlers(sidebar, mode) {
       if (window.openProfileSetup) {
         window.openProfileSetup();
       }
-    });
-  }
-
-  // Collapse/expand toggle
-  const collapseBtn = sidebar.querySelector('.jh-collapse-btn');
-  if (collapseBtn) {
-    collapseBtn.addEventListener('click', () => {
-      sidebarState.isExpanded = !sidebarState.isExpanded;
-      sidebar.classList.toggle('jh-collapsed', !sidebarState.isExpanded);
-      collapseBtn.textContent = sidebarState.isExpanded ? '−' : '+';
     });
   }
 
@@ -787,7 +734,7 @@ function setupJobsModeHandlers(sidebar) {
         huntBtn.classList.add('jh-success');
 
         setTimeout(() => {
-          huntBtn.textContent = 'Hunt Job';
+          huntBtn.textContent = 'Send to Airtable';
           huntBtn.classList.remove('jh-success');
           huntBtn.disabled = false;
         }, 2000);
@@ -797,7 +744,7 @@ function setupJobsModeHandlers(sidebar) {
         huntBtn.classList.remove('jh-loading');
 
         setTimeout(() => {
-          huntBtn.textContent = 'Hunt Job';
+          huntBtn.textContent = 'Send to Airtable';
           huntBtn.disabled = false;
         }, 2000);
       }
@@ -815,40 +762,6 @@ function setupJobsModeHandlers(sidebar) {
           window.sendJobToAirtable,
           window.openProfileSetup
         );
-      }
-    });
-  }
-
-  // Send to Airtable button (footer)
-  const airtableBtn = sidebar.querySelector('.jh-btn-airtable');
-  if (airtableBtn) {
-    airtableBtn.addEventListener('click', async () => {
-      if (!sidebarState.currentJobData || !sidebarState.currentScore) return;
-
-      airtableBtn.disabled = true;
-      airtableBtn.textContent = 'Sending...';
-      airtableBtn.classList.add('jh-loading');
-
-      try {
-        await window.sendJobToAirtable(sidebarState.currentJobData, sidebarState.currentScore);
-        airtableBtn.textContent = '✓ Sent to Airtable';
-        airtableBtn.classList.remove('jh-loading');
-        airtableBtn.classList.add('jh-success');
-
-        setTimeout(() => {
-          airtableBtn.textContent = 'Send to Airtable';
-          airtableBtn.classList.remove('jh-success');
-          airtableBtn.disabled = false;
-        }, 3000);
-      } catch (error) {
-        console.error('[Job Hunter Sidebar] Airtable error:', error);
-        airtableBtn.textContent = 'Error - Try Again';
-        airtableBtn.classList.remove('jh-loading');
-
-        setTimeout(() => {
-          airtableBtn.textContent = 'Send to Airtable';
-          airtableBtn.disabled = false;
-        }, 2000);
       }
     });
   }
@@ -882,7 +795,6 @@ function setupOutreachModeHandlers(sidebar) {
           syncBtn.textContent = 'Synced';
           syncBtn.classList.add('jh-success');
 
-          // Fetch outreach history after sync
           fetchOutreachHistory();
 
           setTimeout(() => {
@@ -944,7 +856,6 @@ function setupOutreachModeHandlers(sidebar) {
           composeTextarea.value = '';
           saveBtn.textContent = 'Saved!';
 
-          // Refresh history
           fetchOutreachHistory();
 
           setTimeout(() => {
@@ -982,34 +893,12 @@ function setupOutreachModeHandlers(sidebar) {
   }
 }
 
-/**
- * Fetch outreach history for current contact
- */
-async function fetchOutreachHistory() {
-  if (!sidebarState.currentContactData?.linkedinUrl) return;
-
-  try {
-    const response = await chrome.runtime.sendMessage({
-      type: 'JH_FETCH_OUTREACH_LOG',
-      payload: {
-        contactLinkedinUrl: sidebarState.currentContactData.linkedinUrl
-      }
-    });
-
-    if (response.success && response.data) {
-      updateOutreachHistory(response.data);
-    }
-  } catch (error) {
-    console.error('[Job Hunter Sidebar] Fetch history error:', error);
-  }
-}
-
 // ============================================================================
 // HTML TEMPLATES
 // ============================================================================
 
 /**
- * Get Jobs Mode sidebar HTML
+ * Get Jobs Mode sidebar HTML - Command Center Design
  */
 function getJobsSidebarHTML() {
   return `
@@ -1020,85 +909,93 @@ function getJobsSidebarHTML() {
           <span class="jh-brand-text">Job Hunter</span>
         </div>
         <div class="jh-header-controls">
-          <button class="jh-btn-settings" title="Edit Profile">&#9881;</button>
-          <button class="jh-sidebar-close" title="Close">&times;</button>
+          <button class="jh-btn-settings" title="Edit Profile">⚙</button>
+          <button class="jh-sidebar-close" title="Close">×</button>
         </div>
       </div>
 
-      <!-- Recommendation chip -->
-      <div class="jh-recommendation-row">
-        <span class="jh-recommendation-chip">Analyzing...</span>
+      <!-- Fit Label Chip -->
+      <div class="jh-fit-row">
+        <span class="jh-fit-chip">ANALYZING...</span>
       </div>
 
-      <!-- Primary card with score -->
-      <div class="jh-primary-card">
+      <!-- Score Card with Job Info -->
+      <div class="jh-score-card">
         <div class="jh-score-section">
           <div class="jh-score-circle">
             <span class="jh-score-value">--</span>
           </div>
           <div class="jh-job-info">
-            <span class="jh-header-company">Loading...</span>
-            <span class="jh-header-title">Loading...</span>
+            <div class="jh-header-company">Loading...</div>
+            <div class="jh-header-title">Loading...</div>
+            <div class="jh-header-location">--</div>
           </div>
         </div>
 
-        <!-- Company metadata grid -->
-        <div class="jh-company-meta-grid">
-          <div class="jh-meta-row">
-            <span class="jh-meta-label">Employees</span>
-            <span class="jh-meta-value jh-header-employees">--</span>
+        <!-- Stats Grid -->
+        <div class="jh-stats-grid">
+          <div class="jh-stat-item">
+            <span class="jh-stat-label">Employees</span>
+            <span class="jh-stat-value jh-stat-employees">--</span>
           </div>
-          <div class="jh-meta-row">
-            <span class="jh-meta-label">Growth (24 mo.)</span>
-            <span class="jh-meta-value jh-header-growth">--</span>
+          <div class="jh-stat-item">
+            <span class="jh-stat-label">Followers</span>
+            <span class="jh-stat-value jh-stat-followers">--</span>
           </div>
-          <div class="jh-meta-row">
-            <span class="jh-meta-label">Total Applicants</span>
-            <span class="jh-meta-value jh-header-applicants">--</span>
+          <div class="jh-stat-item">
+            <span class="jh-stat-label">Applicants</span>
+            <span class="jh-stat-value jh-stat-applicants">--</span>
           </div>
-          <div class="jh-meta-row">
-            <span class="jh-meta-label">Applicants (24h)</span>
-            <span class="jh-meta-value jh-header-applicants-24h">--</span>
+          <div class="jh-stat-item">
+            <span class="jh-stat-label">Last 24h</span>
+            <span class="jh-stat-value jh-stat-applicants-24h">--</span>
           </div>
-          <div class="jh-meta-row">
-            <span class="jh-meta-label">Location</span>
-            <span class="jh-meta-value jh-header-location">--</span>
+          <div class="jh-stat-item">
+            <span class="jh-stat-label">Growth</span>
+            <span class="jh-stat-value jh-stat-growth">--</span>
           </div>
-          <div class="jh-meta-row">
-            <span class="jh-meta-label">Avg. Tenure</span>
-            <span class="jh-meta-value jh-header-tenure">--</span>
+          <div class="jh-stat-item">
+            <span class="jh-stat-label">Tenure</span>
+            <span class="jh-stat-value jh-stat-tenure">--</span>
+          </div>
+          <div class="jh-stat-item jh-stat-full">
+            <span class="jh-stat-label">Hiring Manager</span>
+            <span class="jh-stat-value jh-stat-hiring-manager">--</span>
           </div>
         </div>
       </div>
 
-      <!-- Score breakdown -->
+      <!-- Score Breakdown -->
       <div class="jh-score-breakdown">
-        <div class="jh-breakdown-header">
-          <span class="jh-breakdown-title">Score Breakdown</span>
-          <button class="jh-collapse-btn" title="Collapse">−</button>
-        </div>
-
-        <div class="jh-breakdown-content">
-          <!-- Job Fit -->
-          <div class="jh-breakdown-section jh-breakdown-job-fit">
-            <div class="jh-breakdown-section-header">
-              <span class="jh-breakdown-section-title">JOB FIT</span>
-              <span class="jh-breakdown-score">--/50</span>
-            </div>
-            <div class="jh-breakdown-list">
-              <!-- Populated dynamically -->
+        <!-- Job Fit Section -->
+        <div class="jh-breakdown-section jh-breakdown-job-fit">
+          <div class="jh-breakdown-section-header">
+            <span class="jh-breakdown-section-title">Job Fit</span>
+            <div class="jh-section-progress">
+              <div class="jh-progress-bar-container">
+                <div class="jh-progress-fill"></div>
+              </div>
+              <span class="jh-progress-text">--/50</span>
             </div>
           </div>
+          <div class="jh-breakdown-list">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
 
-          <!-- Your Fit -->
-          <div class="jh-breakdown-section jh-breakdown-your-fit">
-            <div class="jh-breakdown-section-header">
-              <span class="jh-breakdown-section-title">YOUR FIT</span>
-              <span class="jh-breakdown-score">--/50</span>
+        <!-- Your Fit Section -->
+        <div class="jh-breakdown-section jh-breakdown-your-fit">
+          <div class="jh-breakdown-section-header">
+            <span class="jh-breakdown-section-title">Your Fit</span>
+            <div class="jh-section-progress">
+              <div class="jh-progress-bar-container">
+                <div class="jh-progress-fill"></div>
+              </div>
+              <span class="jh-progress-text">--/50</span>
             </div>
-            <div class="jh-breakdown-list">
-              <!-- Populated dynamically -->
-            </div>
+          </div>
+          <div class="jh-breakdown-list">
+            <!-- Populated dynamically -->
           </div>
         </div>
       </div>
@@ -1108,13 +1005,8 @@ function getJobsSidebarHTML() {
 
       <!-- Actions -->
       <div class="jh-actions">
-        <button class="jh-btn jh-btn-hunt jh-btn-primary">Hunt Job</button>
+        <button class="jh-btn jh-btn-hunt jh-btn-primary">Send to Airtable</button>
         <button class="jh-btn jh-btn-details">View Details</button>
-      </div>
-
-      <!-- Send to Airtable footer -->
-      <div class="jh-airtable-footer">
-        <button class="jh-btn-airtable">Send to Airtable</button>
       </div>
     </div>
   `;
@@ -1133,7 +1025,7 @@ function getOutreachSidebarHTML() {
           <span class="jh-mode-badge">Outreach</span>
         </div>
         <div class="jh-header-controls">
-          <button class="jh-sidebar-close" title="Close">&times;</button>
+          <button class="jh-sidebar-close" title="Close">×</button>
         </div>
       </div>
 
@@ -1189,7 +1081,7 @@ function getOutreachSidebarHTML() {
 }
 
 // ============================================================================
-// STYLES
+// STYLES - Command Center Design
 // ============================================================================
 
 /**
@@ -1198,26 +1090,25 @@ function getOutreachSidebarHTML() {
 function getSidebarStyles() {
   return `
     /* ========================================
-       JOB HUNTER SIDEBAR RAIL
-       Premium docked right sidebar with standout styling
+       JOB HUNTER SIDEBAR RAIL - Command Center
        ======================================== */
 
-    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700;900&display=swap');
 
     #jh-sidebar-rail {
       position: fixed;
-      top: 52px; /* Below LinkedIn nav */
+      top: 52px;
       right: 0;
-      width: 406px;
+      width: 400px;
       height: calc(100vh - 52px);
-      background: linear-gradient(180deg, #f0f9ff 0%, #e8f4fc 50%, #f5fbff 100%);
-      border-left: 2px solid #0ea5e9;
-      box-shadow: -4px 0 20px rgba(14, 165, 233, 0.15), -1px 0 4px rgba(0, 0, 0, 0.05);
+      background: #F4F7FA;
+      border-left: 1px solid #D1D9E0;
+      box-shadow: -8px 0 24px rgba(0,0,0,0.15);
       z-index: 9999;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      font-family: 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
       font-size: 14px;
       line-height: 1.4;
-      color: #0f172a;
+      color: #1F2937;
       overflow: hidden;
       display: flex;
       flex-direction: column;
@@ -1249,35 +1140,32 @@ function getSidebarStyles() {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 14px 18px;
-      border-bottom: 1px solid rgba(14, 165, 233, 0.2);
-      background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+      padding: 14px 16px;
+      background: #1F2937;
       flex-shrink: 0;
     }
 
     .jh-header-brand {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
     }
 
     .jh-brand-text {
-      font-family: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif;
-      font-weight: 700;
+      font-family: 'Roboto', sans-serif;
+      font-weight: 900;
       font-size: 20px;
       color: #ffffff;
-      letter-spacing: -0.5px;
-      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+      letter-spacing: -0.3px;
     }
 
     .jh-mode-badge {
       font-size: 11px;
       font-weight: 600;
       padding: 3px 10px;
-      background: rgba(255, 255, 255, 0.2);
+      background: #5856D6;
       color: white;
       border-radius: 12px;
-      backdrop-filter: blur(4px);
     }
 
     .jh-header-controls {
@@ -1286,13 +1174,13 @@ function getSidebarStyles() {
     }
 
     .jh-header-controls button {
-      width: 30px;
-      height: 30px;
+      width: 32px;
+      height: 32px;
       border: none;
-      background: rgba(255, 255, 255, 0.15);
-      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
       cursor: pointer;
-      color: rgba(255, 255, 255, 0.9);
+      color: rgba(255, 255, 255, 0.8);
       font-size: 16px;
       display: flex;
       align-items: center;
@@ -1301,66 +1189,45 @@ function getSidebarStyles() {
     }
 
     .jh-header-controls button:hover {
-      background: rgba(255, 255, 255, 0.25);
+      background: rgba(255, 255, 255, 0.2);
       color: #ffffff;
     }
 
     /* ========================================
-       RECOMMENDATION CHIP
+       FIT LABEL CHIP
        ======================================== */
 
-    .jh-recommendation-row {
-      padding: 14px 18px;
+    .jh-fit-row {
+      padding: 12px 16px;
+      background: #ffffff;
+      border-bottom: 1px solid #E5E7EB;
       text-align: center;
       flex-shrink: 0;
-      background: rgba(255, 255, 255, 0.5);
     }
 
-    .jh-recommendation-chip {
+    .jh-fit-chip {
       display: inline-block;
-      padding: 8px 20px;
+      padding: 8px 24px;
       font-size: 13px;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.8px;
       border-radius: 20px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    }
-
-    .jh-chip-strong {
-      background: linear-gradient(135deg, #059669 0%, #047857 100%);
-      color: white;
-    }
-
-    .jh-chip-good {
-      background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
-      color: white;
-    }
-
-    .jh-chip-moderate {
-      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-      color: white;
-    }
-
-    .jh-chip-weak {
-      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-      color: white;
-    }
-
-    .jh-chip-poor {
-      background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
-      color: white;
+      border: 2px solid #E5E7EB;
+      background: #F4F7FA;
+      color: #6B7280;
+      transition: all 0.2s ease;
     }
 
     /* ========================================
-       PRIMARY CARD
+       SCORE CARD
        ======================================== */
 
-    .jh-primary-card {
-      padding: 16px 18px;
-      border-bottom: 1px solid rgba(14, 165, 233, 0.15);
+    .jh-score-card {
+      padding: 16px;
+      background: #ffffff;
+      border-bottom: 1px solid #E5E7EB;
       flex-shrink: 0;
-      background: rgba(255, 255, 255, 0.6);
     }
 
     .jh-score-section {
@@ -1371,34 +1238,24 @@ function getSidebarStyles() {
     }
 
     .jh-score-circle {
-      width: 64px;
-      height: 64px;
+      width: 72px;
+      height: 72px;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #ffffff;
-      border: 4px solid #e0e7ff;
+      background: #F4F7FA;
+      border: 4px solid #E5E7EB;
       flex-shrink: 0;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      transition: all 0.3s ease;
     }
-
-    .jh-score-circle.jh-score-strong { border-color: #059669; background: #ecfdf5; }
-    .jh-score-circle.jh-score-good { border-color: #0ea5e9; background: #f0f9ff; }
-    .jh-score-circle.jh-score-moderate { border-color: #f59e0b; background: #fffbeb; }
-    .jh-score-circle.jh-score-weak { border-color: #ef4444; background: #fef2f2; }
-    .jh-score-circle.jh-score-poor { border-color: #6b7280; background: #f9fafb; }
 
     .jh-score-value {
-      font-size: 22px;
+      font-size: 26px;
       font-weight: 700;
+      color: #6B7280;
+      transition: color 0.3s ease;
     }
-
-    .jh-score-circle.jh-score-strong .jh-score-value { color: #059669; }
-    .jh-score-circle.jh-score-good .jh-score-value { color: #0ea5e9; }
-    .jh-score-circle.jh-score-moderate .jh-score-value { color: #f59e0b; }
-    .jh-score-circle.jh-score-weak .jh-score-value { color: #ef4444; }
-    .jh-score-circle.jh-score-poor .jh-score-value { color: #6b7280; }
 
     .jh-job-info {
       flex: 1;
@@ -1406,10 +1263,9 @@ function getSidebarStyles() {
     }
 
     .jh-header-company {
-      display: block;
       font-weight: 600;
       font-size: 16px;
-      color: #0f172a;
+      color: #1F2937;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -1417,54 +1273,66 @@ function getSidebarStyles() {
     }
 
     .jh-header-title {
-      display: block;
-      font-size: 13px;
-      color: #64748b;
+      font-weight: 700;
+      font-size: 18px;
+      color: #1F2937;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      margin-bottom: 4px;
+    }
+
+    .jh-header-location {
+      font-size: 13px;
+      color: #6B7280;
     }
 
     /* ========================================
-       COMPANY METADATA GRID
+       STATS GRID
        ======================================== */
 
-    .jh-company-meta-grid {
+    .jh-stats-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      background: #ffffff;
-      border-radius: 10px;
-      padding: 12px;
-      border: 1px solid rgba(14, 165, 233, 0.15);
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1px;
+      background: #E5E7EB;
+      border: 1px solid #E5E7EB;
+      border-radius: 8px;
+      overflow: hidden;
     }
 
-    .jh-meta-row {
+    .jh-stat-item {
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      padding: 10px 12px;
+      background: #ffffff;
     }
 
-    .jh-meta-label {
+    .jh-stat-item.jh-stat-full {
+      grid-column: span 2;
+    }
+
+    .jh-stat-label {
       font-size: 10px;
       font-weight: 500;
-      color: #94a3b8;
+      color: #9CA3AF;
       text-transform: uppercase;
       letter-spacing: 0.5px;
+      margin-bottom: 2px;
     }
 
-    .jh-meta-value {
-      font-size: 13px;
+    .jh-stat-value {
+      font-size: 14px;
       font-weight: 600;
-      color: #334155;
+      color: #1F2937;
     }
 
-    .jh-meta-value.jh-positive {
+    .jh-stat-value.jh-positive {
       color: #059669;
     }
 
-    .jh-meta-value.jh-negative {
-      color: #ef4444;
+    .jh-stat-value.jh-negative {
+      color: #EF4444;
     }
 
     /* ========================================
@@ -1474,53 +1342,14 @@ function getSidebarStyles() {
     .jh-score-breakdown {
       flex: 1;
       overflow-y: auto;
-      border-bottom: 1px solid rgba(14, 165, 233, 0.15);
-    }
-
-    .jh-breakdown-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 12px 18px;
-      background: rgba(255, 255, 255, 0.7);
-      border-bottom: 1px solid rgba(14, 165, 233, 0.1);
-      position: sticky;
-      top: 0;
-      z-index: 1;
-    }
-
-    .jh-breakdown-title {
-      font-weight: 600;
-      font-size: 14px;
-      color: #0f172a;
-    }
-
-    .jh-collapse-btn {
-      width: 26px;
-      height: 26px;
-      border: none;
-      background: rgba(14, 165, 233, 0.1);
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 14px;
-      line-height: 1;
-      color: #0ea5e9;
-      transition: all 0.15s ease;
-    }
-
-    .jh-collapse-btn:hover {
-      background: rgba(14, 165, 233, 0.2);
-    }
-
-    .jh-breakdown-content {
-      padding: 14px 18px;
+      padding: 16px;
     }
 
     .jh-breakdown-section {
-      margin-bottom: 18px;
+      margin-bottom: 20px;
     }
 
-    .jh-breakdown-section:last-of-type {
+    .jh-breakdown-section:last-child {
       margin-bottom: 0;
     }
 
@@ -1530,183 +1359,169 @@ function getSidebarStyles() {
       align-items: center;
       padding: 10px 12px;
       border-radius: 8px;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
     }
 
     .jh-breakdown-job-fit .jh-breakdown-section-header {
-      background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
-      border: 1px solid #93c5fd;
+      background: #1F2937;
     }
 
     .jh-breakdown-your-fit .jh-breakdown-section-header {
-      background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
-      border: 1px solid #6ee7b7;
+      background: #5856D6;
     }
 
     .jh-breakdown-section-title {
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-    }
-
-    .jh-breakdown-job-fit .jh-breakdown-section-title {
-      color: #1d4ed8;
-    }
-
-    .jh-breakdown-your-fit .jh-breakdown-section-title {
-      color: #059669;
-    }
-
-    .jh-breakdown-score {
       font-size: 13px;
       font-weight: 700;
-      padding: 3px 10px;
-      border-radius: 6px;
-      background: rgba(255, 255, 255, 0.8);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #ffffff;
     }
 
-    .jh-breakdown-score.jh-score-high { color: #059669; }
-    .jh-breakdown-score.jh-score-mid { color: #f59e0b; }
-    .jh-breakdown-score.jh-score-low { color: #ef4444; }
+    .jh-section-progress {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .jh-progress-bar-container {
+      width: 80px;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .jh-section-progress .jh-progress-fill {
+      height: 100%;
+      background: #10B981;
+      border-radius: 3px;
+      transition: width 0.3s ease;
+    }
+
+    .jh-progress-text {
+      font-size: 12px;
+      font-weight: 600;
+      color: #ffffff;
+      min-width: 40px;
+    }
 
     .jh-breakdown-list {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 10px;
     }
 
-    /* Show all items by default - no show more/less */
     .jh-breakdown-item {
-      padding: 10px 12px;
+      padding: 12px;
       background: #ffffff;
       border-radius: 8px;
-      border-left: 4px solid #e2e8f0;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-    }
-
-    .jh-breakdown-item.jh-score-high {
-      border-left-color: #059669;
-    }
-
-    .jh-breakdown-item.jh-score-mid {
-      border-left-color: #f59e0b;
-    }
-
-    .jh-breakdown-item.jh-score-low {
-      border-left-color: #ef4444;
+      border: 1px solid #E5E7EB;
     }
 
     .jh-breakdown-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      margin-bottom: 6px;
     }
 
     .jh-breakdown-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #1F2937;
+    }
+
+    .jh-breakdown-score {
       font-size: 12px;
       font-weight: 600;
-      color: #334155;
+      color: #6B7280;
     }
 
-    .jh-breakdown-item-score {
+    .jh-progress-bar {
+      height: 6px;
+      background: #E5E7EB;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .jh-progress-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.3s ease;
+    }
+
+    .jh-progress-fill.jh-high {
+      background: #10B981;
+    }
+
+    .jh-progress-fill.jh-low {
+      background: #E5E7EB;
+    }
+
+    .jh-actual-value {
       font-size: 12px;
-      font-weight: 700;
-      min-width: 28px;
-      height: 22px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 6px;
-      color: white;
+      color: #6B7280;
+      margin-top: 6px;
     }
 
-    .jh-score-high .jh-breakdown-item-score { background: linear-gradient(135deg, #059669 0%, #047857 100%); }
-    .jh-score-mid .jh-breakdown-item-score { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
-    .jh-score-low .jh-breakdown-item-score { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
+    .jh-detection-status {
+      font-size: 12px;
+      margin-top: 6px;
+    }
 
-    .jh-breakdown-value {
-      display: block;
-      font-size: 11px;
-      color: #64748b;
-      margin-top: 4px;
+    .jh-detection-status.jh-detected {
+      color: #059669;
+    }
+
+    .jh-detection-status.jh-not-detected {
+      color: #9CA3AF;
+    }
+
+    .jh-breakdown-empty {
+      padding: 20px;
+      text-align: center;
+      color: #9CA3AF;
+      font-size: 13px;
+      background: #ffffff;
+      border-radius: 8px;
+      border: 1px solid #E5E7EB;
     }
 
     /* ========================================
        SKILL TAGS - Blue badges for matches
        ======================================== */
 
-    .jh-skill-tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 5px;
-      margin-top: 8px;
-    }
-
-    .jh-skill-tag {
-      font-size: 10px;
-      font-weight: 500;
-      padding: 3px 8px;
-      background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
-      color: #1d4ed8;
-      border-radius: 10px;
-      border: 1px solid #93c5fd;
-    }
-
-    .jh-skill-tag.jh-matched {
-      background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
-      color: white;
-      border: none;
-      box-shadow: 0 1px 3px rgba(14, 165, 233, 0.3);
-    }
-
-    .jh-skill-more {
-      font-size: 10px;
-      color: #64748b;
-      font-weight: 500;
-    }
-
-    /* ========================================
-       BENEFITS DISPLAY
-       ======================================== */
-
-    .jh-benefits-summary {
-      font-size: 11px;
-      color: #64748b;
-      margin-top: 4px;
-    }
-
+    .jh-skill-tags,
     .jh-benefits-tags {
       display: flex;
       flex-wrap: wrap;
-      gap: 5px;
+      gap: 6px;
       margin-top: 8px;
     }
 
+    .jh-skill-tag,
     .jh-benefit-tag {
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 500;
-      padding: 3px 8px;
-      background: #f1f5f9;
-      color: #64748b;
-      border-radius: 10px;
-      border: 1px solid #e2e8f0;
+      padding: 4px 10px;
+      background: #F3F4F6;
+      color: #6B7280;
+      border-radius: 12px;
+      border: 1px solid #E5E7EB;
     }
 
+    .jh-skill-tag.jh-matched,
     .jh-benefit-tag.jh-matched {
-      background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+      background: #5856D6;
       color: white;
       border: none;
-      box-shadow: 0 1px 3px rgba(14, 165, 233, 0.3);
     }
 
-    .jh-breakdown-empty {
-      padding: 20px;
-      text-align: center;
-      color: #94a3b8;
+    .jh-benefits-summary {
       font-size: 12px;
-      background: #ffffff;
-      border-radius: 8px;
+      color: #6B7280;
+      margin-top: 6px;
     }
 
     /* ========================================
@@ -1714,37 +1529,39 @@ function getSidebarStyles() {
        ======================================== */
 
     .jh-dealbreakers {
-      padding: 12px 18px;
+      padding: 0 16px 16px;
       flex-shrink: 0;
-      background: rgba(255, 255, 255, 0.5);
     }
 
     .jh-dealbreaker-alert {
-      display: flex;
-      gap: 10px;
       padding: 12px;
-      background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
-      border: 1px solid #fca5a5;
-      border-radius: 10px;
+      background: #FEE2E2;
+      border: 1px solid #FECACA;
+      border-radius: 8px;
+    }
+
+    .jh-dealbreaker-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
     }
 
     .jh-dealbreaker-icon {
-      font-size: 20px;
-      color: #ef4444;
+      font-size: 18px;
+      color: #991B1B;
     }
 
-    .jh-dealbreaker-content strong {
-      display: block;
+    .jh-dealbreaker-header strong {
       font-size: 13px;
-      color: #dc2626;
-      margin-bottom: 4px;
+      color: #991B1B;
     }
 
     .jh-dealbreaker-list {
       margin: 0;
-      padding-left: 16px;
+      padding-left: 24px;
       font-size: 12px;
-      color: #64748b;
+      color: #991B1B;
     }
 
     .jh-dealbreaker-list li {
@@ -1758,32 +1575,30 @@ function getSidebarStyles() {
     .jh-actions {
       display: flex;
       gap: 10px;
-      padding: 14px 18px;
-      border-top: 1px solid rgba(14, 165, 233, 0.15);
-      background: rgba(255, 255, 255, 0.8);
+      padding: 16px;
+      background: #ffffff;
+      border-top: 1px solid #E5E7EB;
       flex-shrink: 0;
     }
 
     .jh-btn {
       flex: 1;
-      padding: 12px 18px;
+      padding: 12px 16px;
       font-size: 14px;
       font-weight: 600;
       border: none;
-      border-radius: 10px;
+      border-radius: 8px;
       cursor: pointer;
       transition: all 0.15s ease;
     }
 
     .jh-btn-primary {
-      background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+      background: #5856D6;
       color: white;
-      box-shadow: 0 2px 8px rgba(14, 165, 233, 0.3);
     }
 
     .jh-btn-primary:hover {
-      background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
-      box-shadow: 0 4px 12px rgba(14, 165, 233, 0.4);
+      background: #4845B4;
     }
 
     .jh-btn-primary.jh-loading {
@@ -1792,79 +1607,25 @@ function getSidebarStyles() {
     }
 
     .jh-btn-primary.jh-success {
-      background: linear-gradient(135deg, #059669 0%, #047857 100%);
+      background: #059669;
     }
 
     .jh-btn-details {
       background: #ffffff;
-      color: #334155;
-      border: 1px solid rgba(14, 165, 233, 0.3);
+      color: #1F2937;
+      border: 1px solid #D1D9E0;
     }
 
     .jh-btn-details:hover {
-      background: #f0f9ff;
-      border-color: #0ea5e9;
-    }
-
-    /* ========================================
-       AIRTABLE FOOTER
-       ======================================== */
-
-    .jh-airtable-footer {
-      padding: 12px 18px;
-      background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-      border-top: 1px solid rgba(14, 165, 233, 0.1);
-      flex-shrink: 0;
-    }
-
-    .jh-btn-airtable {
-      width: 100%;
-      padding: 10px 16px;
-      font-size: 13px;
-      font-weight: 500;
-      background: transparent;
-      color: #64748b;
-      border: 1px dashed #cbd5e1;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: all 0.15s ease;
-    }
-
-    .jh-btn-airtable:hover {
-      background: #ffffff;
-      border-color: #0ea5e9;
-      color: #0ea5e9;
-    }
-
-    .jh-btn-airtable.jh-loading {
-      opacity: 0.7;
-      cursor: wait;
-    }
-
-    .jh-btn-airtable.jh-success {
-      background: #ecfdf5;
-      border-color: #059669;
-      border-style: solid;
-      color: #059669;
+      background: #F4F7FA;
+      border-color: #5856D6;
+      color: #5856D6;
     }
 
     .jh-btn-sm {
       padding: 6px 12px;
       font-size: 12px;
-      border-radius: 14px;
-    }
-
-    .jh-btn-link {
-      background: none;
-      border: none;
-      color: #0A66C2;
-      font-size: 12px;
-      cursor: pointer;
-      padding: 0;
-    }
-
-    .jh-btn-link:hover {
-      text-decoration: underline;
+      border-radius: 6px;
     }
 
     /* ========================================
@@ -1873,7 +1634,8 @@ function getSidebarStyles() {
 
     .jh-contact-card {
       padding: 16px;
-      border-bottom: 1px solid #e0e0e0;
+      background: #ffffff;
+      border-bottom: 1px solid #E5E7EB;
       flex-shrink: 0;
     }
 
@@ -1883,29 +1645,30 @@ function getSidebarStyles() {
 
     .jh-contact-name {
       display: block;
-      font-size: 16px;
-      font-weight: 600;
-      color: #191919;
+      font-size: 18px;
+      font-weight: 700;
+      color: #1F2937;
     }
 
     .jh-contact-role {
       display: block;
-      font-size: 13px;
-      color: #666;
+      font-size: 14px;
+      color: #6B7280;
       margin-top: 2px;
     }
 
     .jh-contact-company {
       display: block;
-      font-size: 13px;
-      color: #191919;
+      font-size: 14px;
+      font-weight: 600;
+      color: #1F2937;
       margin-top: 4px;
     }
 
     .jh-contact-location {
       display: block;
-      font-size: 12px;
-      color: #666;
+      font-size: 13px;
+      color: #6B7280;
       margin-top: 2px;
     }
 
@@ -1924,17 +1687,9 @@ function getSidebarStyles() {
       display: none;
     }
 
-    .jh-sync-syncing {
-      color: #f59e0b;
-    }
-
-    .jh-sync-synced {
-      color: #059669;
-    }
-
-    .jh-sync-error {
-      color: #ef4444;
-    }
+    .jh-sync-syncing { color: #F59E0B; }
+    .jh-sync-synced { color: #059669; }
+    .jh-sync-error { color: #EF4444; }
 
     /* ========================================
        OUTREACH MODE - HISTORY
@@ -1943,16 +1698,15 @@ function getSidebarStyles() {
     .jh-outreach-history {
       flex: 1;
       overflow-y: auto;
-      border-bottom: 1px solid #e0e0e0;
     }
 
     .jh-section-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 10px 16px;
-      background: #f8fafc;
-      border-bottom: 1px solid #e0e0e0;
+      padding: 12px 16px;
+      background: #F4F7FA;
+      border-bottom: 1px solid #E5E7EB;
       position: sticky;
       top: 0;
     }
@@ -1960,17 +1714,17 @@ function getSidebarStyles() {
     .jh-section-title {
       font-weight: 600;
       font-size: 13px;
-      color: #191919;
+      color: #1F2937;
     }
 
     .jh-outreach-history-list {
-      padding: 12px 16px;
+      padding: 16px;
     }
 
     .jh-outreach-empty {
       text-align: center;
       padding: 24px 16px;
-      color: #666;
+      color: #6B7280;
     }
 
     .jh-outreach-empty p {
@@ -1979,15 +1733,15 @@ function getSidebarStyles() {
 
     .jh-outreach-hint {
       font-size: 12px;
-      color: #999;
+      color: #9CA3AF;
     }
 
     .jh-outreach-entry {
       padding: 12px;
-      background: #f8fafc;
+      background: #ffffff;
       border-radius: 8px;
       margin-bottom: 10px;
-      border-left: 3px solid #e0e0e0;
+      border: 1px solid #E5E7EB;
     }
 
     .jh-outreach-entry-header {
@@ -2000,7 +1754,7 @@ function getSidebarStyles() {
     .jh-outreach-channel {
       font-size: 12px;
       font-weight: 600;
-      color: #0A66C2;
+      color: #5856D6;
     }
 
     .jh-outreach-status {
@@ -2010,18 +1764,18 @@ function getSidebarStyles() {
     }
 
     .jh-status-sent {
-      background: #e8f4ec;
-      color: #057642;
+      background: #D1FAE5;
+      color: #059669;
     }
 
     .jh-status-not-sent {
-      background: #fef3c7;
-      color: #d97706;
+      background: #FEF3C7;
+      color: #B45309;
     }
 
     .jh-outreach-date {
       font-size: 11px;
-      color: #999;
+      color: #9CA3AF;
       margin-left: auto;
     }
 
@@ -2031,13 +1785,9 @@ function getSidebarStyles() {
 
     .jh-outreach-text {
       font-size: 13px;
-      color: #191919;
+      color: #1F2937;
       margin: 0;
       line-height: 1.5;
-      display: -webkit-box;
-      -webkit-line-clamp: 3;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
     }
 
     .jh-outreach-entry-actions {
@@ -2051,7 +1801,8 @@ function getSidebarStyles() {
 
     .jh-compose {
       flex-shrink: 0;
-      border-top: 1px solid #e0e0e0;
+      background: #ffffff;
+      border-top: 1px solid #E5E7EB;
     }
 
     .jh-compose-form {
@@ -2060,10 +1811,10 @@ function getSidebarStyles() {
 
     .jh-channel-select {
       width: 100%;
-      padding: 8px 12px;
+      padding: 10px 12px;
       font-size: 13px;
-      border: 1px solid #d0d0d0;
-      border-radius: 8px;
+      border: 1px solid #D1D9E0;
+      border-radius: 6px;
       margin-bottom: 10px;
       background: white;
     }
@@ -2073,8 +1824,8 @@ function getSidebarStyles() {
       height: 80px;
       padding: 10px 12px;
       font-size: 13px;
-      border: 1px solid #d0d0d0;
-      border-radius: 8px;
+      border: 1px solid #D1D9E0;
+      border-radius: 6px;
       resize: vertical;
       font-family: inherit;
       margin-bottom: 10px;
@@ -2082,7 +1833,7 @@ function getSidebarStyles() {
 
     .jh-compose-textarea:focus {
       outline: none;
-      border-color: #0A66C2;
+      border-color: #5856D6;
     }
 
     .jh-compose-actions {
@@ -2091,103 +1842,13 @@ function getSidebarStyles() {
     }
 
     .jh-btn-copy-draft {
-      background: #f3f6f8;
-      color: #191919;
-      border: 1px solid #d0d0d0;
+      background: #F4F7FA;
+      color: #1F2937;
+      border: 1px solid #D1D9E0;
     }
 
     /* ========================================
-       MODAL
-       ======================================== */
-
-    .jh-modal-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.5);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 100001;
-    }
-
-    .jh-modal {
-      background: white;
-      border-radius: 12px;
-      padding: 20px;
-      max-width: 450px;
-      width: 90%;
-      max-height: 80vh;
-      overflow-y: auto;
-      position: relative;
-    }
-
-    .jh-modal-close {
-      position: absolute;
-      top: 12px;
-      right: 12px;
-      background: none;
-      border: none;
-      font-size: 24px;
-      color: #666;
-      cursor: pointer;
-    }
-
-    .jh-modal h3 {
-      margin: 0 0 12px 0;
-      padding-right: 30px;
-      font-size: 16px;
-    }
-
-    .jh-modal-meta {
-      display: flex;
-      gap: 12px;
-      margin-bottom: 16px;
-      font-size: 13px;
-    }
-
-    .jh-modal-message {
-      font-size: 14px;
-      line-height: 1.6;
-      color: #191919;
-      padding: 16px;
-      background: #f8fafc;
-      border-radius: 8px;
-      margin-bottom: 16px;
-    }
-
-    .jh-modal-actions {
-      display: flex;
-      justify-content: flex-end;
-    }
-
-    .jh-btn-copy-modal {
-      padding: 10px 20px;
-      background: #0A66C2;
-      color: white;
-      border: none;
-      border-radius: 20px;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-
-    /* ========================================
-       COLLAPSED STATE
-       ======================================== */
-
-    #jh-sidebar-rail.jh-collapsed .jh-breakdown-content {
-      display: none;
-    }
-
-    #jh-sidebar-rail.jh-collapsed .jh-collapse-btn {
-      transform: rotate(0deg);
-    }
-
-    /* ========================================
-       RESPONSIVE / SCROLL
+       SCROLLBAR
        ======================================== */
 
     .jh-score-breakdown::-webkit-scrollbar,
@@ -2197,7 +1858,7 @@ function getSidebarStyles() {
 
     .jh-score-breakdown::-webkit-scrollbar-thumb,
     .jh-outreach-history::-webkit-scrollbar-thumb {
-      background: #d0d0d0;
+      background: #D1D9E0;
       border-radius: 3px;
     }
 
@@ -2218,13 +1879,6 @@ function formatNumber(num) {
   return num.toLocaleString();
 }
 
-function formatSalary(val) {
-  if (!val) return null;
-  if (val >= 1000000) return `$${(val / 1000000).toFixed(1)}M`;
-  if (val >= 1000) return `$${Math.round(val / 1000)}K`;
-  return `$${val}`;
-}
-
 function formatDate(dateStr) {
   if (!dateStr) return '';
   const date = new Date(dateStr);
@@ -2241,29 +1895,6 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
-}
-
-function getScoreColorClass(score) {
-  if (score >= 80) return 'jh-score-strong';
-  if (score >= 70) return 'jh-score-good';
-  if (score >= 50) return 'jh-score-moderate';
-  if (score >= 30) return 'jh-score-weak';
-  return 'jh-score-poor';
-}
-
-function getSubScoreClass(score) {
-  if (score >= 35) return 'jh-score-high';
-  if (score >= 15) return 'jh-score-mid';
-  return 'jh-score-low';
-}
-
-function getWorkplaceClass(workplace) {
-  if (!workplace) return '';
-  const wp = workplace.toLowerCase();
-  if (wp.includes('remote')) return 'jh-workplace-remote';
-  if (wp.includes('hybrid')) return 'jh-workplace-hybrid';
-  if (wp.includes('on-site') || wp.includes('onsite')) return 'jh-workplace-onsite';
-  return '';
 }
 
 // ============================================================================
@@ -2287,7 +1918,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       huntBtn.disabled = false;
 
       setTimeout(() => {
-        huntBtn.textContent = 'Hunt Job';
+        huntBtn.textContent = 'Send to Airtable';
         huntBtn.classList.remove('jh-success');
       }, 3000);
     } else {
@@ -2296,7 +1927,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       huntBtn.disabled = false;
 
       setTimeout(() => {
-        huntBtn.textContent = 'Hunt Job';
+        huntBtn.textContent = 'Send to Airtable';
       }, 3000);
     }
 
