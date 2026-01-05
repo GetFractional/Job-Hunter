@@ -100,6 +100,61 @@ function ensureNumber(value) {
 }
 
 /**
+ * Map company type to valid Airtable Single Select options
+ * Valid options: "Public Company", "Privately Held", "Educational Institution",
+ *                "Self-Employed", "Government Agency", "Partnership", "Non-Profit"
+ * @param {string} companyType - Raw company type from LinkedIn
+ * @returns {string|null} Valid Airtable option or null
+ */
+function mapCompanyType(companyType) {
+  if (!companyType || typeof companyType !== 'string') return null;
+
+  const normalized = companyType.toLowerCase().trim();
+
+  // Map various LinkedIn formats to valid Airtable options
+  const typeMap = {
+    'public company': 'Public Company',
+    'publicly held': 'Public Company',
+    'publicly traded': 'Public Company',
+    'privately held': 'Privately Held',
+    'private': 'Privately Held',
+    'educational institution': 'Educational Institution',
+    'educational': 'Educational Institution',
+    'education': 'Educational Institution',
+    'school': 'Educational Institution',
+    'university': 'Educational Institution',
+    'self-employed': 'Self-Employed',
+    'self employed': 'Self-Employed',
+    'freelance': 'Self-Employed',
+    'government agency': 'Government Agency',
+    'government': 'Government Agency',
+    'public sector': 'Government Agency',
+    'partnership': 'Partnership',
+    'non-profit': 'Non-Profit',
+    'nonprofit': 'Non-Profit',
+    'non profit': 'Non-Profit',
+    'not-for-profit': 'Non-Profit',
+    'ngo': 'Non-Profit'
+  };
+
+  // Check for exact match first
+  if (typeMap[normalized]) {
+    return typeMap[normalized];
+  }
+
+  // Check for partial matches
+  for (const [key, value] of Object.entries(typeMap)) {
+    if (normalized.includes(key) || key.includes(normalized)) {
+      return value;
+    }
+  }
+
+  // If no match, return null to avoid 422 errors
+  console.log('[Job Hunter BG] ⚠️ Unknown company type, skipping:', companyType);
+  return null;
+}
+
+/**
  * Listen for messages from content scripts
  */
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -376,10 +431,15 @@ async function upsertCompany(credentials, jobData) {
   }
 
   // Company Type (exists in Companies schema - Single Select)
-  // Valid options must match Airtable dropdown (e.g., "Public Company", "Privately Held", etc.)
+  // CRITICAL: Must map to valid Airtable dropdown options to avoid 422 errors
   if (jobData.companyType) {
-    companyFields['Type'] = sanitizeString(jobData.companyType);
-    console.log('[Job Hunter BG] ✓ Company Type:', jobData.companyType);
+    const mappedType = mapCompanyType(jobData.companyType);
+    if (mappedType) {
+      companyFields['Type'] = mappedType;
+      console.log('[Job Hunter BG] ✓ Company Type:', mappedType, '(from:', jobData.companyType, ')');
+    } else {
+      console.log('[Job Hunter BG] ⚠️ Skipping invalid company type:', jobData.companyType);
+    }
   }
 
   // Company Description (exists in Companies schema - Long Text)
@@ -1105,7 +1165,7 @@ async function handleUpsertContactFromProfile(contactData) {
   if (roleTitle) contactFields['Role / Title'] = sanitizeString(roleTitle);
   if (email) contactFields['Email'] = sanitizeString(email);
   if (phone) contactFields['Phone / WhatsApp'] = sanitizeString(phone);
-  if (location) contactFields['Location'] = sanitizeString(location);
+  // NOTE: Location field removed - Contacts table doesn't have this field
   if (companyId) contactFields['Companies'] = [companyId];
 
   // 4. Update or create contact

@@ -1129,7 +1129,6 @@ function getOutreachSidebarHTML() {
       <!-- Header -->
       <div class="jh-sidebar-header">
         <div class="jh-header-brand">
-          <span class="jh-logo">&#127919;</span>
           <span class="jh-brand-text">Job Hunter</span>
           <span class="jh-mode-badge">Outreach</span>
         </div>
