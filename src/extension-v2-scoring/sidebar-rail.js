@@ -146,7 +146,7 @@ function switchSidebarMode(newMode) {
  * @param {Object} scoreResult - Score result from scoring engine
  * @param {Object} jobData - Job data
  */
-function updateSidebarScore(scoreResult, jobData) {
+async function updateSidebarScore(scoreResult, jobData) {
   let sidebar = document.getElementById('jh-sidebar-rail');
   if (!sidebar || sidebarState.mode !== 'jobs') {
     createSidebarRail('jobs');
@@ -161,14 +161,23 @@ function updateSidebarScore(scoreResult, jobData) {
   sidebarState.currentScore = scoreResult;
   sidebarState.currentJobData = jobData;
 
+  // Load user profile for accurate skill/benefit counts
+  let userProfile = null;
+  try {
+    const stored = await chrome.storage.local.get(['jh_user_profile']);
+    userProfile = stored.jh_user_profile || null;
+  } catch (error) {
+    console.warn('[Job Hunter Sidebar] Could not load user profile:', error);
+  }
+
   // Update header section
   updateHeaderSection(sidebar, jobData, scoreResult);
 
   // Update fit label and score card
   updateFitScoreCard(sidebar, scoreResult);
 
-  // Update score breakdown with progress bars
-  updateScoreBreakdown(sidebar, scoreResult);
+  // Update score breakdown with progress bars - NOW WITH USER PROFILE
+  updateScoreBreakdown(sidebar, scoreResult, userProfile);
 
   // Update dealbreakers if any
   updateDealbreakers(sidebar, scoreResult);
@@ -450,13 +459,21 @@ function renderBreakdownItems(breakdown, type, userProfile = null) {
   const totalUserSkills = userProfile?.background?.core_skills?.length || 30;
   const totalUserBenefits = userProfile?.preferences?.benefits?.length || 11;
 
-  return breakdown.map(item => {
+  // Filter out Hiring Urgency from display
+  const filteredBreakdown = breakdown.filter(item =>
+    !item.criteria?.toLowerCase().includes('hiring urgency')
+  );
+
+  return filteredBreakdown.map(item => {
     const score = item.score || 0;
-    const criteriaMaxScore = item.max_score || 10;
+    const criteriaMaxScore = item.max_score || 50;
     // Calculate percentage based on the criteria's max score
-    const percentage = (score / criteriaMaxScore) * 100;
+    const percentage = Math.round((score / criteriaMaxScore) * 100);
     const isHigh = percentage >= 70;
     const isMedium = percentage >= 40 && percentage < 70;
+
+    // Get weight for this criterion (from scoring engine, 0-1 scale converted to percentage)
+    const weight = item.weight ? Math.round(item.weight * 100) : null;
 
     // Shorten criteria names
     let criteriaName = item.criteria || '';
@@ -474,8 +491,7 @@ function renderBreakdownItems(breakdown, type, userProfile = null) {
       'Bonus': 'Bonus',
       'Equity': 'Equity',
       'Experience Level': 'Experience',
-      'Org Stability': 'Org Stability',
-      'Hiring Urgency': 'Hiring Urgency'
+      'Org Stability': 'Org Stability'
     };
     criteriaName = nameMap[criteriaName] || criteriaName;
 
@@ -483,19 +499,24 @@ function renderBreakdownItems(breakdown, type, userProfile = null) {
     let extraHtml = '';
 
     // Skills display with ghost badges for non-matching
-    if (item.criteria === 'Skills Overlap' && (item.matched_skills || item.unmatched_skills)) {
+    if (item.criteria === 'Skills Overlap' && (item.matched_skills || item.unmatched_skills || totalUserSkills)) {
       const matchedSkills = item.matched_skills || [];
       const unmatchedSkills = item.unmatched_skills || [];
       const matchCount = matchedSkills.length;
 
-      // Show X/Y where Y is total user skills
-      extraHtml += `<div class="jh-skills-summary">${matchCount}/${totalUserSkills} skills matched</div>`;
+      // Calculate total correctly: either from unmatched + matched, or from user profile
+      const actualTotal = matchedSkills.length + unmatchedSkills.length;
+      const displayTotal = actualTotal > 0 ? actualTotal : totalUserSkills;
 
-      // Combine matched and unmatched for display (limit to reasonable number)
+      // Show X/Y where Y is total user skills
+      extraHtml += `<div class="jh-skills-summary">${matchCount}/${displayTotal} skills</div>`;
+
+      // Combine matched and unmatched for display
+      // Show ALL skills up to a reasonable limit (first 15 total)
       const displaySkills = [
-        ...matchedSkills.slice(0, 8).map(s => ({ name: s, matched: true })),
-        ...unmatchedSkills.slice(0, 6).map(s => ({ name: s, matched: false }))
-      ];
+        ...matchedSkills.map(s => ({ name: s, matched: true })),
+        ...unmatchedSkills.map(s => ({ name: s, matched: false }))
+      ].slice(0, 15);
 
       if (displaySkills.length > 0) {
         extraHtml += `
@@ -503,6 +524,7 @@ function renderBreakdownItems(breakdown, type, userProfile = null) {
             ${displaySkills.map(s =>
               `<span class="jh-skill-tag ${s.matched ? 'jh-matched' : 'jh-ghost'}">${escapeHtml(s.name)}</span>`
             ).join('')}
+            ${(matchedSkills.length + unmatchedSkills.length) > 15 ? `<span class="jh-skill-tag jh-ghost">+${(matchedSkills.length + unmatchedSkills.length) - 15} more</span>` : ''}
           </div>
         `;
       }
@@ -557,19 +579,75 @@ function renderBreakdownItems(breakdown, type, userProfile = null) {
       }
     }
 
+    // Base Salary - special visualization with range
+    if (item.criteria === 'Base Salary') {
+      const salaryFloor = userProfile?.preferences?.salary_floor || 150000;
+      const salaryTarget = userProfile?.preferences?.salary_target || 200000;
+      const jobSalaryMin = item.job_salary_min || null;
+      const jobSalaryMax = item.job_salary_max || null;
+
+      // Create range visualization
+      // Scale: use $0 to $300K as the full range for visualization
+      const vizMin = 0;
+      const vizMax = 300000;
+      const scale = (val) => ((val - vizMin) / (vizMax - vizMin)) * 100;
+
+      const floorPos = scale(salaryFloor);
+      const targetPos = scale(salaryTarget);
+      const userRangeWidth = targetPos - floorPos;
+
+      let jobMarkersHtml = '';
+      if (jobSalaryMin !== null && jobSalaryMax !== null) {
+        const jobMinPos = scale(jobSalaryMin);
+        const jobMaxPos = scale(jobSalaryMax);
+        const jobRangeWidth = jobMaxPos - jobMinPos;
+        jobMarkersHtml = `<div class="jh-salary-range jh-salary-job" style="left: ${jobMinPos}%; width: ${jobRangeWidth}%" title="Job: $${formatSalary(jobSalaryMin)} - $${formatSalary(jobSalaryMax)}"></div>`;
+      } else if (jobSalaryMin !== null) {
+        const jobPos = scale(jobSalaryMin);
+        jobMarkersHtml = `<div class="jh-salary-marker jh-salary-job-single" style="left: ${jobPos}%" title="Job: $${formatSalary(jobSalaryMin)}"></div>`;
+      }
+
+      extraHtml += `
+        <div class="jh-salary-viz">
+          <div class="jh-salary-track">
+            <div class="jh-salary-range jh-salary-user" style="left: ${floorPos}%; width: ${userRangeWidth}%" title="Your target: $${formatSalary(salaryFloor)} - $${formatSalary(salaryTarget)}"></div>
+            ${jobMarkersHtml}
+          </div>
+          <div class="jh-salary-labels">
+            <span class="jh-salary-label">$${formatSalary(salaryFloor)}</span>
+            <span class="jh-salary-label jh-salary-label-right">$${formatSalary(salaryTarget)}</span>
+          </div>
+        </div>
+      `;
+    }
+
     // Actual value display for other criteria
-    if (item.actual_value && !['Benefits Package', 'Benefits', 'Bonus & Equity', 'Skills Overlap', 'Experience Level'].includes(item.criteria)) {
+    else if (item.actual_value && !['Benefits Package', 'Benefits', 'Bonus & Equity', 'Skills Overlap', 'Experience Level', 'Base Salary'].includes(item.criteria)) {
       extraHtml += `<div class="jh-actual-value">${escapeHtml(item.actual_value)}</div>`;
     }
 
     // Progress bar color class
     const progressClass = isHigh ? 'jh-high' : (isMedium ? 'jh-medium' : 'jh-low');
 
+    // Build score display - percentage with optional weight indicator
+    const scoreDisplay = weight !== null
+      ? `${percentage}% <span class="jh-weight">(${weight}%)</span>`
+      : `${percentage}%`;
+
+    // Determine if this item should be full-width (Skills and Benefits) or can be in grid
+    const isFullWidth = ['Skills Overlap', 'Skills', 'Benefits Package', 'Benefits'].includes(item.criteria);
+    const itemClass = isFullWidth ? 'jh-breakdown-item jh-full-width' : 'jh-breakdown-item';
+
+    // Build fit assessment text for hover tooltip
+    const rationaleText = item.rationale || 'Hover for assessment details';
+
     return `
-      <div class="jh-breakdown-item" title="${escapeHtml(item.rationale || '')}">
+      <div class="${itemClass}"
+           data-criteria="${escapeHtml(item.criteria || '')}"
+           data-rationale="${escapeHtml(rationaleText)}">
         <div class="jh-breakdown-row">
           <span class="jh-breakdown-name">${escapeHtml(criteriaName)}</span>
-          <span class="jh-breakdown-score">${score}/${criteriaMaxScore}</span>
+          <span class="jh-breakdown-score">${scoreDisplay}</span>
         </div>
         <div class="jh-progress-bar">
           <div class="jh-progress-fill ${progressClass}" style="width: ${percentage}%"></div>
@@ -1536,8 +1614,8 @@ function getSidebarStyles() {
     }
 
     .jh-breakdown-list {
-      display: flex;
-      flex-direction: column;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
       gap: 10px;
     }
 
@@ -1546,6 +1624,51 @@ function getSidebarStyles() {
       background: #ffffff;
       border-radius: 8px;
       border: 1px solid #E5E7EB;
+      position: relative;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .jh-breakdown-item:hover {
+      border-color: #5856D6;
+      box-shadow: 0 2px 8px rgba(88, 86, 214, 0.15);
+      transform: translateY(-1px);
+    }
+
+    .jh-breakdown-item.jh-full-width {
+      grid-column: span 2;
+    }
+
+    .jh-breakdown-item::after {
+      content: attr(data-rationale);
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%) translateY(-8px);
+      background: #1F2937;
+      color: white;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      line-height: 1.5;
+      white-space: normal;
+      max-width: 280px;
+      width: max-content;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      z-index: 100;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+
+    .jh-breakdown-item:hover::after {
+      opacity: 1;
+      transform: translateX(-50%) translateY(-4px);
+    }
+
+    .jh-breakdown-item[data-rationale=""]::after,
+    .jh-breakdown-item:not([data-rationale])::after {
+      display: none;
     }
 
     .jh-breakdown-row {
@@ -1564,7 +1687,14 @@ function getSidebarStyles() {
     .jh-breakdown-score {
       font-size: 12px;
       font-weight: 600;
-      color: #6B7280;
+      color: #1F2937;
+    }
+
+    .jh-weight {
+      font-size: 10px;
+      font-weight: 500;
+      color: #9CA3AF;
+      margin-left: 4px;
     }
 
     .jh-progress-bar {
@@ -1662,6 +1792,71 @@ function getSidebarStyles() {
       font-size: 11px;
       color: #6B7280;
       margin-top: 6px;
+    }
+
+    /* ========================================
+       SALARY RANGE VISUALIZATION
+       ======================================== */
+
+    .jh-salary-viz {
+      margin-top: 10px;
+    }
+
+    .jh-salary-track {
+      position: relative;
+      height: 12px;
+      background: #E5E7EB;
+      border-radius: 6px;
+      margin-bottom: 6px;
+    }
+
+    .jh-salary-range {
+      position: absolute;
+      height: 100%;
+      border-radius: 6px;
+      top: 0;
+    }
+
+    .jh-salary-range.jh-salary-user {
+      background: linear-gradient(90deg, #5856D6 0%, #4845B4 100%);
+      opacity: 0.7;
+      z-index: 1;
+    }
+
+    .jh-salary-range.jh-salary-job {
+      background: linear-gradient(90deg, #10B981 0%, #059669 100%);
+      opacity: 0.8;
+      z-index: 2;
+      border: 2px solid #ffffff;
+    }
+
+    .jh-salary-marker {
+      position: absolute;
+      width: 4px;
+      height: 16px;
+      top: -2px;
+      border-radius: 2px;
+    }
+
+    .jh-salary-marker.jh-salary-job-single {
+      background: #10B981;
+      z-index: 2;
+      box-shadow: 0 0 0 2px #ffffff;
+    }
+
+    .jh-salary-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: #6B7280;
+    }
+
+    .jh-salary-label {
+      font-weight: 600;
+    }
+
+    .jh-salary-label-right {
+      color: #5856D6;
     }
 
     /* ========================================
@@ -2053,18 +2248,24 @@ function getSidebarStyles() {
       appearance: none;
       -webkit-appearance: none;
       -moz-appearance: none;
-      padding-right: 32px;
+      padding-right: 36px;
       margin-bottom: 0;
+      width: 100%;
+      box-sizing: border-box;
+      cursor: pointer;
+      background-color: white;
+      background-image: none;
     }
 
     .jh-select-chevron {
       position: absolute;
-      right: 12px;
+      right: 14px;
       top: 50%;
       transform: translateY(-50%);
-      font-size: 10px;
+      font-size: 12px;
       color: #6B7280;
       pointer-events: none;
+      font-weight: bold;
     }
 
     /* ========================================
@@ -2218,6 +2419,11 @@ function getSidebarStyles() {
 function formatNumber(num) {
   if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
   if (num >= 1000) return (num / 1000).toFixed(0) + 'K';
+  return num.toLocaleString();
+}
+
+function formatSalary(num) {
+  if (num >= 1000) return Math.round(num / 1000) + 'K';
   return num.toLocaleString();
 }
 
