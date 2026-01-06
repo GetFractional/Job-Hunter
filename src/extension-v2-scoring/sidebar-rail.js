@@ -317,40 +317,47 @@ function updateFitScoreCard(sidebar, scoreResult) {
  * Update the score breakdown section with progress bars
  */
 function updateScoreBreakdown(sidebar, scoreResult, userProfile = null) {
-  // Job Fit section (job-to-user)
-  const jobFitProgress = sidebar.querySelector('.jh-breakdown-job-fit .jh-section-progress');
-  const jobFitList = sidebar.querySelector('.jh-breakdown-job-fit .jh-breakdown-list');
+  // Consolidated section combining both job-to-user and user-to-job criteria
+  const breakdownProgress = sidebar.querySelector('.jh-breakdown-section .jh-section-progress');
+  const breakdownList = sidebar.querySelector('.jh-breakdown-section .jh-breakdown-list');
 
-  if (jobFitProgress) {
-    const score = scoreResult.job_to_user_fit?.score || 0;
-    const percentage = (score / 50) * 100;
-    jobFitProgress.querySelector('.jh-progress-fill').style.width = `${percentage}%`;
-    jobFitProgress.querySelector('.jh-progress-text').textContent = `${score}/50`;
+  // Calculate total score (job fit + user fit)
+  const jobFitScore = scoreResult.job_to_user_fit?.score || 0;
+  const userFitScore = scoreResult.user_to_job_fit?.score || 0;
+  const totalScore = jobFitScore + userFitScore;
+
+  // Update progress bar
+  if (breakdownProgress) {
+    const percentage = totalScore; // Total is already out of 100
+    breakdownProgress.querySelector('.jh-progress-fill').style.width = `${percentage}%`;
+    breakdownProgress.querySelector('.jh-progress-text').textContent = `${totalScore}/100`;
   }
 
-  if (jobFitList && scoreResult.job_to_user_fit?.breakdown) {
-    jobFitList.innerHTML = renderBreakdownItems(
-      scoreResult.job_to_user_fit.breakdown,
-      'j2u',
-      userProfile
-    );
-  }
+  // Merge both breakdown arrays
+  if (breakdownList) {
+    const allCriteria = [];
 
-  // Your Fit section (user-to-job)
-  const yourFitProgress = sidebar.querySelector('.jh-breakdown-your-fit .jh-section-progress');
-  const yourFitList = sidebar.querySelector('.jh-breakdown-your-fit .jh-breakdown-list');
+    // Add job-to-user criteria
+    if (scoreResult.job_to_user_fit?.breakdown) {
+      allCriteria.push(...scoreResult.job_to_user_fit.breakdown);
+    }
 
-  if (yourFitProgress) {
-    const score = scoreResult.user_to_job_fit?.score || 0;
-    const percentage = (score / 50) * 100;
-    yourFitProgress.querySelector('.jh-progress-fill').style.width = `${percentage}%`;
-    yourFitProgress.querySelector('.jh-progress-text').textContent = `${score}/50`;
-  }
+    // Add user-to-job criteria
+    if (scoreResult.user_to_job_fit?.breakdown) {
+      allCriteria.push(...scoreResult.user_to_job_fit.breakdown);
+    }
 
-  if (yourFitList && scoreResult.user_to_job_fit?.breakdown) {
-    yourFitList.innerHTML = renderBreakdownItems(
-      scoreResult.user_to_job_fit.breakdown,
-      'u2j',
+    // Sort by weight/importance (highest first)
+    allCriteria.sort((a, b) => {
+      const weightA = a.weight || 0;
+      const weightB = b.weight || 0;
+      return weightB - weightA;
+    });
+
+    // Render all criteria in one consolidated list
+    breakdownList.innerHTML = renderBreakdownItems(
+      allCriteria,
+      'consolidated',
       userProfile
     );
   }
@@ -1224,37 +1231,20 @@ function getJobsSidebarHTML() {
         </div>
       </div>
 
-      <!-- Score Breakdown -->
+      <!-- Score Breakdown - Consolidated -->
       <div class="jh-score-breakdown">
-        <!-- Job Fit Section -->
-        <div class="jh-breakdown-section jh-breakdown-job-fit">
+        <div class="jh-breakdown-section">
           <div class="jh-breakdown-section-header">
-            <span class="jh-breakdown-section-title">Job Fit</span>
+            <span class="jh-breakdown-section-title">Criteria Assessment</span>
             <div class="jh-section-progress">
               <div class="jh-progress-bar-container">
                 <div class="jh-progress-fill"></div>
               </div>
-              <span class="jh-progress-text">--/50</span>
+              <span class="jh-progress-text">--/100</span>
             </div>
           </div>
           <div class="jh-breakdown-list">
-            <!-- Populated dynamically -->
-          </div>
-        </div>
-
-        <!-- Your Fit Section -->
-        <div class="jh-breakdown-section jh-breakdown-your-fit">
-          <div class="jh-breakdown-section-header">
-            <span class="jh-breakdown-section-title">Your Fit</span>
-            <div class="jh-section-progress">
-              <div class="jh-progress-bar-container">
-                <div class="jh-progress-fill"></div>
-              </div>
-              <span class="jh-progress-text">--/50</span>
-            </div>
-          </div>
-          <div class="jh-breakdown-list">
-            <!-- Populated dynamically -->
+            <!-- Populated dynamically with all criteria sorted by importance -->
           </div>
         </div>
       </div>
