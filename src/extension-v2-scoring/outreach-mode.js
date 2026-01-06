@@ -89,13 +89,13 @@ async function fetchAndDisplayOutreach(recordId) {
       outreachStatus: fields['Outreach Status'] || 'Draft',
       sentDate: fields['Sent Date'] || null,
       // Lookup fields from Contact
-      firstName: fields['First Name (from Outreach Message)']?.[0] || '',
-      lastName: fields['Role / Title (from Outreach Message)']?.[0] || '',
-      roleTitle: fields['Role / Title (from Outreach Message)']?.[0] || '',
-      company: fields['Company (from Outreach Message)']?.[0] || '',
-      email: fields['Email (from Outreach Message)']?.[0] || '',
-      linkedInUrl: fields['LinkedIn URL (from Outreach Message)']?.[0] || '',
-      lastOutreachDate: fields['Last Outreach Date (from Outreach Message)']?.[0] || null
+      firstName: fields['First Name']?.[0] || fields['First Name (from Contact)']?.[0] || '',
+      lastName: fields['Last Name']?.[0] || fields['Last Name (from Contact)']?.[0] || '',
+      roleTitle: fields['Role / Title']?.[0] || fields['Role / Title (from Contact)']?.[0] || '',
+      company: fields['Company']?.[0] || fields['Company (from Contact)']?.[0] || '',
+      email: fields['Email']?.[0] || fields['Email (from Contact)']?.[0] || '',
+      linkedInUrl: fields['LinkedIn URL']?.[0] || fields['LinkedIn URL (from Contact)']?.[0] || '',
+      lastOutreachDate: fields['Last Outreach Date']?.[0] || fields['Last Outreach Date (from Contact)']?.[0] || null
     };
 
     outreachModeActive = true;
