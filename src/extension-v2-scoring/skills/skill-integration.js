@@ -1,5 +1,5 @@
 /**
- * Job Hunter OS - Skill Extraction Integration
+ * Job Filter - Skill Extraction Integration
  *
  * Main entry point that integrates all skill extraction components:
  * - Initializes the fuzzy matcher with taxonomy

@@ -1,5 +1,5 @@
 /**
- * Job Hunter OS - Skill Extractor
+ * Job Filter - Skill Extractor
  *
  * Extracts required and desired skill concepts from job descriptions.
  * Uses a pattern-based extraction approach optimized for job postings:
@@ -29,6 +29,11 @@
  */
 function extractRequiredSkillConcepts(jobDescriptionText, options = {}) {
   const startTime = performance.now();
+  const config = (typeof window !== 'undefined' && window.SkillConstants?.EXTRACTION_CONFIG)
+    ? window.SkillConstants.EXTRACTION_CONFIG
+    : {};
+  const minConfidence = typeof config.MIN_CONFIDENCE === 'number' ? config.MIN_CONFIDENCE : 0.5;
+  const maxSkills = typeof config.MAX_SKILLS_PER_JOB === 'number' ? config.MAX_SKILLS_PER_JOB : 30;
 
   // Default options
   const {
@@ -106,7 +111,7 @@ function extractRequiredSkillConcepts(jobDescriptionText, options = {}) {
 
   // Step 6: Build final skill arrays
   result.required = normalizedRequired
-    .filter(s => s.confidence >= 0.5)
+    .filter(s => s.confidence >= minConfidence)
     .map(s => ({
       name: s.matchedSkill?.name || s.normalized || s.original,
       canonical: s.canonical || toCanonicalKey(s.original),
@@ -116,7 +121,7 @@ function extractRequiredSkillConcepts(jobDescriptionText, options = {}) {
     }));
 
   result.desired = normalizedDesired
-    .filter(s => s.confidence >= 0.5)
+    .filter(s => s.confidence >= minConfidence)
     .map(s => ({
       name: s.matchedSkill?.name || s.normalized || s.original,
       canonical: s.canonical || toCanonicalKey(s.original),
@@ -128,6 +133,15 @@ function extractRequiredSkillConcepts(jobDescriptionText, options = {}) {
   // Remove duplicates between required and desired (required wins)
   const requiredCanonicals = new Set(result.required.map(s => s.canonical));
   result.desired = result.desired.filter(s => !requiredCanonicals.has(s.canonical));
+
+  // Cap total skills to avoid overwhelming output (keep highest confidence)
+  if (maxSkills > 0) {
+    const combined = [...result.required, ...result.desired].sort((a, b) => b.confidence - a.confidence);
+    const capped = combined.slice(0, maxSkills);
+    const cappedCanonicals = new Set(capped.map(s => s.canonical));
+    result.required = result.required.filter(s => cappedCanonicals.has(s.canonical));
+    result.desired = result.desired.filter(s => cappedCanonicals.has(s.canonical));
+  }
 
   // Step 7: Calculate overall confidence
   const allSkills = [...result.required, ...result.desired];
@@ -212,6 +226,11 @@ function parseSections(text) {
  */
 function extractPhrases(text) {
   if (!text) return [];
+  const config = (typeof window !== 'undefined' && window.SkillConstants?.EXTRACTION_CONFIG)
+    ? window.SkillConstants.EXTRACTION_CONFIG
+    : {};
+  const minLength = typeof config.MIN_PHRASE_LENGTH === 'number' ? config.MIN_PHRASE_LENGTH : 2;
+  const maxWords = typeof config.MAX_PHRASE_WORDS === 'number' ? config.MAX_PHRASE_WORDS : 5;
 
   const phrases = new Set();
 
@@ -230,7 +249,11 @@ function extractPhrases(text) {
   // Clean and return
   return Array.from(phrases)
     .map(p => cleanExtractedPhrase(p))
-    .filter(p => p && p.length >= 2 && p.length <= 50);
+    .filter(p => {
+      if (!p || p.length < minLength || p.length > 50) return false;
+      const wordCount = p.split(/\s+/).length;
+      return wordCount <= maxWords;
+    });
 }
 
 /**
@@ -280,7 +303,10 @@ function extractIndicatorPhrases(text) {
     /background\s+in\s+([a-z][a-z\s\/&,()-]{2,50})/gi,
     /understanding\s+of\s+([a-z][a-z\s\/&,()-]{2,50})/gi,
     /strong\s+([a-z][a-z\s\/&,()-]{2,40})\s+skills?/gi,
-    /proven\s+([a-z][a-z\s\/&,()-]{2,40})\s+(?:skills?|ability|experience)/gi
+    /proven\s+([a-z][a-z\s\/&,()-]{2,40})\s+(?:skills?|ability|experience)/gi,
+    /responsible\s+for\s+([a-z][a-z\s\/&,()-]{2,50})/gi,
+    /accountable\s+for\s+([a-z][a-z\s\/&,()-]{2,50})/gi,
+    /experience\s+(?:scaling|building|owning)\s+([a-z][a-z\s\/&,()-]{2,50})/gi
   ];
 
   for (const pattern of indicatorPatterns) {

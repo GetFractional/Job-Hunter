@@ -1,5 +1,5 @@
 /**
- * Job Hunter OS - Mode Detection & SPA Navigation Handler
+ * Job Filter - Mode Detection & SPA Navigation Handler
  *
  * Handles robust mode switching between Jobs Mode and Outreach Mode.
  * LinkedIn uses SPA (Single Page Application) architecture, so we need to
@@ -69,7 +69,7 @@ function handleModeChange() {
     return;
   }
 
-  console.log('[Job Hunter Mode] Detected change:', currentMode, '->', newMode, 'URL:', url);
+  console.log('[Job Filter Mode] Detected change:', currentMode, '->', newMode, 'URL:', url);
 
   // Teardown previous mode
   if (currentMode) {
@@ -93,7 +93,7 @@ function handleModeChange() {
  * @param {string} mode - Mode to teardown
  */
 function teardownMode(mode) {
-  console.log('[Job Hunter Mode] Teardown:', mode);
+  console.log('[Job Filter Mode] Teardown:', mode);
 
   // Remove sidebar
   if (window.JobHunterSidebar) {
@@ -116,7 +116,7 @@ function teardownMode(mode) {
  * @param {string} mode - Mode to setup
  */
 function setupMode(mode) {
-  console.log('[Job Hunter Mode] Setup:', mode);
+  console.log('[Job Filter Mode] Setup:', mode);
 
   if (mode === 'jobs') {
     setupJobsMode();
@@ -175,7 +175,7 @@ function checkProfileAndProceed(callback) {
     if (response && response.hasProfile) {
       callback();
     } else {
-      console.log('[Job Hunter Mode] No profile found, prompting setup');
+      console.log('[Job Filter Mode] No profile found, prompting setup');
       if (window.showProfileSetupPrompt) {
         window.showProfileSetupPrompt();
       } else {
@@ -248,7 +248,7 @@ function extractContactData() {
     phone = phoneEl?.textContent?.trim() || '';
   }
 
-  console.log('[Job Hunter Mode] Extracted contact:', { fullName, companyName, location });
+  console.log('[Job Filter Mode] Extracted contact:', { fullName, companyName, location });
 
   return {
     firstName,
@@ -280,7 +280,7 @@ function observeJobChanges() {
                               document.querySelector('main');
 
   if (!jobDetailsContainer) {
-    console.log('[Job Hunter Mode] Job details container not found, will retry');
+    console.log('[Job Filter Mode] Job details container not found, will retry');
     setTimeout(observeJobChanges, 1000);
     return;
   }
@@ -298,7 +298,7 @@ function observeJobChanges() {
   });
 
   observers.push(observer);
-  console.log('[Job Hunter Mode] Job observer attached');
+  console.log('[Job Filter Mode] Job observer attached');
 }
 
 /**
@@ -341,7 +341,7 @@ function observeProfileChanges() {
   });
 
   observers.push(observer);
-  console.log('[Job Hunter Mode] Profile observer attached');
+  console.log('[Job Filter Mode] Profile observer attached');
 }
 
 /**
@@ -384,14 +384,14 @@ function initNavigationListeners() {
     }
   }, 1000);
 
-  console.log('[Job Hunter Mode] Navigation listeners initialized');
+  console.log('[Job Filter Mode] Navigation listeners initialized');
 }
 
 /**
  * Initialize mode detection system
  */
 function initModeDetection() {
-  console.log('[Job Hunter Mode] Initializing...');
+  console.log('[Job Filter Mode] Initializing...');
 
   // Set up navigation listeners
   initNavigationListeners();

@@ -1,5 +1,5 @@
 /**
- * Job Hunter OS - Skill Normalizer
+ * Job Filter - Skill Normalizer
  *
  * Normalizes raw skill phrases to canonical skill concepts using a 4-pass approach:
  *
@@ -34,6 +34,11 @@ function normalizeSkillConcept(phrase, options) {
     synonymGroups = new Map(),
     fuzzyMatcher = null
   } = options;
+  const config = (typeof window !== 'undefined' && window.SkillConstants?.EXTRACTION_CONFIG)
+    ? window.SkillConstants.EXTRACTION_CONFIG
+    : {};
+  const fuzzyThreshold = typeof config.FUZZY_THRESHOLD === 'number' ? config.FUZZY_THRESHOLD : 0.35;
+  const minConfidence = typeof config.MIN_CONFIDENCE === 'number' ? config.MIN_CONFIDENCE : 0.5;
 
   // Clean and normalize input
   const cleaned = cleanSkillPhrase(phrase);
@@ -75,7 +80,7 @@ function normalizeSkillConcept(phrase, options) {
   // PASS 3: Fuzzy match
   if (fuzzyMatcher) {
     const fuzzyResults = fuzzyMatcher.search(cleaned, { limit: 1 });
-    if (fuzzyResults.length > 0 && fuzzyResults[0].score <= 0.35) {
+    if (fuzzyResults.length > 0 && fuzzyResults[0].score <= fuzzyThreshold) {
       const match = fuzzyResults[0];
       // Convert fuzzy score (0=best) to confidence (1=best)
       const confidence = 1 - match.score;
@@ -83,7 +88,7 @@ function normalizeSkillConcept(phrase, options) {
         normalized: match.item.name,
         canonical: match.item.canonical,
         matchedSkill: match.item,
-        confidence: Math.max(0.6, confidence), // Minimum 0.6 for fuzzy matches
+        confidence: Math.max(minConfidence, confidence),
         matchType: 'fuzzy',
         matchedTerm: match.matchedTerm
       };

@@ -1,5 +1,5 @@
 /**
- * Job Hunter OS - Background Service Worker
+ * Job Filter - Background Service Worker
  *
  * Handles communication between content scripts and Airtable API:
  * - Listens for messages from content.js
@@ -150,7 +150,7 @@ function mapCompanyType(companyType) {
   }
 
   // If no match, return null to avoid 422 errors
-  console.log('[Job Hunter BG] ⚠️ Unknown company type, skipping:', companyType);
+  console.log('[Job Filter BG] ⚠️ Unknown company type, skipping:', companyType);
   return null;
 }
 
@@ -166,7 +166,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   // Handle job capture requests (with optional score data)
   if (request.action === 'jobHunter.createAirtableRecord') {
-    console.log('[Job Hunter BG] ⚡ Received job capture request');
+    console.log('[Job Filter BG] ⚡ Received job capture request');
 
     // CRITICAL: Respond immediately to prevent timeout
     // Content script has 5-second timeout, but Airtable API calls can take longer
@@ -178,13 +178,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     // Process asynchronously in background (don't await)
     const startTime = Date.now();
-    console.log('[Job Hunter BG] 🚀 Starting background processing at', new Date().toISOString());
+    console.log('[Job Filter BG] 🚀 Starting background processing at', new Date().toISOString());
 
     handleCreateTripleRecord(request.job, request.score)
       .then(result => {
         const elapsed = Date.now() - startTime;
-        console.log('[Job Hunter BG] ✅ Background processing COMPLETE in', elapsed, 'ms');
-        console.log('[Job Hunter BG] SUCCESS - Result:', result);
+        console.log('[Job Filter BG] ✅ Background processing COMPLETE in', elapsed, 'ms');
+        console.log('[Job Filter BG] SUCCESS - Result:', result);
 
         // CRITICAL: Notify content script of SUCCESS so button can update
         chrome.tabs.sendMessage(sender.tab.id, {
@@ -195,13 +195,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           contactRecordId: result.contactRecordId,
           message: 'Job successfully captured to Airtable!'
         }).catch(err => {
-          console.log('[Job Hunter BG] ⚠️ Could not notify content script of success (tab may be closed)');
+          console.log('[Job Filter BG] ⚠️ Could not notify content script of success (tab may be closed)');
         });
       })
       .catch(error => {
         const elapsed = Date.now() - startTime;
-        console.error('[Job Hunter BG] ❌ Background processing FAILED in', elapsed, 'ms');
-        console.error('[Job Hunter BG] ERROR:', error.message);
+        console.error('[Job Filter BG] ❌ Background processing FAILED in', elapsed, 'ms');
+        console.error('[Job Filter BG] ERROR:', error.message);
 
         // CRITICAL: Notify content script of FAILURE so button can show error
         chrome.tabs.sendMessage(sender.tab.id, {
@@ -209,7 +209,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           success: false,
           error: error.message || 'Failed to save job to Airtable'
         }).catch(err => {
-          console.log('[Job Hunter BG] ⚠️ Could not notify content script of error (tab may be closed)');
+          console.log('[Job Filter BG] ⚠️ Could not notify content script of error (tab may be closed)');
         });
       });
 
@@ -219,7 +219,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   // Handle Outreach Log record fetch
   if (request.action === 'jobHunter.fetchOutreachRecord') {
-    console.log('[Job Hunter BG] Fetching Outreach Log record:', request.recordId);
+    console.log('[Job Filter BG] Fetching Outreach Log record:', request.recordId);
     handleFetchOutreachRecord(request.recordId)
       .then(result => sendResponse(result))
       .catch(error => sendResponse({ success: false, error: error.message }));
@@ -228,7 +228,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   // Handle Outreach Log "Mark as Sent" update
   if (request.action === 'jobHunter.markOutreachSent') {
-    console.log('[Job Hunter BG] Marking outreach as sent:', request.recordId);
+    console.log('[Job Filter BG] Marking outreach as sent:', request.recordId);
     handleMarkOutreachSent(request.recordId, request.contactRecordId)
       .then(result => sendResponse(result))
       .catch(error => sendResponse({ success: false, error: error.message }));
@@ -252,7 +252,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   // Handle Upsert Contact (from /in/ profile pages)
   if (request.type === 'JH_UPSERT_CONTACT') {
-    console.log('[Job Hunter BG] Upserting contact from profile:', request.payload.fullName);
+    console.log('[Job Filter BG] Upserting contact from profile:', request.payload.fullName);
     handleUpsertContactFromProfile(request.payload)
       .then(result => sendResponse({ success: true, data: result }))
       .catch(error => sendResponse({ success: false, error: error.message }));
@@ -261,7 +261,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   // Handle Fetch Outreach Log by Contact LinkedIn URL
   if (request.type === 'JH_FETCH_OUTREACH_LOG') {
-    console.log('[Job Hunter BG] Fetching outreach log for:', request.payload.contactLinkedinUrl);
+    console.log('[Job Filter BG] Fetching outreach log for:', request.payload.contactLinkedinUrl);
     handleFetchOutreachLogByContact(request.payload.contactLinkedinUrl)
       .then(result => sendResponse({ success: true, data: result }))
       .catch(error => sendResponse({ success: false, error: error.message }));
@@ -270,7 +270,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   // Handle Create Outreach Log Entry
   if (request.type === 'JH_CREATE_OUTREACH_LOG') {
-    console.log('[Job Hunter BG] Creating outreach log entry');
+    console.log('[Job Filter BG] Creating outreach log entry');
     handleCreateOutreachLogEntry(request.payload)
       .then(result => sendResponse({ success: true, data: result }))
       .catch(error => sendResponse({ success: false, error: error.message }));
@@ -279,7 +279,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   // Handle Mark Outreach Sent (new type format)
   if (request.type === 'JH_MARK_OUTREACH_SENT') {
-    console.log('[Job Hunter BG] Marking outreach as sent:', request.payload.outreachLogRecordId);
+    console.log('[Job Filter BG] Marking outreach as sent:', request.payload.outreachLogRecordId);
     handleMarkOutreachSent(request.payload.outreachLogRecordId, null)
       .then(result => sendResponse({ success: true, data: result }))
       .catch(error => sendResponse({ success: false, error: error.message }));
@@ -292,7 +292,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   // Handle skill extraction request
   if (request.action === 'jobHunter.extractSkills' || request.type === 'JH_EXTRACT_SKILLS') {
-    console.log('[Job Hunter BG] Skill extraction request received');
+    console.log('[Job Filter BG] Skill extraction request received');
     handleSkillExtractionRequest(request.payload || request)
       .then(result => sendResponse({ success: true, data: result }))
       .catch(error => sendResponse({ success: false, error: error.message }));
@@ -301,7 +301,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   // Handle skill analysis (extraction + matching) request
   if (request.action === 'jobHunter.analyzeSkills' || request.type === 'JH_ANALYZE_SKILLS') {
-    console.log('[Job Hunter BG] Full skill analysis request received');
+    console.log('[Job Filter BG] Full skill analysis request received');
     handleFullSkillAnalysis(request.payload || request)
       .then(result => sendResponse({ success: true, data: result }))
       .catch(error => sendResponse({ success: false, error: error.message }));
@@ -310,7 +310,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   // Handle updating job record with skill data
   if (request.action === 'jobHunter.updateJobSkills' || request.type === 'JH_UPDATE_JOB_SKILLS') {
-    console.log('[Job Hunter BG] Update job skills request:', request.payload?.jobRecordId);
+    console.log('[Job Filter BG] Update job skills request:', request.payload?.jobRecordId);
     handleUpdateJobSkills(request.payload || request)
       .then(result => sendResponse({ success: true, data: result }))
       .catch(error => sendResponse({ success: false, error: error.message }));
@@ -327,16 +327,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
  * @returns {Promise<Object>} Result with success status and record IDs
  */
 async function handleCreateTripleRecord(jobData, scoreData = null) {
-  console.log('[Job Hunter BG] Creating triple record (Company, Contact, Job):', jobData);
+  console.log('[Job Filter BG] Creating triple record (Company, Contact, Job):', jobData);
   if (scoreData) {
-    console.log('[Job Hunter BG] Including score data:', scoreData.overall_score, scoreData.overall_label);
+    console.log('[Job Filter BG] Including score data:', scoreData.overall_score, scoreData.overall_label);
   }
 
   // Get credentials from storage
   const credentials = await getCredentials();
 
   if (!credentials.baseId || !credentials.pat) {
-    console.error('[Job Hunter BG] Missing credentials');
+    console.error('[Job Filter BG] Missing credentials');
     return {
       success: false,
       error: 'Please configure Airtable settings in the extension popup'
@@ -354,10 +354,10 @@ async function handleCreateTripleRecord(jobData, scoreData = null) {
   try {
     // STEP A: Upsert Company record
     const companyRecordId = await upsertCompany(credentials, jobData);
-    console.log('[Job Hunter BG] ✓ Company record ID:', companyRecordId);
+    console.log('[Job Filter BG] ✓ Company record ID:', companyRecordId);
 
     // HUMAN-SPEED DELAY: Prevent LinkedIn throttling (critical for account safety)
-    console.log('[Job Hunter BG] ⏳ Waiting 1.5s before next API call...');
+    console.log('[Job Filter BG] ⏳ Waiting 1.5s before next API call...');
     await delay(1500);
 
     // STEP B: Upsert Contact record (if hiring manager data exists)
@@ -365,21 +365,21 @@ async function handleCreateTripleRecord(jobData, scoreData = null) {
     if (jobData.hiringManagerDetails?.name) {
       contactRecordId = await upsertContact(credentials, jobData, companyRecordId);
       if (contactRecordId) {
-        console.log('[Job Hunter BG] ✓ Contact record ID:', contactRecordId);
+        console.log('[Job Filter BG] ✓ Contact record ID:', contactRecordId);
 
         // HUMAN-SPEED DELAY: Prevent LinkedIn throttling
-        console.log('[Job Hunter BG] ⏳ Waiting 1.5s before next API call...');
+        console.log('[Job Filter BG] ⏳ Waiting 1.5s before next API call...');
         await delay(1500);
       } else {
-        console.log('[Job Hunter BG] ℹ️ Contact creation skipped (validation rejected fake contact)');
+        console.log('[Job Filter BG] ℹ️ Contact creation skipped (validation rejected fake contact)');
       }
     } else {
-      console.log('[Job Hunter BG] ℹ️ No hiring manager data, skipping Contact creation');
+      console.log('[Job Filter BG] ℹ️ No hiring manager data, skipping Contact creation');
     }
 
     // STEP C: Create Job record with links to Company and Contact
     const jobRecordId = await createJob(credentials, jobData, scoreData, companyRecordId, contactRecordId);
-    console.log('[Job Hunter BG] ✓ Job record created:', jobRecordId);
+    console.log('[Job Filter BG] ✓ Job record created:', jobRecordId);
 
     return {
       success: true,
@@ -391,7 +391,7 @@ async function handleCreateTripleRecord(jobData, scoreData = null) {
     };
 
   } catch (error) {
-    console.error('[Job Hunter BG] Error creating triple record:', error);
+    console.error('[Job Filter BG] Error creating triple record:', error);
     return {
       success: false,
       error: error.message || 'Failed to create records'
@@ -440,25 +440,25 @@ async function upsertCompany(credentials, jobData) {
   // LinkedIn URL (exists in Companies schema)
   if (jobData.companyPageUrl) {
     companyFields['LinkedIn URL'] = sanitizeString(jobData.companyPageUrl);
-    console.log('[Job Hunter BG] ✓ LinkedIn URL:', jobData.companyPageUrl);
+    console.log('[Job Filter BG] ✓ LinkedIn URL:', jobData.companyPageUrl);
   }
 
   // Location (exists in Companies schema)
   if (jobData.location) {
     companyFields['Location'] = sanitizeString(jobData.location);
-    console.log('[Job Hunter BG] ✓ Location:', jobData.location);
+    console.log('[Job Filter BG] ✓ Location:', jobData.location);
   }
 
   // Industry (exists in Companies schema)
   if (jobData.industry) {
     companyFields['Industry'] = sanitizeString(jobData.industry);
-    console.log('[Job Hunter BG] ✓ Industry:', jobData.industry);
+    console.log('[Job Filter BG] ✓ Industry:', jobData.industry);
   }
 
   // Website (exists in Companies schema)
   if (jobData.website) {
     companyFields['Website'] = sanitizeString(jobData.website);
-    console.log('[Job Hunter BG] ✓ Website:', jobData.website);
+    console.log('[Job Filter BG] ✓ Website:', jobData.website);
   }
 
   // Company Type (exists in Companies schema - Single Select)
@@ -467,16 +467,16 @@ async function upsertCompany(credentials, jobData) {
     const mappedType = mapCompanyType(jobData.companyType);
     if (mappedType) {
       companyFields['Type'] = mappedType;
-      console.log('[Job Hunter BG] ✓ Company Type:', mappedType, '(from:', jobData.companyType, ')');
+      console.log('[Job Filter BG] ✓ Company Type:', mappedType, '(from:', jobData.companyType, ')');
     } else {
-      console.log('[Job Hunter BG] ⚠️ Skipping invalid company type:', jobData.companyType);
+      console.log('[Job Filter BG] ⚠️ Skipping invalid company type:', jobData.companyType);
     }
   }
 
   // Company Description (exists in Companies schema - Long Text)
   if (jobData.companyDescription) {
     companyFields['Company Description'] = sanitizeString(jobData.companyDescription);
-    console.log('[Job Hunter BG] ✓ Company Description:', jobData.companyDescription.substring(0, 100) + '...');
+    console.log('[Job Filter BG] ✓ Company Description:', jobData.companyDescription.substring(0, 100) + '...');
   }
 
   // Size (exists in Companies schema - Single Select)
@@ -486,16 +486,16 @@ async function upsertCompany(credentials, jobData) {
     const sizeCategory = mapHeadcountToSize(totalEmployees);
     if (sizeCategory) {
       companyFields['Size'] = sizeCategory;
-      console.log('[Job Hunter BG] ✓ Size:', sizeCategory, '(from', totalEmployees, 'employees)');
+      console.log('[Job Filter BG] ✓ Size:', sizeCategory, '(from', totalEmployees, 'employees)');
     }
   }
 
-  console.log('[Job Hunter BG] === Companies Table Payload (schema-validated) ===');
+  console.log('[Job Filter BG] === Companies Table Payload (schema-validated) ===');
   console.log(JSON.stringify(companyFields, null, 2));
 
   if (existingRecord) {
     // Update existing company record
-    console.log('[Job Hunter BG] Updating existing company:', existingRecord.id);
+    console.log('[Job Filter BG] Updating existing company:', existingRecord.id);
     const updateUrl = `${AIRTABLE_API_BASE}/${credentials.baseId}/${TABLES.COMPANIES}/${existingRecord.id}`;
 
     const updateResponse = await fetchWithRetry(updateUrl, {
@@ -509,7 +509,7 @@ async function upsertCompany(credentials, jobData) {
 
     if (!updateResponse.ok) {
       const errorBody = await updateResponse.json().catch(() => ({}));
-      console.error('[Job Hunter BG] ❌ Company UPDATE failed (422):', {
+      console.error('[Job Filter BG] ❌ Company UPDATE failed (422):', {
         status: updateResponse.status,
         error: errorBody.error,
         sentPayload: companyFields
@@ -522,11 +522,11 @@ async function upsertCompany(credentials, jobData) {
 
   } else {
     // Create new company record
-    console.log('[Job Hunter BG] Creating new company');
+    console.log('[Job Filter BG] Creating new company');
     const createUrl = `${AIRTABLE_API_BASE}/${credentials.baseId}/${TABLES.COMPANIES}`;
 
     // DEBUG: Log payload before sending to Airtable
-    console.log('[Job Hunter BG] Payload being sent to Airtable (Companies):', JSON.stringify({ fields: companyFields }, null, 2));
+    console.log('[Job Filter BG] Payload being sent to Airtable (Companies):', JSON.stringify({ fields: companyFields }, null, 2));
 
     const createResponse = await fetchWithRetry(createUrl, {
       method: 'POST',
@@ -539,7 +539,7 @@ async function upsertCompany(credentials, jobData) {
 
     if (!createResponse.ok) {
       const errorBody = await createResponse.json().catch(() => ({}));
-      console.error('[Job Hunter BG] ❌ Company CREATE failed (422):', {
+      console.error('[Job Filter BG] ❌ Company CREATE failed (422):', {
         status: createResponse.status,
         error: errorBody.error,
         sentPayload: companyFields
@@ -566,7 +566,7 @@ async function upsertContact(credentials, jobData, companyRecordId) {
 
   // CRITICAL: If no hiring manager found, return null - do NOT create fake "John Doe" contact
   if (!hiringManager?.name) {
-    console.log('[Job Hunter BG] No hiring manager found - skipping contact creation');
+    console.log('[Job Filter BG] No hiring manager found - skipping contact creation');
     return null;
   }
 
@@ -591,12 +591,12 @@ async function upsertContact(credentials, jobData, companyRecordId) {
 
   // CRITICAL: Reject if hiring manager name equals company name (fake contact detection)
   if (normalizedName === normalizedCompanyName) {
-    console.log('[Job Hunter BG] ❌ REJECTED fake contact - hiring manager name matches company name:', hiringManager.name);
+    console.log('[Job Filter BG] ❌ REJECTED fake contact - hiring manager name matches company name:', hiringManager.name);
     return null;
   }
 
   if (invalidNames.includes(normalizedName)) {
-    console.log('[Job Hunter BG] ❌ REJECTED invalid hiring manager name:', hiringManager.name);
+    console.log('[Job Filter BG] ❌ REJECTED invalid hiring manager name:', hiringManager.name);
     return null;
   }
 
@@ -607,13 +607,13 @@ async function upsertContact(credentials, jobData, companyRecordId) {
 
   // CRITICAL: Reject if no last name (likely a company name, not a person)
   if (!lastName || lastName.length === 0) {
-    console.log('[Job Hunter BG] ❌ REJECTED potential fake contact - no last name (single word name):', hiringManager.name);
+    console.log('[Job Filter BG] ❌ REJECTED potential fake contact - no last name (single word name):', hiringManager.name);
     return null;
   }
 
   // Validate we have at least a first name after sanitization
   if (!firstName || firstName.length < 2) {
-    console.log('[Job Hunter BG] ❌ REJECTED invalid hiring manager name after parsing:', hiringManager.name);
+    console.log('[Job Filter BG] ❌ REJECTED invalid hiring manager name after parsing:', hiringManager.name);
     return null;
   }
 
@@ -667,7 +667,7 @@ async function upsertContact(credentials, jobData, companyRecordId) {
 
   if (existingRecord) {
     // Update existing contact record
-    console.log('[Job Hunter BG] Updating existing contact:', existingRecord.id);
+    console.log('[Job Filter BG] Updating existing contact:', existingRecord.id);
     const updateUrl = `${AIRTABLE_API_BASE}/${credentials.baseId}/${TABLES.CONTACTS}/${existingRecord.id}`;
 
     const updateResponse = await fetchWithRetry(updateUrl, {
@@ -681,7 +681,7 @@ async function upsertContact(credentials, jobData, companyRecordId) {
 
     if (!updateResponse.ok) {
       const errorBody = await updateResponse.json().catch(() => ({}));
-      console.error('[Job Hunter BG] ❌ Contact update failed:', {
+      console.error('[Job Filter BG] ❌ Contact update failed:', {
         status: updateResponse.status,
         statusText: updateResponse.statusText,
         errorMessage: errorBody.error?.message || 'No error message',
@@ -696,11 +696,11 @@ async function upsertContact(credentials, jobData, companyRecordId) {
 
   } else {
     // Create new contact record
-    console.log('[Job Hunter BG] Creating new contact');
+    console.log('[Job Filter BG] Creating new contact');
     const createUrl = `${AIRTABLE_API_BASE}/${credentials.baseId}/${TABLES.CONTACTS}`;
 
     // DEBUG: Log payload before sending to Airtable
-    console.log('[Job Hunter BG] Payload being sent to Airtable (Contacts):', JSON.stringify({ fields: contactFields }, null, 2));
+    console.log('[Job Filter BG] Payload being sent to Airtable (Contacts):', JSON.stringify({ fields: contactFields }, null, 2));
 
     const createResponse = await fetchWithRetry(createUrl, {
       method: 'POST',
@@ -713,7 +713,7 @@ async function upsertContact(credentials, jobData, companyRecordId) {
 
     if (!createResponse.ok) {
       const errorBody = await createResponse.json().catch(() => ({}));
-      console.error('[Job Hunter BG] ❌ Contact creation failed:', {
+      console.error('[Job Filter BG] ❌ Contact creation failed:', {
         status: createResponse.status,
         statusText: createResponse.statusText,
         errorMessage: errorBody.error?.message || 'No error message',
@@ -755,9 +755,9 @@ async function createJob(credentials, jobData, scoreData, companyRecordId, conta
   // Link to Contact record if available (OPTIONAL - job can exist without contact)
   if (contactRecordId) {
     jobFields['Contacts'] = [contactRecordId];
-    console.log('[Job Hunter BG] ✓ Linking job to contact:', contactRecordId);
+    console.log('[Job Filter BG] ✓ Linking job to contact:', contactRecordId);
   } else {
-    console.log('[Job Hunter BG] ℹ️ No contact to link - job will be created without hiring manager');
+    console.log('[Job Filter BG] ℹ️ No contact to link - job will be created without hiring manager');
   }
 
   // Add salary fields only if they have valid numeric values (OPTIONAL - job can exist without salary)
@@ -769,11 +769,11 @@ async function createJob(credentials, jobData, scoreData, companyRecordId, conta
 
       if (!isNaN(salaryMin) && salaryMin > 0) {
         jobFields['Salary Min'] = salaryMin;
-        console.log('[Job Hunter BG] ✓ Salary Min:', salaryMin);
+        console.log('[Job Filter BG] ✓ Salary Min:', salaryMin);
       }
     }
   } catch (e) {
-    console.log('[Job Hunter BG] ⚠️ Failed to parse Salary Min:', e.message);
+    console.log('[Job Filter BG] ⚠️ Failed to parse Salary Min:', e.message);
   }
 
   try {
@@ -784,11 +784,11 @@ async function createJob(credentials, jobData, scoreData, companyRecordId, conta
 
       if (!isNaN(salaryMax) && salaryMax > 0) {
         jobFields['Salary Max'] = salaryMax;
-        console.log('[Job Hunter BG] ✓ Salary Max:', salaryMax);
+        console.log('[Job Filter BG] ✓ Salary Max:', salaryMax);
       }
     }
   } catch (e) {
-    console.log('[Job Hunter BG] ⚠️ Failed to parse Salary Max:', e.message);
+    console.log('[Job Filter BG] ⚠️ Failed to parse Salary Max:', e.message);
   }
   if (jobData.workplaceType) {
     jobFields['Workplace Type'] = jobData.workplaceType;
@@ -811,10 +811,10 @@ async function createJob(credentials, jobData, scoreData, companyRecordId, conta
     try {
       if (scoreData.overall_score !== undefined) {
         jobFields['Overall Fit Score'] = scoreData.overall_score;
-        console.log('[Job Hunter BG] ✓ Overall Fit Score:', scoreData.overall_score);
+        console.log('[Job Filter BG] ✓ Overall Fit Score:', scoreData.overall_score);
       }
     } catch (e) {
-      console.log('[Job Hunter BG] ⚠️ Failed to parse Overall Fit Score:', e.message);
+      console.log('[Job Filter BG] ⚠️ Failed to parse Overall Fit Score:', e.message);
     }
 
     try {
@@ -823,7 +823,7 @@ async function createJob(credentials, jobData, scoreData, companyRecordId, conta
         let rawLabel = String(scoreData.overall_label);
         let fitLabel = sanitizeString(rawLabel).toUpperCase().trim();
 
-        console.log('[Job Hunter BG] 🔍 Processing Fit Recommendation:', {
+        console.log('[Job Filter BG] 🔍 Processing Fit Recommendation:', {
           raw: rawLabel,
           afterSanitization: fitLabel
         });
@@ -840,15 +840,15 @@ async function createJob(credentials, jobData, scoreData, companyRecordId, conta
           else if (fitLabel.includes('POOR')) fitLabel = 'POOR FIT';
           else if (fitLabel.includes('HARD') || fitLabel.includes('NO')) fitLabel = 'HARD NO';
           else fitLabel = 'GOOD FIT';
-          console.log(`[Job Hunter BG] ℹ️ Mapped "${rawLabel}" → "${fitLabel}"`);
+          console.log(`[Job Filter BG] ℹ️ Mapped "${rawLabel}" → "${fitLabel}"`);
         }
 
         // CRITICAL: Do NOT sanitize again - it's already been sanitized above
         jobFields['Fit Recommendation'] = fitLabel;
-        console.log('[Job Hunter BG] ✓ Fit Recommendation:', fitLabel);
+        console.log('[Job Filter BG] ✓ Fit Recommendation:', fitLabel);
       }
     } catch (e) {
-      console.log('[Job Hunter BG] ⚠️ Failed to process Fit Recommendation:', e.message);
+      console.log('[Job Filter BG] ⚠️ Failed to process Fit Recommendation:', e.message);
     }
     if (scoreData.job_to_user_fit?.score !== undefined) {
       jobFields['Preference Fit Score'] = scoreData.job_to_user_fit.score;
@@ -882,7 +882,7 @@ async function createJob(credentials, jobData, scoreData, companyRecordId, conta
   const createUrl = `${AIRTABLE_API_BASE}/${credentials.baseId}/${TABLES.JOBS_PIPELINE}`;
 
   // DEBUG: Log payload before sending to Airtable
-  console.log('[Job Hunter BG] Payload being sent to Airtable (Jobs Pipeline):', JSON.stringify({ fields: jobFields }, null, 2));
+  console.log('[Job Filter BG] Payload being sent to Airtable (Jobs Pipeline):', JSON.stringify({ fields: jobFields }, null, 2));
 
   const createResponse = await fetchWithRetry(createUrl, {
     method: 'POST',
@@ -895,7 +895,7 @@ async function createJob(credentials, jobData, scoreData, companyRecordId, conta
 
   if (!createResponse.ok) {
     const errorText = await createResponse.text();
-    console.error('[Job Hunter BG] Job creation error:', errorText);
+    console.error('[Job Filter BG] Job creation error:', errorText);
     throw new Error(`Failed to create job: ${createResponse.status}`);
   }
 
@@ -940,7 +940,7 @@ async function handleFetchOutreachRecord(recordId) {
     };
 
   } catch (error) {
-    console.error('[Job Hunter BG] Error fetching outreach record:', error);
+    console.error('[Job Filter BG] Error fetching outreach record:', error);
     return {
       success: false,
       error: error.message
@@ -1006,7 +1006,7 @@ async function handleMarkOutreachSent(outreachRecordId, contactRecordId) {
       });
 
       if (!contactResponse.ok) {
-        console.warn('[Job Hunter BG] Failed to update contact record, but outreach was marked as sent');
+        console.warn('[Job Filter BG] Failed to update contact record, but outreach was marked as sent');
       }
     }
 
@@ -1016,7 +1016,7 @@ async function handleMarkOutreachSent(outreachRecordId, contactRecordId) {
     };
 
   } catch (error) {
-    console.error('[Job Hunter BG] Error marking outreach as sent:', error);
+    console.error('[Job Filter BG] Error marking outreach as sent:', error);
     return {
       success: false,
       error: error.message
@@ -1040,7 +1040,7 @@ async function getCredentials() {
       pat: result[STORAGE_KEYS.PAT] || ''
     };
   } catch (error) {
-    console.error('[Job Hunter BG] Error reading credentials:', error);
+    console.error('[Job Filter BG] Error reading credentials:', error);
     return { baseId: '', pat: '' };
   }
 }
@@ -1068,7 +1068,7 @@ async function fetchWithRetry(url, options, maxRetries = 3) {
 
       // Server error or rate limit - retry
       if (response.status === 429 || response.status >= 500) {
-        console.log(`[Job Hunter BG] Retry ${attempt + 1}/${maxRetries} after ${response.status}`);
+        console.log(`[Job Filter BG] Retry ${attempt + 1}/${maxRetries} after ${response.status}`);
         await delay(Math.pow(2, attempt) * 1000); // 1s, 2s, 4s
         continue;
       }
@@ -1077,7 +1077,7 @@ async function fetchWithRetry(url, options, maxRetries = 3) {
 
     } catch (error) {
       lastError = error;
-      console.log(`[Job Hunter BG] Network error, retry ${attempt + 1}/${maxRetries}`);
+      console.log(`[Job Filter BG] Network error, retry ${attempt + 1}/${maxRetries}`);
 
       if (attempt < maxRetries - 1) {
         await delay(Math.pow(2, attempt) * 1000);
@@ -1219,7 +1219,7 @@ async function handleUpsertContactFromProfile(contactData) {
     }
 
     contactId = existingContact.id;
-    console.log('[Job Hunter BG] Updated existing contact:', contactId);
+    console.log('[Job Filter BG] Updated existing contact:', contactId);
   } else {
     // Create new
     const createUrl = `${AIRTABLE_API_BASE}/${credentials.baseId}/${TABLES.CONTACTS}`;
@@ -1239,7 +1239,7 @@ async function handleUpsertContactFromProfile(contactData) {
 
     const newContact = await createResponse.json();
     contactId = newContact.id;
-    console.log('[Job Hunter BG] Created new contact:', contactId);
+    console.log('[Job Filter BG] Created new contact:', contactId);
   }
 
   return { contactId, companyId };
@@ -1381,7 +1381,7 @@ async function handleCreateOutreachLogEntry(payload) {
   }
 
   const newEntry = await createResponse.json();
-  console.log('[Job Hunter BG] Created outreach log entry:', newEntry.id);
+  console.log('[Job Filter BG] Created outreach log entry:', newEntry.id);
 
   return {
     id: newEntry.id,
@@ -1407,7 +1407,7 @@ async function handleSkillExtractionRequest(request) {
     throw new Error('Job description is required');
   }
 
-  console.log('[Job Hunter BG] Extracting skills from job description...');
+  console.log('[Job Filter BG] Extracting skills from job description...');
 
   // Use the skill extractor module
   // Note: These modules are loaded as content scripts, not available in service worker
@@ -1440,7 +1440,7 @@ async function handleFullSkillAnalysis(request) {
     throw new Error('Job description is required');
   }
 
-  console.log('[Job Hunter BG] Performing full skill analysis...');
+  console.log('[Job Filter BG] Performing full skill analysis...');
 
   // Get user skills from storage if not provided
   let profileSkills = userSkills || [];
@@ -1448,9 +1448,9 @@ async function handleFullSkillAnalysis(request) {
     try {
       const profile = await chrome.storage.local.get('jh_user_profile');
       profileSkills = profile?.jh_user_profile?.background?.core_skills || [];
-      console.log('[Job Hunter BG] Loaded', profileSkills.length, 'skills from user profile');
+      console.log('[Job Filter BG] Loaded', profileSkills.length, 'skills from user profile');
     } catch (e) {
-      console.warn('[Job Hunter BG] Could not load user profile:', e);
+      console.warn('[Job Filter BG] Could not load user profile:', e);
     }
   }
 
@@ -1491,7 +1491,7 @@ async function handleUpdateJobSkills(request) {
     throw new Error('Airtable credentials not configured');
   }
 
-  console.log('[Job Hunter BG] Updating job record with skill data:', jobRecordId);
+  console.log('[Job Filter BG] Updating job record with skill data:', jobRecordId);
 
   // Build update payload
   const updateFields = {};
@@ -1523,14 +1523,14 @@ async function handleUpdateJobSkills(request) {
 
   // Only update if we have fields to update
   if (Object.keys(updateFields).length === 0) {
-    console.log('[Job Hunter BG] No skill fields to update');
+    console.log('[Job Filter BG] No skill fields to update');
     return { success: true, message: 'No changes needed' };
   }
 
   // Update the job record
   const updateUrl = `${AIRTABLE_API_BASE}/${credentials.baseId}/${TABLES.JOBS_PIPELINE}/${jobRecordId}`;
 
-  console.log('[Job Hunter BG] Updating with fields:', updateFields);
+  console.log('[Job Filter BG] Updating with fields:', updateFields);
 
   const updateResponse = await fetchWithRetry(updateUrl, {
     method: 'PATCH',
@@ -1543,7 +1543,7 @@ async function handleUpdateJobSkills(request) {
 
   if (!updateResponse.ok) {
     const errorBody = await updateResponse.json().catch(() => ({}));
-    console.error('[Job Hunter BG] ❌ Job skill update failed:', {
+    console.error('[Job Filter BG] ❌ Job skill update failed:', {
       status: updateResponse.status,
       error: errorBody.error
     });
@@ -1551,7 +1551,7 @@ async function handleUpdateJobSkills(request) {
   }
 
   const updateData = await updateResponse.json();
-  console.log('[Job Hunter BG] ✓ Job skills updated successfully');
+  console.log('[Job Filter BG] ✓ Job skills updated successfully');
 
   return {
     success: true,
@@ -1561,4 +1561,4 @@ async function handleUpdateJobSkills(request) {
 }
 
 // Log when service worker starts
-console.log('[Job Hunter BG] Background service worker initialized with CRM support + Outreach Mode + Skill Extraction');
+console.log('[Job Filter BG] Background service worker initialized with CRM support + Outreach Mode + Skill Extraction');

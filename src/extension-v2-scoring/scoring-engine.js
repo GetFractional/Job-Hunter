@@ -1,5 +1,5 @@
 /**
- * Job Hunter OS - Scoring Engine
+ * Job Filter - Scoring Engine
  *
  * Bidirectional job fit scoring algorithm that calculates:
  * - Job-to-User Fit (0-50): Does this job meet the user's preferences?
@@ -118,13 +118,13 @@ const SUB_SCORE_THRESHOLDS = {
  * ARCHITECTURE: Always calculate ALL scores first, THEN apply dealbreaker check.
  * This ensures users see the detailed breakdown even when a dealbreaker is triggered.
  */
-function calculateJobFitScore(jobPayload, userProfile) {
+async function calculateJobFitScore(jobPayload, userProfile) {
   const timestamp = new Date().toISOString();
   const scoreId = `score_${Date.now()}`;
 
   // STEP 1: Always calculate bidirectional scores FIRST (regardless of dealbreakers)
   const jobToUserFit = calculateJobToUserFit(jobPayload, userProfile);
-  const userToJobFit = calculateUserToJobFit(jobPayload, userProfile);
+  const userToJobFit = await calculateUserToJobFit(jobPayload, userProfile);
 
   // STEP 2: Combine scores (each contributes 50% to overall 0-100 score)
   const overallResult = combineScores(jobToUserFit.score, userToJobFit.score);
@@ -232,11 +232,11 @@ function calculateJobToUserFit(jobPayload, userProfile) {
  * @param {Object} userProfile - User preferences/background
  * @returns {Object} Score, label, and breakdown
  */
-function calculateUserToJobFit(jobPayload, userProfile) {
+async function calculateUserToJobFit(jobPayload, userProfile) {
   const criteria = [
     scoreRoleType(jobPayload, userProfile),
     // scoreRevOpsComponent - REMOVED per user request (Operations & Systems Focus)
-    scoreSkillMatch(jobPayload, userProfile),
+    await scoreSkillMatchAsync(jobPayload, userProfile),
     scoreIndustryAlignment(jobPayload, userProfile),
     scoreExperienceLevel(jobPayload, userProfile)
   ];
@@ -399,35 +399,30 @@ function scoreSalary(jobPayload, userProfile) {
   let score = 0;
   let rationale = '';
 
-  // SCORING LOGIC using max salary (glass ceiling)
-  if (offeredSalary >= target) {
-    // Meets or exceeds target - perfect score
-    score = 50;
-    rationale = `Max $${formatSalary(offeredSalary)} meets/exceeds target of $${formatSalary(target)}`;
-  } else if (offeredSalary >= (target * 0.95)) {
-    // Within 5% of target (e.g., $190k when target is $200k)
-    score = 48;
-    rationale = `Max $${formatSalary(offeredSalary)} is within 5% of target`;
-  } else if (offeredSalary >= (target * 0.90)) {
-    // Within 10% of target
-    score = 45;
-    rationale = `Max $${formatSalary(offeredSalary)} is within 10% of target`;
-  } else if (offeredSalary >= floor) {
-    // Between floor and 90% of target - interpolate score from 35 to 45
-    const range = (target * 0.90) - floor;
-    const aboveFloor = offeredSalary - floor;
-    const percentage = aboveFloor / range;
-    score = 35 + (percentage * 10);
-    rationale = `Max $${formatSalary(offeredSalary)} exceeds floor by $${formatSalary(aboveFloor)}; within target range`;
-  } else if (offeredSalary >= (floor * 0.9)) {
-    // Close to floor (within 10%)
-    score = 15;
-    rationale = `Max $${formatSalary(offeredSalary)} is close to but below your $${formatSalary(floor)} floor`;
-  } else {
-    // Significantly below floor
-    const belowFloor = floor - offeredSalary;
-    score = 5;
-    rationale = `Max $${formatSalary(offeredSalary)} is $${formatSalary(belowFloor)} below your floor`;
+  const scoreFromOffer = (offer) => {
+    if (offer >= target) return { score: 50, note: 'meets/exceeds target' };
+    if (offer >= (target * 0.95)) return { score: 48, note: 'within 5% of target' };
+    if (offer >= (target * 0.90)) return { score: 45, note: 'within 10% of target' };
+    if (offer >= floor) {
+      const range = (target * 0.90) - floor;
+      const aboveFloor = offer - floor;
+      const percentage = range > 0 ? (aboveFloor / range) : 0;
+      return { score: 35 + (percentage * 10), note: 'within target range' };
+    }
+    if (offer >= (floor * 0.9)) return { score: 15, note: 'close to floor but below' };
+    return { score: 5, note: 'below floor' };
+  };
+
+  const base = scoreFromOffer(offeredSalary);
+  score = base.score;
+  rationale = `Max $${formatSalary(offeredSalary)} ${base.note}`;
+
+  // Penalize if the minimum salary is below the user's floor
+  if (salaryMin !== null && salaryMin !== undefined && salaryMin < floor) {
+    const gap = floor - salaryMin;
+    const penalty = Math.min(15, Math.round((gap / floor) * 15));
+    score = Math.max(0, score - penalty);
+    rationale += `; min $${formatSalary(salaryMin)} below floor`;
   }
 
   // Build display salary string
@@ -440,7 +435,9 @@ function scoreSalary(jobPayload, userProfile) {
     criteria_description: `Whether the posted max salary meets your $${formatSalary(floor)} minimum and $${formatSalary(target)} target`,
     actual_value: displaySalary,
     score: Math.round(score),
-    rationale
+    rationale,
+    job_salary_min: salaryMin ?? null,
+    job_salary_max: salaryMax ?? null
   };
 }
 
@@ -533,7 +530,7 @@ function scoreEquityBonus(jobPayload, userProfile) {
     actualValue = 'Neither mentioned';
     rationale = 'No bonus or equity mentioned in job description';
   } else if (bothCount === 1) {
-    // One mentioned: 25 points
+    // One mentioned: 25 points (50% on the card)
     score = 25;
     if (bonusMentioned && !equityMentioned) {
       actualValue = bonusPercent ? `${Math.round(bonusPercent * 100)}% bonus` : 'Bonus';
@@ -556,7 +553,9 @@ function scoreEquityBonus(jobPayload, userProfile) {
     actual_value: actualValue,
     score: score,
     rationale,
-    max_score: 50
+    max_score: 50,
+    bonus_mentioned: bonusMentioned,
+    equity_mentioned: equityMentioned
   };
 }
 
@@ -746,7 +745,7 @@ function scoreBenefits(jobPayload, userProfile) {
   const preferredBenefits = userProfile?.preferences?.benefits || [];
   const hasPreferences = preferredBenefits.length > 0;
 
-  // NEW LOGIC: Filter to only show user's preferred benefits (X/Y format)
+  // NEW LOGIC: Track preferred matches but show all detected benefits
   let matchedPreferredBenefits = [];
   let benefitBadges = [];
   let benefitsCount = `${allMatchedBenefits.length}/11`; // Default: total detected / total tracked
@@ -869,8 +868,10 @@ function scoreBenefits(jobPayload, userProfile) {
     actual_value: actualValue,
     score: normalizedScore,
     rationale,
-    matched_benefits: matchedPreferredBenefits, // Only preferred benefits
-    benefit_badges: benefitBadges, // Only preferred benefits
+    matched_benefits: allMatchedBenefits,
+    matched_preferred_benefits: matchedPreferredBenefits,
+    preferred_benefits_total: hasPreferences ? preferredBenefits.length : 0,
+    benefit_badges: benefitBadges, // Preferred benefits only
     benefits_count: benefitsCount, // "X/Y" format for UI display
     missing_data: matchedPreferredBenefits.length === 0
   };
@@ -1482,6 +1483,85 @@ function scoreSkillMatch(jobPayload, userProfile) {
 }
 
 /**
+ * Score skill match using the skill extraction engine (0-50)
+ * Falls back to keyword matching if the skill service isn't available.
+ */
+async function scoreSkillMatchAsync(jobPayload, userProfile) {
+  const descriptionText = jobPayload.descriptionText || jobPayload.job_description_text || '';
+  const userSkills = userProfile?.background?.core_skills || [];
+
+  if (!descriptionText || !descriptionText.trim()) {
+    return scoreSkillMatch(jobPayload, userProfile);
+  }
+
+  if (!userSkills || userSkills.length === 0) {
+    return scoreSkillMatch(jobPayload, userProfile);
+  }
+
+  if (!window.SkillExtractionService?.analyzeJobSkills || !window.SkillMatcher?.normalizeUserSkills) {
+    return scoreSkillMatch(jobPayload, userProfile);
+  }
+
+  try {
+    const analysis = await window.SkillExtractionService.analyzeJobSkills(descriptionText, {
+      jobUrl: jobPayload.jobUrl || jobPayload.job_url || window.location?.href || '',
+      userSkills,
+      skipCache: true
+    });
+
+    if (analysis?.error) {
+      return scoreSkillMatch(jobPayload, userProfile);
+    }
+
+    const taxonomy = window.SkillTaxonomy?.SKILL_TAXONOMY || [];
+    const normalize = window.SkillMatcher.normalizeUserSkills;
+    const normalizedUserSkills = normalize(userSkills, taxonomy);
+
+    const matchedNormalized = normalize(analysis.match?.matched || [], taxonomy);
+    const matchedCanonicals = new Set(matchedNormalized.map(s => s.canonical));
+
+    const matchedUserSkills = normalizedUserSkills.filter(s => matchedCanonicals.has(s.canonical));
+    const unmatchedUserSkills = normalizedUserSkills.filter(s => !matchedCanonicals.has(s.canonical));
+
+    const totalSkills = normalizedUserSkills.length;
+    const matchCount = matchedUserSkills.length;
+    const matchPercentage = totalSkills > 0 ? (matchCount / totalSkills) * 100 : 0;
+
+    let score = (matchPercentage / 100) * 50;
+    let rationale = '';
+
+    if (matchPercentage >= 80) {
+      rationale = `Excellent match: ${matchCount}/${totalSkills} skills (${Math.round(matchPercentage)}%)`;
+    } else if (matchPercentage >= 60) {
+      rationale = `Strong match: ${matchCount}/${totalSkills} skills (${Math.round(matchPercentage)}%)`;
+    } else if (matchPercentage >= 40) {
+      rationale = `Good match: ${matchCount}/${totalSkills} skills (${Math.round(matchPercentage)}%)`;
+    } else if (matchPercentage >= 20) {
+      rationale = `Moderate match: ${matchCount}/${totalSkills} skills (${Math.round(matchPercentage)}%)`;
+    } else if (matchCount >= 1) {
+      rationale = `Limited match: ${matchCount}/${totalSkills} skills (${Math.round(matchPercentage)}%)`;
+    } else {
+      score = 0;
+      rationale = 'No skill overlap detected';
+    }
+
+    return {
+      criteria: 'Skills Overlap',
+      criteria_description: 'How many of your skills are mentioned in the job description requirements',
+      actual_value: matchCount > 0 ? `${matchCount}/${totalSkills} skills (${Math.round(matchPercentage)}%)` : 'No matches',
+      score: Math.round(score),
+      rationale,
+      matched_skills: matchedUserSkills.map(s => s.name),
+      unmatched_skills: unmatchedUserSkills.map(s => s.name),
+      match_percentage: Math.round(matchPercentage)
+    };
+  } catch (error) {
+    console.warn('[Job Filter Scoring] Skill extraction failed, falling back:', error);
+    return scoreSkillMatch(jobPayload, userProfile);
+  }
+}
+
+/**
  * Score industry alignment (0-50)
  * @param {Object} jobPayload - Job data with company_name, job_description_text
  * @param {Object} userProfile - User background with industries
@@ -1962,6 +2042,7 @@ if (typeof window !== 'undefined') {
     SCORE_THRESHOLDS,
     SUB_SCORE_THRESHOLDS
   };
+  window.JobFilterScoring = window.JobHunterScoring;
 }
 
 // For module environments (testing)

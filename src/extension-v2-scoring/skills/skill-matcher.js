@@ -1,5 +1,5 @@
 /**
- * Job Hunter OS - Skill Matcher
+ * Job Filter - Skill Matcher
  *
  * Compares extracted required skills against user profile skills to calculate:
  * - Matched skills (user HAS these required skills)
@@ -221,8 +221,11 @@ function normalizeUserSkills(userSkills, taxonomy = []) {
     }
   }
 
-  return userSkills.map(userSkill => {
-    const normalized = (userSkill || '').toLowerCase().trim();
+  const normalizedList = userSkills.map((userSkill) => {
+    const raw = (typeof userSkill === 'object' && userSkill !== null)
+      ? (userSkill.name || userSkill.label || userSkill.value || '')
+      : userSkill;
+    const normalized = (raw || '').toLowerCase().trim();
 
     // Try to find in taxonomy
     const taxonomyMatch = taxonomyLookup.get(normalized);
@@ -232,18 +235,26 @@ function normalizeUserSkills(userSkills, taxonomy = []) {
         name: taxonomyMatch.name,
         canonical: taxonomyMatch.canonical,
         category: taxonomyMatch.category,
-        original: userSkill
+        original: raw || userSkill
       };
     }
 
     // Return as-is if not in taxonomy
     return {
-      name: userSkill,
-      canonical: toCanonicalKey(userSkill),
+      name: raw || userSkill,
+      canonical: toCanonicalKey(raw || userSkill),
       category: 'Other',
-      original: userSkill
+      original: raw || userSkill
     };
   });
+  const deduped = new Map();
+  normalizedList.forEach((skill) => {
+    if (!skill?.canonical) return;
+    if (!deduped.has(skill.canonical)) {
+      deduped.set(skill.canonical, skill);
+    }
+  });
+  return Array.from(deduped.values());
 }
 
 // ============================================================================

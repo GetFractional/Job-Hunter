@@ -1,5 +1,5 @@
 /**
- * Job Hunter OS - Skill Taxonomy
+ * Job Filter - Skill Taxonomy
  *
  * A curated taxonomy of skill concepts for job description analysis.
  * Based on Lightcast Open Skills (trimmed to ~300 relevant skills for Growth/Marketing/RevOps roles).
@@ -56,7 +56,7 @@ const SKILL_TAXONOMY = [
     name: "Growth Hacking",
     canonical: "growth_hacking",
     category: "Growth",
-    aliases: ["growth marketing", "viral growth", "product-led growth", "PLG"]
+    aliases: ["growth marketing", "viral growth"]
   },
   {
     name: "Landing Page Optimization",
@@ -69,6 +69,24 @@ const SKILL_TAXONOMY = [
     canonical: "lead_generation",
     category: "Growth",
     aliases: ["lead gen", "demand generation", "demand gen", "pipeline generation", "inbound leads"]
+  },
+  {
+    name: "Demand Generation Strategy",
+    canonical: "demand_generation_strategy",
+    category: "Growth",
+    aliases: ["demand gen strategy", "demand generation strategy", "pipeline strategy", "pipeline growth"]
+  },
+  {
+    name: "Product-Led Growth",
+    canonical: "product_led_growth",
+    category: "Growth",
+    aliases: ["product led growth", "product-led growth", "PLG motion", "PLG strategy"]
+  },
+  {
+    name: "Sales-Led Growth",
+    canonical: "sales_led_growth",
+    category: "Growth",
+    aliases: ["sales led growth", "sales-led growth", "sales-led motion", "sales-led strategy"]
   },
   {
     name: "Customer Journey Mapping",
@@ -159,6 +177,12 @@ const SKILL_TAXONOMY = [
     aliases: ["brand strategy", "brand development", "brand management", "branding"]
   },
   {
+    name: "Marketing Strategy",
+    canonical: "marketing_strategy",
+    category: "Marketing",
+    aliases: ["marketing planning", "marketing roadmap", "marketing leadership", "marketing strategy"]
+  },
+  {
     name: "Influencer Marketing",
     canonical: "influencer_marketing",
     category: "Marketing",
@@ -177,10 +201,22 @@ const SKILL_TAXONOMY = [
     aliases: ["PMM", "product positioning", "product messaging", "go-to-market"]
   },
   {
+    name: "Messaging & Positioning",
+    canonical: "messaging_positioning",
+    category: "Marketing",
+    aliases: ["messaging", "positioning", "value proposition", "market positioning"]
+  },
+  {
     name: "Marketing Automation",
     canonical: "marketing_automation",
     category: "Marketing",
-    aliases: ["automated marketing", "marketing workflows", "drip campaigns", "nurture campaigns"]
+    aliases: ["automated marketing", "marketing workflows", "drip campaigns", "nurture campaigns", "automation motions", "automated workflows"]
+  },
+  {
+    name: "B2B Marketing",
+    canonical: "b2b_marketing",
+    category: "Marketing",
+    aliases: ["B2B", "B2B SaaS", "B2B SaaS marketing", "enterprise marketing", "business-to-business"]
   },
   {
     name: "Campaign Management",
@@ -193,6 +229,60 @@ const SKILL_TAXONOMY = [
     canonical: "event_marketing",
     category: "Marketing",
     aliases: ["event planning", "trade shows", "webinars", "conference marketing"]
+  },
+  {
+    name: "Field Marketing",
+    canonical: "field_marketing",
+    category: "Marketing",
+    aliases: ["regional marketing", "field programs", "local marketing"]
+  },
+  {
+    name: "Community Marketing",
+    canonical: "community_marketing",
+    category: "Marketing",
+    aliases: ["community building", "community strategy", "community-led growth", "community programs"]
+  },
+  {
+    name: "Account-Based Marketing",
+    canonical: "account_based_marketing",
+    category: "Marketing",
+    aliases: ["ABM", "account based marketing", "account-based strategy", "account-based programs"]
+  },
+  {
+    name: "Outbound Marketing",
+    canonical: "outbound_marketing",
+    category: "Marketing",
+    aliases: ["outbound campaigns", "outbound motion", "outbound strategy", "cold outreach"]
+  },
+  {
+    name: "Partner Marketing",
+    canonical: "partner_marketing",
+    category: "Marketing",
+    aliases: ["partner-led growth", "ecosystem marketing", "alliances marketing", "co-marketing"]
+  },
+  {
+    name: "Paid Social Advertising",
+    canonical: "paid_social_advertising",
+    category: "Marketing",
+    aliases: ["paid social", "social ads", "paid social campaigns", "social advertising"]
+  },
+  {
+    name: "Paid Search Advertising",
+    canonical: "paid_search_advertising",
+    category: "Marketing",
+    aliases: ["paid search", "search ads", "search advertising", "PPC"]
+  },
+  {
+    name: "Out-of-Home Advertising",
+    canonical: "out_of_home_advertising",
+    category: "Marketing",
+    aliases: ["OOH", "out of home", "out-of-home", "outdoor advertising"]
+  },
+  {
+    name: "Answer Engine Optimization",
+    canonical: "answer_engine_optimization",
+    category: "Marketing",
+    aliases: ["AEO", "answer engine optimization", "AI search optimization", "LLM optimization"]
   },
   {
     name: "Public Relations",
@@ -271,6 +361,18 @@ const SKILL_TAXONOMY = [
     aliases: ["metrics development", "KPI tracking", "performance metrics", "OKRs"]
   },
   {
+    name: "Market Sizing",
+    canonical: "market_sizing",
+    category: "Analytics",
+    aliases: ["TAM", "SAM", "SOM", "total addressable market", "market sizing analysis"]
+  },
+  {
+    name: "Pipeline Analytics",
+    canonical: "pipeline_analytics",
+    category: "Analytics",
+    aliases: ["pipeline analysis", "pipeline metrics", "pipeline velocity", "pipeline health"]
+  },
+  {
     name: "Web Analytics",
     canonical: "web_analytics",
     category: "Analytics",
@@ -339,6 +441,12 @@ const SKILL_TAXONOMY = [
     canonical: "lifecycle_marketing",
     category: "Lifecycle",
     aliases: ["customer lifecycle", "lifecycle campaigns", "lifecycle strategy", "CRM marketing"]
+  },
+  {
+    name: "Lead Nurturing",
+    canonical: "lead_nurturing",
+    category: "Lifecycle",
+    aliases: ["lead nurture", "nurture programs", "nurture campaigns", "lead nurturing"]
   },
   {
     name: "Onboarding Optimization",
@@ -509,6 +617,18 @@ const SKILL_TAXONOMY = [
     canonical: "lead_scoring",
     category: "Operations",
     aliases: ["lead qualification", "lead prioritization", "MQL scoring", "SQL scoring"]
+  },
+  {
+    name: "Pipeline Management",
+    canonical: "pipeline_management",
+    category: "Operations",
+    aliases: ["pipeline management", "pipeline operations", "pipeline strategy", "pipeline health"]
+  },
+  {
+    name: "ICP Definition",
+    canonical: "icp_definition",
+    category: "Operations",
+    aliases: ["ICP", "ideal customer profile", "ICP definition", "customer profile definition"]
   },
   {
     name: "Sales Forecasting",
@@ -726,6 +846,26 @@ const SKILL_SYNONYM_GROUPS = new Map([
   ["funnel_optimization", ["funnel analysis", "funnel mgmt", "sales funnel", "marketing funnel"]],
   ["go_to_market_strategy", ["GTM", "go to market", "gtm strategy", "market launch"]],
   ["lead_generation", ["lead gen", "demand gen", "pipeline building", "top of funnel"]],
+  ["demand_generation_strategy", ["demand generation strategy", "demand gen strategy", "pipeline strategy", "pipeline growth"]],
+  ["product_led_growth", ["product led growth", "product-led growth", "plg motion", "plg strategy"]],
+  ["sales_led_growth", ["sales led growth", "sales-led growth", "sales-led motion"]],
+  ["account_based_marketing", ["abm", "account based marketing", "account-based marketing", "account-based programs"]],
+  ["outbound_marketing", ["outbound marketing", "outbound motion", "outbound campaigns", "cold outreach"]],
+  ["partner_marketing", ["partner marketing", "partner-led growth", "ecosystem marketing", "alliances marketing"]],
+  ["community_marketing", ["community marketing", "community building", "community-led growth", "community programs"]],
+  ["field_marketing", ["field marketing", "regional marketing", "field programs"]],
+  ["paid_social_advertising", ["paid social", "social ads", "paid social campaigns"]],
+  ["paid_search_advertising", ["paid search", "search ads", "ppc"]],
+  ["out_of_home_advertising", ["ooh", "out of home", "out-of-home", "outdoor advertising"]],
+  ["answer_engine_optimization", ["aeo", "answer engine optimization", "ai search optimization", "llm optimization"]],
+  ["messaging_positioning", ["messaging", "positioning", "value proposition", "market positioning"]],
+  ["b2b_marketing", ["b2b", "b2b saas", "b2b marketing", "business to business", "business-to-business"]],
+  ["marketing_strategy", ["marketing strategy", "marketing planning", "marketing roadmap"]],
+  ["market_sizing", ["tam", "sam", "som", "total addressable market", "market sizing"]],
+  ["pipeline_analytics", ["pipeline analytics", "pipeline metrics", "pipeline velocity", "pipeline analysis"]],
+  ["lead_nurturing", ["lead nurture", "lead nurturing", "nurture programs", "nurture campaigns"]],
+  ["pipeline_management", ["pipeline management", "pipeline operations", "pipeline strategy"]],
+  ["icp_definition", ["icp", "ideal customer profile", "customer profile definition"]],
   ["customer_segmentation", ["segmentation", "audience segments", "user segments"]],
   ["email_marketing", ["email", "email campaigns", "ESP", "email automation"]],
   ["seo", ["search optimization", "organic search", "search rankings"]],
@@ -757,6 +897,16 @@ const CANONICAL_RULES = new Map([
   ["mops", "marketing operations"],
   ["revops", "revenue operations"],
   ["bi", "business intelligence"],
+  ["abm", "account-based marketing"],
+  ["ooh", "out-of-home advertising"],
+  ["aeo", "answer engine optimization"],
+  ["icp", "icp definition"],
+  ["tam", "market sizing"],
+  ["sam", "market sizing"],
+  ["som", "market sizing"],
+  ["mql", "lead scoring"],
+  ["plg", "product-led growth"],
+  ["sales-led", "sales-led growth"],
   ["etl", "etl"],
   ["api", "api integration"],
   ["ml", "machine learning"],
@@ -771,7 +921,7 @@ const CANONICAL_RULES = new Map([
   ["csat", "nps management"],
   ["cx", "customer experience"],
   ["ux", "customer experience"],
-  ["plg", "growth hacking"],
+  ["plg", "product-led growth"],
   ["pmf", "product-market fit"],
   ["pmm", "product marketing"],
   ["pr", "public relations"],
@@ -784,9 +934,30 @@ const CANONICAL_RULES = new Map([
   ["split testing", "a/b testing"],
   ["multivariate testing", "a/b testing"],
   ["conversion optimization", "conversion rate optimization"],
-  ["demand generation", "lead generation"],
-  ["demand gen", "lead generation"],
+  ["full funnel", "funnel optimization"],
+  ["full-funnel", "funnel optimization"],
+  ["demand generation", "demand generation strategy"],
+  ["demand gen", "demand generation strategy"],
   ["lead gen", "lead generation"],
+  ["account based marketing", "account-based marketing"],
+  ["account-based marketing", "account-based marketing"],
+  ["outbound", "outbound marketing"],
+  ["partner-led growth", "partner marketing"],
+  ["ecosystem marketing", "partner marketing"],
+  ["field marketing", "field marketing"],
+  ["paid social", "paid social advertising"],
+  ["paid search", "paid search advertising"],
+  ["pipeline management", "pipeline management"],
+  ["pipeline analytics", "pipeline analytics"],
+  ["pipeline velocity", "pipeline analytics"],
+  ["market sizing", "market sizing"],
+  ["ideal customer profile", "icp definition"],
+  ["positioning", "messaging & positioning"],
+  ["messaging", "messaging & positioning"],
+  ["b2b", "b2b marketing"],
+  ["b2b saas", "b2b marketing"],
+  ["business to business", "b2b marketing"],
+  ["business-to-business", "b2b marketing"],
   ["paid media", "performance marketing"],
   ["paid acquisition", "performance marketing"],
   ["lifecycle", "lifecycle marketing"],
@@ -810,6 +981,8 @@ const CANONICAL_RULES = new Map([
   ["email campaigns", "email marketing"],
   ["email automation", "email marketing"],
   ["marketing automation", "marketing automation"],
+  ["automation motions", "marketing automation"],
+  ["automated workflows", "marketing automation"],
   ["automation", "marketing automation"],
   ["crm", "crm administration"],
   ["process improvement", "process optimization"],

@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Job Hunter OS",
+  "name": "Job Filter",
   "version": "1.1.0",
   "description": "Capture job listings from LinkedIn and Indeed to your Airtable pipeline with intelligent job fit scoring",
 
@@ -18,7 +18,7 @@
 
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Job Hunter OS Settings"
+    "default_title": "Job Filter Settings"
   },
 
   "background": {

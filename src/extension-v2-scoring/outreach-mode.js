@@ -1,5 +1,5 @@
 /**
- * Job Hunter OS - Outreach Mode
+ * Job Filter - Outreach Mode
  *
  * Handles LinkedIn profile page outreach workflow:
  * - Detects ?outreachID=recXXX parameter

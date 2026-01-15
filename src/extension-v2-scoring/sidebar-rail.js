@@ -1,5 +1,5 @@
 /**
- * Job Hunter OS - Docked Sidebar Rail (Command Center Design)
+ * Job Filter - Docked Sidebar Rail (Command Center Design)
  *
  * A LinkedIn-native docked right sidebar that displays:
  * - Jobs Mode: Job scoring, company metadata, and actions
@@ -115,7 +115,7 @@ function createSidebarRail(mode) {
   sidebarState.mode = mode;
   sidebarState.isVisible = true;
 
-  console.log('[Job Hunter Sidebar] Created in mode:', mode);
+  console.log('[Job Filter Sidebar] Created in mode:', mode);
   return sidebar;
 }
 
@@ -138,7 +138,7 @@ function removeSidebarRail() {
 function switchSidebarMode(newMode) {
   if (sidebarState.mode === newMode) return;
 
-  console.log('[Job Hunter Sidebar] Switching mode:', sidebarState.mode, '->', newMode);
+  console.log('[Job Filter Sidebar] Switching mode:', sidebarState.mode, '->', newMode);
   createSidebarRail(newMode);
 }
 
@@ -159,7 +159,7 @@ async function updateSidebarScore(scoreResult, jobData) {
   }
 
   if (!sidebar) {
-    console.error('[Job Hunter Sidebar] Failed to create sidebar');
+    console.error('[Job Filter Sidebar] Failed to create sidebar');
     return;
   }
 
@@ -172,7 +172,7 @@ async function updateSidebarScore(scoreResult, jobData) {
     const stored = await chrome.storage.local.get(['jh_user_profile']);
     userProfile = stored.jh_user_profile || null;
   } catch (error) {
-    console.warn('[Job Hunter Sidebar] Could not load user profile:', error);
+    console.warn('[Job Filter Sidebar] Could not load user profile:', error);
   }
 
   // Update header section
@@ -187,10 +187,79 @@ async function updateSidebarScore(scoreResult, jobData) {
   // Update dealbreakers if any
   updateDealbreakers(sidebar, scoreResult);
 
+  // Enhance skills card with extraction results without blocking UI updates
+  updateSkillCriteriaAsync(sidebar, scoreResult, jobData, userProfile);
+
   // Show sidebar
   sidebar.classList.add('jh-visible');
 
-  console.log('[Job Hunter Sidebar] Updated with score:', scoreResult.overall_score);
+  console.log('[Job Filter Sidebar] Updated with score:', scoreResult.overall_score);
+}
+
+/**
+ * Update the Skills card with extraction results
+ */
+async function updateSkillCriteriaAsync(sidebar, scoreResult, jobData, userProfile) {
+  const descriptionText = jobData?.descriptionText || '';
+  const jobUrl = jobData?.jobUrl || window.location?.href || '';
+
+  if (!descriptionText.trim()) return;
+  if (!window.SkillExtractionService?.analyzeJobSkills) return;
+
+  try {
+    const userSkills = userProfile?.background?.core_skills || [];
+    const analysis = await window.SkillExtractionService.analyzeJobSkills(descriptionText, {
+      jobUrl,
+      userSkills,
+      skipCache: true
+    });
+    if (!analysis || analysis.error) return;
+
+    const userToJob = scoreResult?.user_to_job_fit?.breakdown || [];
+    const skillsItem = userToJob.find(item => item.criteria === 'Skills Overlap');
+    if (!skillsItem) return;
+
+    const uniqueByCanonical = (items) => {
+      const seen = new Set();
+      const deduped = [];
+      items.forEach((item) => {
+        const canonical = item?.canonical || (item?.name || '').toLowerCase();
+        if (!canonical || seen.has(canonical)) return;
+        seen.add(canonical);
+        deduped.push(item);
+      });
+      return deduped;
+    };
+
+    const match = analysis.match || {};
+    const matchedDetails = uniqueByCanonical(match.matchedDetails || []);
+    const missingDetails = uniqueByCanonical(match.missingDetails || []);
+
+    const matchedSkills = matchedDetails.length
+      ? matchedDetails.map(s => s.name).filter(Boolean)
+      : (match.matched || []).filter(Boolean);
+    const missingSkills = missingDetails.length
+      ? missingDetails.map(s => s.name).filter(Boolean)
+      : (match.missing || []).filter(Boolean);
+
+    const requiredCount = (analysis.extraction?.required?.length || (matchedSkills.length + missingSkills.length) || 0);
+    const matchedCount = matchedSkills.length;
+    const percentage = requiredCount > 0 ? Math.round((matchedCount / requiredCount) * 100) : 0;
+
+    skillsItem.matched_skills = matchedSkills;
+    skillsItem.unmatched_skills = missingSkills;
+    skillsItem.match_percentage = percentage;
+    skillsItem.actual_value = requiredCount > 0
+      ? `${matchedCount}/${requiredCount} skills (${percentage}%)`
+      : 'No skills found';
+
+    const maxScore = skillsItem.max_score || 50;
+    skillsItem.score = Math.round((percentage / 100) * maxScore);
+
+    updateScoreBreakdown(sidebar, scoreResult, userProfile);
+  } catch (error) {
+    console.warn('[Job Filter Sidebar] Skill match failed:', error);
+  }
 }
 
 /**
@@ -565,38 +634,16 @@ function renderBreakdownItems(breakdown, type, userProfile = null) {
     // Benefits display - same logic as skills with ghost badges
     if (item.criteria === 'Benefits Package' || item.criteria === 'Benefits') {
       const matchedBenefits = item.matched_benefits || [];
-      const allBenefits = item.all_benefits || [];
-      const matchCount = matchedBenefits.length;
+      const preferredMatched = item.matched_preferred_benefits || [];
+      const preferredTotal = Number.isFinite(item.preferred_benefits_total) ? item.preferred_benefits_total : totalUserBenefits;
+      const matchCount = preferredMatched.length > 0 ? preferredMatched.length : matchedBenefits.length;
+      const totalCount = preferredTotal > 0 ? preferredTotal : totalUserBenefits;
 
-      // Show X/Y where Y is total user preferred benefits
-      extraHtml += `<div class="jh-benefits-summary">${matchCount}/${totalUserBenefits} benefits matched</div>`;
+      extraHtml += totalCount > 0
+        ? `<div class="jh-benefits-summary">${matchCount}/${totalCount} benefits matched</div>`
+        : `<div class="jh-benefits-summary">${matchCount} benefits matched</div>`;
 
-      // Get user's preferred benefits to show as ghost badges if not matched
-      const normalizeBenefitName = (value) => (value || '').toLowerCase().replace(/[_-]/g, ' ').replace(/\s+/g, ' ').trim();
-      const matchedSet = new Set(matchedBenefits.map(b => normalizeBenefitName(b)));
-      const preferredBenefits = userProfile?.preferences?.benefits || [];
-
-      // Build display list: matched first, then unmatched preferred as ghost
-      const displayBenefits = [];
-      matchedBenefits.forEach(b => displayBenefits.push({ name: b, matched: true }));
-
-      // Add unmatched preferred benefits as ghost
-      const isPreferredMatched = (pref) => {
-        const prefKey = normalizeBenefitName(pref);
-        for (const matched of matchedSet) {
-          if (prefKey.includes(matched) || matched.includes(prefKey)) {
-            return true;
-          }
-        }
-        return false;
-      };
-
-      preferredBenefits.forEach(b => {
-        if (!isPreferredMatched(b)) {
-          displayBenefits.push({ name: b, matched: false });
-        }
-      });
-
+      const displayBenefits = matchedBenefits.map(b => ({ name: b, matched: true }));
       badgeCount = displayBenefits.length;
       if (displayBenefits.length > 0) {
         extraHtml += `
@@ -631,6 +678,8 @@ function renderBreakdownItems(breakdown, type, userProfile = null) {
       const jobSalaryMax = item.job_salary_max || null;
 
       let jobRangeHtml = '';
+      let salaryRowClass = '';
+      let salaryLabel = 'Salary';
 
       if (jobSalaryMin !== null || jobSalaryMax !== null) {
         // Show job salary range
@@ -641,14 +690,20 @@ function renderBreakdownItems(breakdown, type, userProfile = null) {
         } else {
           jobRangeHtml = `Up to $${formatSalary(jobSalaryMax)}`;
         }
+        if (!(jobSalaryMin !== null && jobSalaryMax !== null && jobSalaryMax !== jobSalaryMin)) {
+          salaryRowClass = 'jh-salary-single';
+          salaryLabel = '';
+        }
       } else {
         jobRangeHtml = item.actual_value && item.actual_value.includes('$') ? item.actual_value : '--';
+        salaryRowClass = 'jh-salary-single';
+        salaryLabel = '';
       }
 
       extraHtml += `
         <div class="jh-salary-comparison">
-          <div class="jh-salary-row">
-            <span class="jh-salary-label-text">Salary</span>
+          <div class="jh-salary-row ${salaryRowClass}">
+            <span class="jh-salary-label-text">${salaryLabel}</span>
             <span class="jh-salary-value">${jobRangeHtml}</span>
           </div>
           <div class="jh-salary-row">
@@ -755,7 +810,7 @@ function updateSidebarContact(contactData) {
   // Update sync status
   updateSyncStatus(sidebar, 'ready');
 
-  console.log('[Job Hunter Sidebar] Contact data loaded:', displayName);
+  console.log('[Job Filter Sidebar] Contact data loaded:', displayName);
 }
 
 /**
@@ -892,7 +947,7 @@ function setupOutreachEntryHandlers(container) {
           }, 2000);
         }
       } catch (err) {
-        console.error('[Job Hunter Sidebar] Mark sent error:', err);
+        console.error('[Job Filter Sidebar] Mark sent error:', err);
         btn.textContent = 'Error';
         setTimeout(() => {
           btn.textContent = 'Mark Sent';
@@ -921,7 +976,7 @@ async function fetchOutreachHistory() {
       updateOutreachHistory(response.data);
     }
   } catch (error) {
-    console.error('[Job Hunter Sidebar] Fetch history error:', error);
+    console.error('[Job Filter Sidebar] Fetch history error:', error);
   }
 }
 
@@ -1002,7 +1057,7 @@ function setupJobsModeHandlers(sidebar) {
           huntBtn.disabled = false;
         }, 2000);
       } catch (error) {
-        console.error('[Job Hunter Sidebar] Hunt error:', error);
+        console.error('[Job Filter Sidebar] Hunt error:', error);
         huntBtn.textContent = 'Error';
         huntBtn.classList.remove('jh-loading');
 
@@ -1054,7 +1109,7 @@ function setupOutreachModeHandlers(sidebar) {
           throw new Error(response.error || 'Sync failed');
         }
       } catch (error) {
-        console.error('[Job Hunter Sidebar] Sync error:', error);
+        console.error('[Job Filter Sidebar] Sync error:', error);
         updateSyncStatus(sidebar, 'error', error.message);
         syncBtn.textContent = 'Sync Failed';
 
@@ -1114,7 +1169,7 @@ function setupOutreachModeHandlers(sidebar) {
           throw new Error(response.error || 'Save failed');
         }
       } catch (error) {
-        console.error('[Job Hunter Sidebar] Save draft error:', error);
+        console.error('[Job Filter Sidebar] Save draft error:', error);
         saveBtn.textContent = 'Save Failed';
 
         setTimeout(() => {
@@ -1154,7 +1209,7 @@ function getJobsSidebarHTML() {
       <!-- Header with branding -->
       <div class="jh-sidebar-header">
         <div class="jh-header-brand">
-          <span class="jh-brand-text">Job Hunter</span>
+          <span class="jh-brand-text">Job Filter</span>
         </div>
         <div class="jh-header-controls">
           <button class="jh-btn-minimize" title="Minimize">−</button>
@@ -1232,7 +1287,7 @@ function getOutreachSidebarHTML() {
       <!-- Header -->
       <div class="jh-sidebar-header">
         <div class="jh-header-brand">
-          <span class="jh-brand-text">Job Hunter</span>
+          <span class="jh-brand-text">Job Filter</span>
           <span class="jh-mode-badge">Outreach</span>
         </div>
         <div class="jh-header-controls">
@@ -1943,6 +1998,14 @@ function getSidebarStyles() {
       margin-bottom: 4px;
     }
 
+    .jh-salary-row.jh-salary-single {
+      justify-content: flex-end;
+    }
+
+    .jh-salary-row.jh-salary-single .jh-salary-label-text {
+      display: none;
+    }
+
     .jh-salary-row:last-of-type {
       margin-bottom: 0;
     }
@@ -2284,6 +2347,7 @@ function getSidebarStyles() {
       margin: 0;
       line-height: 1.5;
     }
+
 
     .jh-outreach-entry-actions {
       display: flex;
@@ -2776,6 +2840,9 @@ function updateBadgeOverflow(breakdownList) {
 
   const tagSections = breakdownList.querySelectorAll('.jh-skill-tags, .jh-benefits-tags');
   tagSections.forEach((section) => {
+    if (section.classList.contains('jh-benefits-tags')) {
+      return;
+    }
     const badges = Array.from(section.querySelectorAll('span'));
     if (badges.length === 0) return;
 
@@ -2807,11 +2874,22 @@ function updateBadgeOverflow(breakdownList) {
     }
 
     if (badges.length > 1) {
-      const firstRowBottom = badges[0].getBoundingClientRect().bottom + 1;
-      const firstRowLastIndex = badges.reduce((idx, badge, i) => (
-        badge.getBoundingClientRect().top <= firstRowBottom ? i : idx
-      ), 0);
-      lastVisibleIndex = Math.max(lastVisibleIndex, firstRowLastIndex);
+      const rowTops = [];
+      badges.forEach((badge) => {
+        const top = badge.getBoundingClientRect().top;
+        if (!rowTops.some(t => Math.abs(t - top) < 2)) {
+          rowTops.push(top);
+        }
+      });
+
+      const maxRows = 2;
+      if (rowTops.length > 0) {
+        const allowedTop = rowTops[Math.min(maxRows - 1, rowTops.length - 1)];
+        const rowLimitedIndex = badges.reduce((idx, badge, i) => (
+          badge.getBoundingClientRect().top <= allowedTop ? i : idx
+        ), 0);
+        lastVisibleIndex = Math.min(lastVisibleIndex, rowLimitedIndex);
+      }
     }
 
     if (lastVisibleIndex < badges.length - 1) {
@@ -2941,7 +3019,7 @@ function enableSidebarDrag(sidebar) {
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'jobCaptureComplete') {
-    console.log('[Job Hunter Sidebar] Job capture complete:', request.success ? 'SUCCESS' : 'FAILURE');
+    console.log('[Job Filter Sidebar] Job capture complete:', request.success ? 'SUCCESS' : 'FAILURE');
 
     const sidebar = document.getElementById('jh-sidebar-rail');
     if (!sidebar) return;

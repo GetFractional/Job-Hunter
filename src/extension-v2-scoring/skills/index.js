@@ -1,5 +1,5 @@
 /**
- * Job Hunter OS - Skills Module Index
+ * Job Filter - Skills Module Index
  *
  * This file serves as the entry point for all skill extraction functionality.
  * It ensures modules are loaded in the correct order and provides a simple API.

@@ -1,10 +1,10 @@
-# Job Hunter OS - Chrome Extension
+# Job Filter - Chrome Extension
 
 A Chrome extension that captures job listings from LinkedIn and Indeed, sending them directly to your Airtable Jobs Pipeline.
 
 ## Features
 
-- **One-Click Capture**: Click "Send to Job Hunter" on any LinkedIn or Indeed job page
+- **One-Click Capture**: Click "Send to Job Filter" on any LinkedIn or Indeed job page
 - **Auto-Extraction**: Automatically extracts job title, company, location, salary, and full description
 - **Airtable Integration**: Creates records in your Jobs Pipeline with Status = "Captured"
 - **Error Handling**: Automatic retry on network failures with clear error messages
@@ -35,7 +35,7 @@ Before using the extension, you need to configure your Airtable credentials:
 ## Usage
 
 1. Navigate to a job listing on LinkedIn or Indeed
-2. Look for the blue **"Send to Job Hunter"** button in the bottom-right corner
+2. Look for the blue **"Send to Job Filter"** button in the bottom-right corner
 3. Click the button to capture the job
 4. A success message appears when the job is saved to Airtable
 
@@ -83,13 +83,13 @@ The extension captures and sends these fields to Airtable:
 ### "Table not found" error
 
 - Ensure your Airtable base has a table named exactly `Jobs Pipeline`
-- Check that the Base ID matches your Job Hunter OS base
+- Check that the Base ID matches your Job Filter base
 
 ### Job data is incomplete
 
 - LinkedIn and Indeed occasionally change their page structure
 - The extension uses multiple fallback selectors
-- Check the Console for `[Job Hunter]` log messages
+- Check the Console for `[Job Filter]` log messages
 
 ## Development
 
@@ -118,7 +118,7 @@ To add custom icons:
 
 1. Make your code changes
 2. Go to `chrome://extensions/`
-3. Click the refresh icon on the Job Hunter OS extension
+3. Click the refresh icon on the Job Filter extension
 4. Test on a LinkedIn or Indeed job page
 
 ## Security Notes

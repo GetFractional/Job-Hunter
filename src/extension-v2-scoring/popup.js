@@ -1,5 +1,5 @@
 /**
- * Job Hunter OS - Popup Script
+ * Job Filter - Popup Script
  *
  * Handles the settings popup UI:
  * - Tab navigation between Airtable and Profile settings

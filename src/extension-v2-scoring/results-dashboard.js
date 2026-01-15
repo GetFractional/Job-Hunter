@@ -1,5 +1,5 @@
 /**
- * Job Hunter OS - Results Dashboard Script
+ * Job Filter - Results Dashboard Script
  *
  * Handles rendering and interaction for the score results modal.
  * This script is injected into the page alongside results-dashboard.html
@@ -16,7 +16,7 @@
  * Create and inject the results modal into the page
  * @param {Object} scoreResult - Score result from scoring engine
  * @param {Object} jobData - Original job data
- * @param {Function} onSendToAirtable - Callback for "Send to Job Hunter" button
+ * @param {Function} onSendToAirtable - Callback for "Send to Job Filter" button
  * @param {Function} onEditProfile - Callback for "Edit Profile" button
  */
 function showResultsModal(scoreResult, jobData, onSendToAirtable, onEditProfile) {
@@ -424,7 +424,7 @@ function setupModalEventHandlers(scoreResult, jobData, onSendToAirtable, onEditP
     });
   }
 
-  // Send to Job Hunter button
+  // Send to Job Filter button
   const sendBtn = document.getElementById('jh-btn-send');
   if (sendBtn && onSendToAirtable) {
     sendBtn.addEventListener('click', async () => {
@@ -543,7 +543,7 @@ function getModalHTML() {
     <footer class="jh-modal-footer">
       <button type="button" class="jh-btn jh-btn-secondary" id="jh-btn-edit-profile">Edit Profile</button>
       <button type="button" class="jh-btn jh-btn-secondary" id="jh-btn-close">Close</button>
-      <button type="button" class="jh-btn jh-btn-primary" id="jh-btn-send">Send to Job Hunter</button>
+      <button type="button" class="jh-btn jh-btn-primary" id="jh-btn-send">Send to Job Filter</button>
     </footer>
   </div>
 </div>

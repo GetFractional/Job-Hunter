@@ -1,5 +1,5 @@
 /**
- * Job Hunter OS - Skill Extraction Constants
+ * Job Filter - Skill Extraction Constants
  *
  * Contains:
  * - Tools/Platforms deny-list for filtering
@@ -230,19 +230,20 @@ const DESIRED_SECTION_PATTERNS = [
 const EXTRACTION_CONFIG = {
   // Fuse.js fuzzy matching threshold (0 = exact, 1 = match anything)
   // Lower = stricter matching
-  FUZZY_THRESHOLD: 0.35,
+  FUZZY_THRESHOLD: 0.42,
 
   // Minimum confidence to include a skill
-  MIN_CONFIDENCE: 0.6,
+  MIN_CONFIDENCE: 0.45,
 
   // Maximum skills to extract per job
-  MAX_SKILLS_PER_JOB: 30,
+  // Set to 0 for no cap
+  MAX_SKILLS_PER_JOB: 0,
 
   // Minimum phrase length to consider (characters)
   MIN_PHRASE_LENGTH: 2,
 
   // Maximum phrase length to consider (words)
-  MAX_PHRASE_WORDS: 5,
+  MAX_PHRASE_WORDS: 7,
 
   // Cache settings
   CACHE_MAX_SIZE: 50,
@@ -266,12 +267,15 @@ const SKILL_PHRASE_PATTERNS = [
   /skilled?\s+(?:in|at|with)\s+([a-z][a-z\s\/&-]{2,40})/gi,
   /background\s+in\s+([a-z][a-z\s\/&-]{2,40})/gi,
   /understanding\s+of\s+([a-z][a-z\s\/&-]{2,40})/gi,
+  /responsible\s+for\s+([a-z][a-z\s\/&-]{2,40})/gi,
+  /accountable\s+for\s+([a-z][a-z\s\/&-]{2,40})/gi,
+  /experience\s+(?:scaling|building|owning)\s+([a-z][a-z\s\/&-]{2,40})/gi,
 
   // Bullet point skill patterns (common in job descriptions)
   /^[\s•\-\*\d.)\]]+([A-Z][a-z][a-z\s\/&-]{2,40})(?:\s*(?:\(|\/|,|;|$))/gm,
 
   // Skills after action verbs
-  /(?:drive|lead|manage|develop|implement|execute|optimize|analyze)\s+([a-z][a-z\s\/&-]{2,40})/gi
+  /(?:drive|lead|manage|develop|implement|execute|optimize|analyze|build|scale|own|launch|design|define|partner|collaborate)\s+([a-z][a-z\s\/&-]{2,40})/gi
 ];
 
 // ============================================================================

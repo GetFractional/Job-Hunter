@@ -1,10 +1,10 @@
 /**
- * Job Hunter OS - Content Script
+ * Job Filter - Content Script
  *
  * Runs on LinkedIn and Indeed job detail pages to:
  * - Detect when user is viewing a job posting
  * - Extract job data from the page DOM
- * - Inject "Send to Job Hunter" and "Score This Job" overlay buttons
+ * - Inject "Send to Job Filter" and "Score This Job" overlay buttons
  * - Calculate job fit scores using the scoring engine
  * - Display results in a modal overlay
  * - Send extracted data to background script for Airtable submission
@@ -26,7 +26,7 @@ function isExtensionContextValid() {
     // Try to access chrome.runtime - will throw if context invalidated
     return !!(chrome && chrome.runtime && chrome.runtime.id);
   } catch (error) {
-    console.warn('[Job Hunter] Extension context invalidated - extension was likely reloaded');
+    console.warn('[Job Filter] Extension context invalidated - extension was likely reloaded');
     return false;
   }
 }
@@ -35,7 +35,7 @@ function isExtensionContextValid() {
  * Show user-friendly message when extension context is invalidated
  */
 function handleInvalidContext() {
-  console.log('[Job Hunter] Extension was reloaded. Please refresh this page to re-enable Job Hunter.');
+  console.log('[Job Filter] Extension was reloaded. Please refresh this page to re-enable Job Filter.');
   // Optional: Show a subtle notification to the user
   if (typeof window.JobHunterSidebar !== 'undefined') {
     try {
@@ -56,7 +56,7 @@ function handleInvalidContext() {
 
 // Prevent multiple injections
 if (window.jobHunterInjected) {
-  console.log('[Job Hunter] Already injected, skipping');
+  console.log('[Job Filter] Already injected, skipping');
 } else {
   window.jobHunterInjected = true;
   initJobHunter();
@@ -68,7 +68,7 @@ if (window.jobHunterInjected) {
  * Main initialization function
  */
 function initJobHunter() {
-  console.log('[Job Hunter] Content script loaded');
+  console.log('[Job Filter] Content script loaded');
 
   // Determine which site we're on
   const hostname = window.location.hostname;
@@ -97,34 +97,34 @@ function safeInitMutationObserver(targetElement, callback, config, label = 'unna
   try {
     // Validate target exists
     if (!targetElement) {
-      console.log(`[Job Hunter] MutationObserver target not found for ${label}`);
+      console.log(`[Job Filter] MutationObserver target not found for ${label}`);
       return null;
     }
 
     // Validate target is a valid Node (not a disconnected element or iframe content)
     if (!(targetElement instanceof Node)) {
-      console.log(`[Job Hunter] MutationObserver target is not a valid Node for ${label}:`, typeof targetElement);
+      console.log(`[Job Filter] MutationObserver target is not a valid Node for ${label}:`, typeof targetElement);
       return null;
     }
 
     // Check if the node is connected to the document
     if (!targetElement.isConnected) {
-      console.log(`[Job Hunter] MutationObserver target is not connected to document for ${label}`);
+      console.log(`[Job Filter] MutationObserver target is not connected to document for ${label}`);
       return null;
     }
 
     // Additional check: ensure it's not inside an iframe
     if (targetElement.ownerDocument !== document) {
-      console.log(`[Job Hunter] MutationObserver target is in different document (possibly iframe) for ${label}`);
+      console.log(`[Job Filter] MutationObserver target is in different document (possibly iframe) for ${label}`);
       return null;
     }
 
     const observer = new MutationObserver(callback);
     observer.observe(targetElement, config);
-    console.log(`[Job Hunter] MutationObserver initialized successfully for ${label}`);
+    console.log(`[Job Filter] MutationObserver initialized successfully for ${label}`);
     return observer;
   } catch (error) {
-    console.error(`[Job Hunter] Failed to initialize MutationObserver for ${label}:`, error.message);
+    console.error(`[Job Filter] Failed to initialize MutationObserver for ${label}:`, error.message);
     return null;
   }
 }
@@ -482,7 +482,7 @@ function extractLinkedInJobData() {
     for (const selector of jobDetailPaneSelectors) {
       jobDetailPane = document.querySelector(selector);
       if (jobDetailPane) {
-        console.log('[Job Hunter] ✓ Found job detail pane:', selector);
+        console.log('[Job Filter] ✓ Found job detail pane:', selector);
         break;
       }
     }
@@ -607,31 +607,31 @@ function extractLinkedInJobData() {
 
         // Reject if contains "followers" (company info)
         if (/followers?/i.test(name)) {
-          console.log('[Job Hunter] ⚠ Rejected hiring manager name (contains "followers"):', name);
+          console.log('[Job Filter] ⚠ Rejected hiring manager name (contains "followers"):', name);
           return false;
         }
 
         // Reject if contains large numbers with commas (like "51,078" from follower counts)
         if (/\d{1,3}(?:,\d{3})+/.test(name)) {
-          console.log('[Job Hunter] ⚠ Rejected hiring manager name (contains large numbers):', name);
+          console.log('[Job Filter] ⚠ Rejected hiring manager name (contains large numbers):', name);
           return false;
         }
 
         // Reject if contains K/M suffix (follower counts like "1.2M")
         if (/\d+(?:\.\d+)?[KM]\b/i.test(name)) {
-          console.log('[Job Hunter] ⚠ Rejected hiring manager name (contains K/M suffix):', name);
+          console.log('[Job Filter] ⚠ Rejected hiring manager name (contains K/M suffix):', name);
           return false;
         }
 
         // Reject if too long (person names rarely exceed 50 chars)
         if (name.length > 50) {
-          console.log('[Job Hunter] ⚠ Rejected hiring manager name (too long):', name);
+          console.log('[Job Filter] ⚠ Rejected hiring manager name (too long):', name);
           return false;
         }
 
         // Reject if contains "employees" (company headcount info)
         if (/employees?/i.test(name)) {
-          console.log('[Job Hunter] ⚠ Rejected hiring manager name (contains "employees"):', name);
+          console.log('[Job Filter] ⚠ Rejected hiring manager name (contains "employees"):', name);
           return false;
         }
 
@@ -657,7 +657,7 @@ function extractLinkedInJobData() {
       const linkedInUrlMatch = nameEl.href.match(/linkedin\.com\/in\/([^/?]+)/);
       if (linkedInUrlMatch) {
         hiringManagerLinkedInUrl = `https://www.linkedin.com/in/${linkedInUrlMatch[1]}/`;
-        console.log('[Job Hunter] ✓ Hiring Manager LinkedIn URL extracted:', hiringManagerLinkedInUrl);
+        console.log('[Job Filter] ✓ Hiring Manager LinkedIn URL extracted:', hiringManagerLinkedInUrl);
       }
     }
 
@@ -671,8 +671,8 @@ function extractLinkedInJobData() {
         title: hiringManagerTitle
       };
       data.hiringManagerLinkedInUrl = hiringManagerLinkedInUrl; // NEW: Store LinkedIn URL
-      console.log('[Job Hunter] ✓ Hiring Manager extracted:', data.hiringManager);
-      console.log('[Job Hunter] Hiring Manager Details:', {
+      console.log('[Job Filter] ✓ Hiring Manager extracted:', data.hiringManager);
+      console.log('[Job Filter] Hiring Manager Details:', {
         name: hiringManagerName,
         title: hiringManagerTitle,
         linkedInUrl: hiringManagerLinkedInUrl,
@@ -681,8 +681,8 @@ function extractLinkedInJobData() {
         titleSelector: titleEl?.className || 'unknown'
       });
     } else {
-      console.log('[Job Hunter] ⚠ Hiring Manager not found on page');
-      console.log('[Job Hunter] Debug info:', {
+      console.log('[Job Filter] ⚠ Hiring Manager not found on page');
+      console.log('[Job Filter] Debug info:', {
         hiringTeamContainerFound: !!hiringTeamContainer,
         hiringTeamContainerClass: hiringTeamContainer?.className || 'none',
         nameElementFound: !!nameEl,
@@ -692,7 +692,7 @@ function extractLinkedInJobData() {
       // Try to help debug by logging any elements that might contain hiring manager info
       const possibleElements = document.querySelectorAll('[class*="hiring"], [class*="poster"], [class*="hirer"]');
       if (possibleElements.length > 0) {
-        console.log('[Job Hunter] Possible hiring-related elements found:', possibleElements.length);
+        console.log('[Job Filter] Possible hiring-related elements found:', possibleElements.length);
         possibleElements.forEach((el, idx) => {
           if (idx < 3) { // Log first 3 to avoid spam
             console.log(`  [${idx}] ${el.className}:`, el.textContent?.trim().substring(0, 100));
@@ -773,19 +773,19 @@ function extractLinkedInJobData() {
     if (companyHeadcountData.currentHeadcount !== null) {
       data.companyHeadcount = companyHeadcountData.currentHeadcount;
       data.totalEmployees = companyHeadcountData.currentHeadcount; // Alias for Airtable
-      console.log('[Job Hunter] ✓ Total Employees extracted:', companyHeadcountData.currentHeadcount);
+      console.log('[Job Filter] ✓ Total Employees extracted:', companyHeadcountData.currentHeadcount);
     }
     if (companyHeadcountData.headcountGrowthRate !== null) {
       data.companyHeadcountGrowth = `${companyHeadcountData.headcountGrowthRate >= 0 ? '+' : ''}${companyHeadcountData.headcountGrowthRate}%`;
-      console.log('[Job Hunter] ✓ Growth rate extracted:', data.companyHeadcountGrowth, '(2-year company-wide)');
+      console.log('[Job Filter] ✓ Growth rate extracted:', data.companyHeadcountGrowth, '(2-year company-wide)');
     } else {
       // Explicitly set to null when no growth data exists
       data.companyHeadcountGrowth = null;
-      console.log('[Job Hunter] ⚠ No growth data found - companyHeadcountGrowth set to null');
+      console.log('[Job Filter] ⚠ No growth data found - companyHeadcountGrowth set to null');
     }
     if (companyHeadcountData.medianEmployeeTenure !== null) {
       data.medianEmployeeTenure = companyHeadcountData.medianEmployeeTenure;
-      console.log('[Job Hunter] ✓ Median Employee Tenure extracted:', data.medianEmployeeTenure, 'years');
+      console.log('[Job Filter] ✓ Median Employee Tenure extracted:', data.medianEmployeeTenure, 'years');
     }
 
     // Extract Industry from footer "About the company" section
@@ -795,9 +795,9 @@ function extractLinkedInJobData() {
       // Skip if it's "Staffing and Recruiting" - we'll infer from job description instead
       if (industryText && !industryText.toLowerCase().includes('staffing and recruiting')) {
         data.industry = industryText;
-        console.log('[Job Hunter] ✓ Industry extracted:', data.industry);
+        console.log('[Job Filter] ✓ Industry extracted:', data.industry);
       } else if (industryText.toLowerCase().includes('staffing and recruiting')) {
-        console.log('[Job Hunter] ⚠ Detected recruiting firm - industry will need inference from JD');
+        console.log('[Job Filter] ⚠ Detected recruiting firm - industry will need inference from JD');
       }
     }
 
@@ -828,7 +828,7 @@ function extractLinkedInJobData() {
             followersValue = parseFloat(followersValue) * 1000000;
           }
           data.companyFollowers = parseInt(followersValue, 10);
-          console.log('[Job Hunter] ✓ Followers extracted:', data.companyFollowers);
+          console.log('[Job Filter] ✓ Followers extracted:', data.companyFollowers);
           break;
         }
       }
@@ -857,7 +857,7 @@ function extractLinkedInJobData() {
         const typeMatch = aboutText.match(pattern);
         if (typeMatch) {
           data.companyType = typeMatch[1];
-          console.log('[Job Hunter] ✓ Company Type extracted:', data.companyType);
+          console.log('[Job Filter] ✓ Company Type extracted:', data.companyType);
           break;
         }
       }
@@ -868,7 +868,7 @@ function extractLinkedInJobData() {
         const description = descriptionEl.textContent?.trim();
         if (description && description.length > 30) { // Only capture if substantive
           data.companyDescription = description;
-          console.log('[Job Hunter] ✓ Company Description extracted:', description.substring(0, 100) + '...');
+          console.log('[Job Filter] ✓ Company Description extracted:', description.substring(0, 100) + '...');
         }
       }
     }
@@ -886,7 +886,7 @@ function extractLinkedInJobData() {
         const websiteEl = document.querySelector(selector);
         if (websiteEl && websiteEl.href && !websiteEl.href.includes('linkedin.com')) {
           data.website = websiteEl.href;
-          console.log('[Job Hunter] ✓ Website extracted:', data.website);
+          console.log('[Job Filter] ✓ Website extracted:', data.website);
           break;
         }
       }
@@ -911,8 +911,8 @@ function extractLinkedInJobData() {
           }
         });
         if (data.featuredBenefits.length > 0) {
-          console.log('[Job Hunter] ✓ Featured Benefits extracted:', data.featuredBenefits.length, 'benefits');
-          console.log('[Job Hunter] Benefits:', data.featuredBenefits.join(', '));
+          console.log('[Job Filter] ✓ Featured Benefits extracted:', data.featuredBenefits.length, 'benefits');
+          console.log('[Job Filter] Benefits:', data.featuredBenefits.join(', '));
           break;
         }
       }
@@ -931,13 +931,13 @@ function extractLinkedInJobData() {
           }
         });
         if (data.featuredBenefits.length > 0) {
-          console.log('[Job Hunter] ✓ Featured Benefits (from artdeco-card):', data.featuredBenefits.length, 'benefits');
+          console.log('[Job Filter] ✓ Featured Benefits (from artdeco-card):', data.featuredBenefits.length, 'benefits');
         }
       }
     }
 
   } catch (error) {
-    console.error('[Job Hunter] Error extracting LinkedIn data:', error);
+    console.error('[Job Filter] Error extracting LinkedIn data:', error);
   }
 
   return data;
@@ -963,11 +963,11 @@ function extractCompanyHeadcountData() {
   try {
     // CRITICAL: LinkedIn Premium Company Growth Widget (.jobs-premium-company-growth)
     // This widget contains Total Employees, Growth %, and Median Tenure
-    console.log('[Job Hunter] Looking for LinkedIn premium company growth widget...');
+    console.log('[Job Filter] Looking for LinkedIn premium company growth widget...');
     const growthWidget = document.querySelector('.jobs-premium-company-growth');
 
     if (growthWidget) {
-      console.log('[Job Hunter] ✓ Found premium company growth widget');
+      console.log('[Job Filter] ✓ Found premium company growth widget');
 
       // Extract Total Employees from the first .t-16 element
       const employeeCountEl = growthWidget.querySelector('p.t-16');
@@ -976,14 +976,14 @@ function extractCompanyHeadcountData() {
         const employeeMatch = employeeText.match(/(\d{1,3}(?:,\d{3})*)/);
         if (employeeMatch) {
           result.currentHeadcount = parseInt(employeeMatch[1].replace(/,/g, ''), 10);
-          console.log('[Job Hunter] ✓ Total Employees:', result.currentHeadcount);
+          console.log('[Job Filter] ✓ Total Employees:', result.currentHeadcount);
           result.headcountDataFound = true;
         }
       }
 
       // Extract Growth from "Company-wide" stat (NOT department-specific)
       const companyGrowthItems = growthWidget.querySelectorAll('.jobs-premium-company-growth__stat-item');
-      console.log('[Job Hunter] Found', companyGrowthItems.length, 'growth stat items');
+      console.log('[Job Filter] Found', companyGrowthItems.length, 'growth stat items');
 
       for (const item of companyGrowthItems) {
         const labels = item.querySelectorAll('p');
@@ -1012,7 +1012,7 @@ function extractCompanyHeadcountData() {
               result.headcountGrowthRate = hasDecrease ? -Math.abs(rate) : rate;
               result.headcountGrowthText = `Company-wide ${result.headcountGrowthRate >= 0 ? '+' : ''}${result.headcountGrowthRate}% (2yr)`;
               result.headcountDataFound = true;
-              console.log('[Job Hunter] ✓ Company-wide Growth:', result.headcountGrowthRate + '%');
+              console.log('[Job Filter] ✓ Company-wide Growth:', result.headcountGrowthRate + '%');
               break;
             }
           }
@@ -1029,19 +1029,19 @@ function extractCompanyHeadcountData() {
           const parentText = strong.closest('div')?.textContent?.toLowerCase() || '';
           if (parentText.includes('tenure') || parentText.includes('employee')) {
             result.medianEmployeeTenure = parseFloat(tenureMatch[1]);
-            console.log('[Job Hunter] ✓ Median Employee Tenure:', result.medianEmployeeTenure, 'years');
+            console.log('[Job Filter] ✓ Median Employee Tenure:', result.medianEmployeeTenure, 'years');
             break;
           }
         }
       }
     } else {
-      console.log('[Job Hunter] ⚠ Premium company growth widget not found on page');
+      console.log('[Job Filter] ⚠ Premium company growth widget not found on page');
     }
 
     // FALLBACK METHODS: Only run if widget didn't find data
     // Method 1: Try LinkedIn company sidebar / insights section on job posting (FALLBACK ONLY)
     if (!result.currentHeadcount || !result.headcountGrowthRate) {
-      console.log('[Job Hunter] Using fallback methods for missing data...');
+      console.log('[Job Filter] Using fallback methods for missing data...');
 
       const companyInfoSelectors = [
         '[data-testid="company-info"]',
@@ -1090,11 +1090,11 @@ function extractCompanyHeadcountData() {
           const upper = parseInt(rangeMatch[2].replace(/,/g, ''), 10);
           result.currentHeadcount = Math.floor((lower + upper) / 2);
           result.headcountDataFound = true;
-          console.log('[Job Hunter] Fallback: Extracted headcount from range:', result.currentHeadcount);
+          console.log('[Job Filter] Fallback: Extracted headcount from range:', result.currentHeadcount);
         } else if (singleMatch) {
           result.currentHeadcount = parseInt(singleMatch[1].replace(/,/g, ''), 10);
           result.headcountDataFound = true;
-          console.log('[Job Hunter] Fallback: Extracted headcount from single:', result.currentHeadcount);
+          console.log('[Job Filter] Fallback: Extracted headcount from single:', result.currentHeadcount);
         }
       }
 
@@ -1117,7 +1117,7 @@ function extractCompanyHeadcountData() {
               result.headcountGrowthRate = rate;
               result.headcountGrowthText = match[0];
               result.headcountDataFound = true;
-              console.log('[Job Hunter] Fallback: Extracted growth rate:', result.headcountGrowthRate + '%');
+              console.log('[Job Filter] Fallback: Extracted growth rate:', result.headcountGrowthRate + '%');
               break;
             }
           }
@@ -1126,7 +1126,7 @@ function extractCompanyHeadcountData() {
     } // End of fallback methods conditional
 
   } catch (error) {
-    console.error('[Job Hunter] Error extracting headcount data:', error);
+    console.error('[Job Filter] Error extracting headcount data:', error);
   }
 
   return result;
@@ -1394,7 +1394,7 @@ function extractIndeedJobData() {
     }
 
   } catch (error) {
-    console.error('[Job Hunter] Error extracting Indeed data:', error);
+    console.error('[Job Filter] Error extracting Indeed data:', error);
   }
 
   return data;
@@ -1896,7 +1896,7 @@ function injectOverlay(source) {
     return;
   }
 
-  console.log('[Job Hunter] Initializing auto-scoring...');
+  console.log('[Job Filter] Initializing auto-scoring...');
 
   // Create sidebar if mode detection hasn't already done so
   if (typeof window.JobHunterSidebar !== 'undefined' && !document.getElementById('jh-sidebar-rail')) {
@@ -1931,7 +1931,7 @@ async function handleScoreClick(source, button) {
       ? extractLinkedInJobData()
       : extractIndeedJobData();
 
-    console.log('[Job Hunter] Extracted job data for scoring:', jobData);
+    console.log('[Job Filter] Extracted job data for scoring:', jobData);
 
     // Validate we got essential data
     if (!jobData.jobTitle || !jobData.companyName) {
@@ -1957,8 +1957,8 @@ async function handleScoreClick(source, button) {
       throw new Error('Scoring engine not loaded');
     }
 
-    const scoreResult = window.JobHunterScoring.calculateJobFitScore(jobData, userProfile);
-    console.log('[Job Hunter] Score result:', scoreResult);
+    const scoreResult = await window.JobHunterScoring.calculateJobFitScore(jobData, userProfile);
+    console.log('[Job Filter] Score result:', scoreResult);
 
     // Reset button state
     button.classList.remove('loading');
@@ -1985,7 +1985,7 @@ async function handleScoreClick(source, button) {
     }
 
   } catch (error) {
-    console.error('[Job Hunter] Scoring error:', error);
+    console.error('[Job Filter] Scoring error:', error);
 
     // Show error state
     button.classList.remove('loading');
@@ -2042,7 +2042,7 @@ function showProfileSetupPrompt() {
       ">
         <h3 style="margin: 0 0 12px 0; font-size: 18px; color: #1a1a2e;">Set Up Your Profile</h3>
         <p style="margin: 0 0 20px 0; font-size: 14px; color: #6c757d;">
-          To score jobs against your preferences, please set up your Job Hunter profile first. It only takes 3 minutes!
+          To score jobs against your preferences, please set up your Job Filter profile first. It only takes 3 minutes!
         </p>
         <div style="display: flex; gap: 10px; justify-content: center;">
           <button id="jh-prompt-cancel" style="
@@ -2119,7 +2119,7 @@ window.triggerJobScoring = function() {
 async function triggerAutoScore(source) {
   // Check if extension context is still valid
   if (!isExtensionContextValid()) {
-    console.log('[Job Hunter] Extension context invalidated, skipping auto-score');
+    console.log('[Job Filter] Extension context invalidated, skipping auto-score');
     handleInvalidContext();
     return;
   }
@@ -2128,7 +2128,7 @@ async function triggerAutoScore(source) {
 
   // Don't re-score the same job
   if (currentUrl === lastScoredUrl) {
-    console.log('[Job Hunter] Already scored this job, skipping');
+    console.log('[Job Filter] Already scored this job, skipping');
     return;
   }
 
@@ -2142,12 +2142,12 @@ async function triggerAutoScore(source) {
     try {
       // Double-check context is still valid after timeout
       if (!isExtensionContextValid()) {
-        console.log('[Job Hunter] Extension context invalidated during debounce');
+        console.log('[Job Filter] Extension context invalidated during debounce');
         handleInvalidContext();
         return;
       }
 
-      console.log('[Job Hunter] Auto-scoring job...');
+      console.log('[Job Filter] Auto-scoring job...');
 
       // Extract job data
       const jobData = source === 'LinkedIn'
@@ -2156,7 +2156,7 @@ async function triggerAutoScore(source) {
 
       // Validate we got essential data
       if (!jobData.jobTitle || !jobData.companyName) {
-        console.log('[Job Hunter] Not enough data to auto-score');
+        console.log('[Job Filter] Not enough data to auto-score');
         return;
       }
 
@@ -2165,19 +2165,19 @@ async function triggerAutoScore(source) {
 
       // If no profile, don't auto-score (user needs to set up profile first)
       if (!userProfile || !userProfile.preferences) {
-        console.log('[Job Hunter] No profile found, skipping auto-score');
+        console.log('[Job Filter] No profile found, skipping auto-score');
         return;
       }
 
       // Check if scoring engine is available
       if (typeof window.JobHunterScoring === 'undefined') {
-        console.error('[Job Hunter] Scoring engine not loaded');
+        console.error('[Job Filter] Scoring engine not loaded');
         return;
       }
 
       // Calculate score
-      const scoreResult = window.JobHunterScoring.calculateJobFitScore(jobData, userProfile);
-      console.log('[Job Hunter] Auto-score result:', scoreResult);
+      const scoreResult = await window.JobHunterScoring.calculateJobFitScore(jobData, userProfile);
+      console.log('[Job Filter] Auto-score result:', scoreResult);
 
       // Update sidebar (new docked rail UI)
       if (typeof window.JobHunterSidebar !== 'undefined') {
@@ -2194,10 +2194,10 @@ async function triggerAutoScore(source) {
     } catch (error) {
       // Check if error is due to extension context invalidation
       if (error.message && error.message.includes('Extension context invalidated')) {
-        console.log('[Job Hunter] Extension was reloaded. Please refresh the page.');
+        console.log('[Job Filter] Extension was reloaded. Please refresh the page.');
         handleInvalidContext();
       } else {
-        console.error('[Job Hunter] Auto-score error:', error);
+        console.error('[Job Filter] Auto-score error:', error);
       }
     }
   }, 800); // 800ms debounce
@@ -2261,7 +2261,7 @@ window.sendJobToAirtable = async function sendJobToAirtable(jobData, scoreResult
         // Check for Chrome runtime errors first
         const lastErr = chrome.runtime.lastError;
         if (lastErr) {
-          console.error('[Job Hunter] Runtime error:', lastErr.message);
+          console.error('[Job Filter] Runtime error:', lastErr.message);
           safeReject(new Error(lastErr.message || 'Message failed'));
           return;
         }
@@ -2274,7 +2274,7 @@ window.sendJobToAirtable = async function sendJobToAirtable(jobData, scoreResult
 
         // Handle "processing in background" response (async processing)
         if (resp && resp.processing) {
-          console.log('[Job Hunter] Job capture processing in background...');
+          console.log('[Job Filter] Job capture processing in background...');
           // Resolve immediately - actual result will come via jobCaptureComplete message
           safeResolve({ success: true, processing: true, message: resp.message });
           return;
@@ -2323,7 +2323,7 @@ async function handleCaptureClick(source, button) {
       ? extractLinkedInJobData()
       : extractIndeedJobData();
 
-    console.log('[Job Hunter] Extracted job data:', jobData);
+    console.log('[Job Filter] Extracted job data:', jobData);
 
     // Validate we got essential data
     if (!jobData.jobTitle || !jobData.companyName) {
@@ -2354,7 +2354,7 @@ async function handleCaptureClick(source, button) {
     });
 
     if (response && response.success) {
-      console.log('[Job Hunter] Airtable saved:', {
+      console.log('[Job Filter] Airtable saved:', {
         recordId: response.recordId,
         baseId: response.baseId,
         table: response.table
@@ -2367,7 +2367,7 @@ async function handleCaptureClick(source, button) {
       // Reset button after 3 seconds
       setTimeout(() => {
         button.classList.remove('success');
-        button.querySelector('span').textContent = 'Send to Job Hunter';
+        button.querySelector('span').textContent = 'Send to Job Filter';
         button.disabled = false;
       }, 3000);
     } else {
@@ -2376,7 +2376,7 @@ async function handleCaptureClick(source, button) {
     }
 
   } catch (error) {
-    console.error('[Job Hunter] Capture error:', error);
+    console.error('[Job Filter] Capture error:', error);
 
     // Show error state
     button.classList.remove('loading');
@@ -2386,7 +2386,7 @@ async function handleCaptureClick(source, button) {
     // Reset button after 3 seconds
     setTimeout(() => {
       button.classList.remove('error');
-      button.querySelector('span').textContent = 'Send to Job Hunter';
+      button.querySelector('span').textContent = 'Send to Job Filter';
       button.disabled = false;
     }, 3000);
   }

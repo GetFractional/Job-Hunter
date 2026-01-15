@@ -1,5 +1,5 @@
 /**
- * Job Hunter OS - Profile Setup Script
+ * Job Filter - Profile Setup Script
  *
  * Handles the user profile onboarding flow:
  * - Multi-tab form navigation

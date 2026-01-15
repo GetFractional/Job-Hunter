@@ -1,5 +1,5 @@
 /**
- * Job Hunter OS - Floating Score Panel
+ * Job Filter - Floating Score Panel
  *
  * A condensed, movable panel that auto-scores jobs when viewing them.
  * Displays in the bottom-right corner and can be:
@@ -96,7 +96,7 @@ function updatePanelScore(scoreResult, jobData) {
   }
 
   if (!panel) {
-    console.error('[Job Hunter] Failed to create floating panel');
+    console.error('[Job Filter] Failed to create floating panel');
     return;
   }
 

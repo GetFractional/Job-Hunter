@@ -1,5 +1,5 @@
 /**
- * Job Hunter OS - Fuzzy Matcher
+ * Job Filter - Fuzzy Matcher
  *
  * Lightweight fuzzy string matching implementation for skill extraction.
  * Uses a combination of:
