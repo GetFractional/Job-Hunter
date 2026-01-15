@@ -405,16 +405,6 @@ function extractLinkedInJobData() {
     ];
     data.descriptionText = getTextFromSelectors(descriptionSelectors, true) || '';
 
-    // DEBUG: Log captured description
-    console.log('[Job Filter] DEBUG: descriptionText length:', data.descriptionText?.length || 0);
-    if (!data.descriptionText || data.descriptionText.length < 100) {
-      console.log('[Job Filter] DEBUG: descriptionText may be missing or short. Checking selectors...');
-      descriptionSelectors.forEach(sel => {
-        const el = document.querySelector(sel);
-        console.log(`[Job Filter] DEBUG: Selector "${sel}":`, el ? `found (${el.textContent?.length || 0} chars)` : 'not found');
-      });
-    }
-
     // Multi-pass salary extraction with confidence levels
     const salaryResult = extractSalaryWithConfidence({
       structuredSalary: structuredSalaryText,

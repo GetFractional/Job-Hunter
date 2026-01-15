@@ -70,12 +70,6 @@ const SkillExtractionService = (function() {
    * @returns {Object} Skill analysis result
    */
   async function analyzeJobSkills(jobDescriptionText, options = {}) {
-    // DEBUG: Log input text
-    console.log('[SkillService] analyzeJobSkills called with text length:', jobDescriptionText?.length || 0);
-    if (!jobDescriptionText || jobDescriptionText.length < 50) {
-      console.log('[SkillService] DEBUG: Text too short or empty. First 200 chars:', jobDescriptionText?.substring(0, 200));
-    }
-
     // Ensure initialized
     if (!initialized) {
       const initSuccess = await initialize();
