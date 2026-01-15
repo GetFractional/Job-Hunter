@@ -110,6 +110,25 @@ function extractRequiredSkillConcepts(jobDescriptionText, options = {}) {
 
   result.debug.afterNormalization = normalizedRequired.length + normalizedDesired.length;
 
+  // DEBUG: Log filtering stages
+  if (result.debug.totalPhrases === 0) {
+    console.log('[SkillExtractor] DEBUG: No phrases extracted from text. Text length:', jobDescriptionText?.length || 0);
+  } else {
+    console.log('[SkillExtractor] DEBUG: Extraction pipeline:', {
+      rawPhrases: result.debug.totalPhrases,
+      afterToolFilter: result.debug.afterToolFilter,
+      afterGenericFilter: result.debug.afterGenericFilter,
+      afterNormalization: result.debug.afterNormalization,
+      sampleRaw: result.rawExtracted.slice(0, 5),
+      cleanRequired: cleanRequiredPhrases.slice(0, 5),
+      normalizedRequired: normalizedRequired.slice(0, 5).map(s => ({
+        original: s.original,
+        confidence: s.confidence,
+        matchedSkill: s.matchedSkill?.name
+      }))
+    });
+  }
+
   // Step 6: Build final skill arrays
   result.required = normalizedRequired
     .filter(s => s.confidence >= minConfidence)
@@ -130,6 +149,11 @@ function extractRequiredSkillConcepts(jobDescriptionText, options = {}) {
       confidence: s.confidence,
       matchType: s.matchType || 'extracted'
     }));
+
+  // DEBUG: Log final results
+  if (result.required.length === 0 && result.desired.length === 0 && result.debug.afterNormalization > 0) {
+    console.log('[SkillExtractor] DEBUG: All skills filtered by confidence threshold:', minConfidence);
+  }
 
   // Remove duplicates between required and desired (required wins)
   const requiredCanonicals = new Set(result.required.map(s => s.canonical));
