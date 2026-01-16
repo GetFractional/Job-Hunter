@@ -668,7 +668,7 @@ function getModalStyles() {
 .jh-score-label.jh-poor-fit { background: #ffe3e3; color: #c92a2a; }
 .jh-score-label.jh-hard-no { background: #495057; color: #fff; }
 .jh-score-summary { font-size: 13px; color: #495057; margin: 0; }
-.jh-fit-section { padding: 16px 24px; border-bottom: 1px solid #e9ecef; }
+.jh-fit-section { padding: 16px 24px 0; border-bottom: 1px solid #e9ecef; }
 .jh-section-header {
   display: flex;
   align-items: center;
@@ -736,7 +736,7 @@ function getModalStyles() {
 .jh-criterion-rationale { font-size: 11px; color: #868e96; margin: 0; }
 .jh-criterion.jh-score-high .jh-criterion-name { color: #2b8a3e; }
 .jh-criterion.jh-score-low .jh-criterion-name { color: #c92a2a; }
-.jh-interpretation-section { padding: 16px 24px; border-bottom: 1px solid #e9ecef; }
+.jh-interpretation-section { padding: 16px 24px; border-top: 1px solid #e9ecef; }
 .jh-interpretation-section h3 { font-size: 14px; font-weight: 600; color: #1a1a2e; margin: 0 0 12px 0; }
 .jh-action-badge {
   display: inline-flex;
@@ -746,6 +746,7 @@ function getModalStyles() {
   border-radius: 8px;
   font-size: 13px;
   font-weight: 500;
+  margin-top: 16px;
   margin-bottom: 16px;
 }
 .jh-action-badge.jh-pursue { background: #d3f9d8; color: #2b8a3e; }
@@ -840,7 +841,8 @@ function getModalStyles() {
 @media (max-width: 480px) {
   .jh-modal-content { width: 95%; max-height: 95vh; border-radius: 12px; }
   .jh-score-header { flex-direction: column; text-align: center; padding: 20px; }
-  .jh-fit-section, .jh-interpretation-section { padding: 12px 16px; }
+  .jh-fit-section { padding: 12px 16px 0; }
+  .jh-interpretation-section { padding: 12px 16px; }
   .jh-modal-footer { flex-wrap: wrap; padding: 12px 16px; }
   .jh-btn { flex: 1 1 45%; }
   .jh-btn-primary { flex: 1 1 100%; order: -1; margin-bottom: 8px; }

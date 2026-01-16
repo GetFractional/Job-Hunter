@@ -1,5 +1,18 @@
 # Job Hunter Extension - Fixes Applied
 
+## 🎨 UI Cleanup: Results Dashboard
+
+### Changes Made:
+1. **Removed Extra Whitespace:** Reduced the bottom margin of the "Benefits" and "Skills" cards to create a more compact and readable layout.
+2. **Equalized Padding:** Added top padding to the "Profile Considerations" alert to ensure consistent spacing above and below the element.
+3. **Added Separator Border:** Included a top border on the "Next Steps" container to visually separate it from the sections above, matching the existing design language.
+4. **Responsive Adjustments:** Ensured all padding and margin changes are correctly applied on smaller screen sizes for a consistent mobile experience.
+
+### Files Modified:
+- `src/extension-v2-scoring/results-dashboard.css`
+
+---
+
 ## 🐛 Problem Identified
 
 The Chrome extension was not sending jobs to Airtable due to **Manifest V3 Service Worker Lifecycle Issues**.
@@ -130,7 +143,7 @@ If you still experience issues:
 
 3. **Check browser console:**
    - If you see `Extension context invalidated` - reload the page
-   - If you see `Could not establish connection` - reload the extension
+   - If you see `Could not establish connection` - reload the.
    - If you see `Airtable API error: 401` - check your credentials
 
 4. **Check network:**
