@@ -107,10 +107,14 @@ function createSidebarRail(mode) {
 
   document.body.appendChild(sidebar);
 
+  // Add resize handles
+  addResizeHandles(sidebar);
+
   // Set up event handlers
   setupSidebarEventHandlers(sidebar, mode);
   applySavedSidebarPosition(sidebar);
   enableSidebarDrag(sidebar);
+  enableSidebarResize(sidebar);
 
   sidebarState.mode = mode;
   sidebarState.isVisible = true;
@@ -599,7 +603,7 @@ function renderBreakdownItems(breakdown, type, userProfile = null) {
     let extraHtml = '';
     let badgeCount = null;
 
-    // Skills display with ghost badges for non-matching
+    // Skills display - matched badges highlighted, "Missing" label shows unmatched on hover
     if (item.criteria === 'Skills Overlap' && (item.matched_skills || item.unmatched_skills || totalUserSkills)) {
       const matchedSkills = item.matched_skills || [];
       const unmatchedSkills = item.unmatched_skills || [];
@@ -609,8 +613,7 @@ function renderBreakdownItems(breakdown, type, userProfile = null) {
       const actualTotal = matchedSkills.length + unmatchedSkills.length;
       const displayTotal = actualTotal > 0 ? actualTotal : totalUserSkills;
 
-      // FIXED: Calculate percentage consistently with match_percentage used in warnings
-      // percentage = matchCount / displayTotal * 100
+      // Calculate percentage consistently
       const displayPercentage = displayTotal > 0 ? Math.round((matchCount / displayTotal) * 100) : 0;
 
       // Update match_percentage to ensure consistency between card and warnings
@@ -618,37 +621,46 @@ function renderBreakdownItems(breakdown, type, userProfile = null) {
         item.match_percentage = displayPercentage;
       }
 
-      // Show X/Y with percentage - same calculation used everywhere
+      // Show X/Y with percentage
       extraHtml += `<div class="jh-skills-summary">${matchCount}/${displayTotal} skills (${displayPercentage}%)</div>`;
 
-      // Combine matched and unmatched for display (matched first)
-      const combinedSkills = [
-        ...matchedSkills.map(s => ({ name: s, matched: true })),
-        ...unmatchedSkills.map(s => ({ name: s, matched: false }))
-      ];
-      badgeCount = combinedSkills.length;
-
-      // FIXED: Add overflow truncation with accurate "+more" count
-      const maxVisibleBadges = 10;
-      const displaySkills = combinedSkills.slice(0, maxVisibleBadges);
-      const hiddenCount = combinedSkills.length - displaySkills.length;
-
-      if (displaySkills.length > 0) {
+      // Show ALL matched skills first (highlighted)
+      if (matchedSkills.length > 0) {
         extraHtml += `
-          <div class="jh-skill-tags">
-            ${displaySkills.map(s =>
-              `<span class="jh-skill-tag ${s.matched ? 'jh-matched' : 'jh-ghost'}">${escapeHtml(formatBadgeLabel(s.name))}</span>`
+          <div class="jh-skill-tags jh-responsive-tags">
+            ${matchedSkills.map(s =>
+              `<span class="jh-skill-tag jh-matched">${escapeHtml(formatBadgeLabel(s))}</span>`
             ).join('')}
-            ${hiddenCount > 0 ? `<span class="jh-skill-tag jh-more" title="Click to see all ${combinedSkills.length} skills">+${hiddenCount} more</span>` : ''}
           </div>
         `;
       }
+
+      // Show "Missing" label that reveals unmatched skills on hover
+      if (unmatchedSkills.length > 0) {
+        const missingTooltip = unmatchedSkills.map(s => escapeHtml(s)).join(', ');
+        extraHtml += `
+          <div class="jh-missing-skills-container">
+            <span class="jh-skill-tag jh-missing" title="${missingTooltip}" data-missing-count="${unmatchedSkills.length}">
+              Missing (${unmatchedSkills.length})
+            </span>
+            <div class="jh-missing-tooltip">
+              <div class="jh-missing-tooltip-header">Missing Skills:</div>
+              <div class="jh-missing-tooltip-content">
+                ${unmatchedSkills.map(s => `<span class="jh-missing-skill-item">${escapeHtml(s)}</span>`).join('')}
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      badgeCount = matchedSkills.length + (unmatchedSkills.length > 0 ? 1 : 0);
     }
 
-    // Benefits display - same logic as skills with ghost badges
+    // Benefits display - matched badges highlighted, "Missing" shows unmatched on hover
     if (item.criteria === 'Benefits Package' || item.criteria === 'Benefits') {
       const matchedBenefits = item.matched_benefits || [];
       const preferredMatched = item.matched_preferred_benefits || [];
+      const missingBenefits = item.missing_preferred_benefits || [];
       const preferredTotal = Number.isFinite(item.preferred_benefits_total) ? item.preferred_benefits_total : totalUserBenefits;
       const matchCount = preferredMatched.length > 0 ? preferredMatched.length : matchedBenefits.length;
       const totalCount = preferredTotal > 0 ? preferredTotal : totalUserBenefits;
@@ -657,24 +669,36 @@ function renderBreakdownItems(breakdown, type, userProfile = null) {
         ? `<div class="jh-benefits-summary">${matchCount}/${totalCount} benefits matched</div>`
         : `<div class="jh-benefits-summary">${matchCount} benefits matched</div>`;
 
-      const allBenefits = matchedBenefits.map(b => ({ name: b, matched: true }));
-      badgeCount = allBenefits.length;
-
-      // FIXED: Add overflow truncation with accurate "+more" count for benefits
-      const maxVisibleBenefits = 6;
-      const displayBenefits = allBenefits.slice(0, maxVisibleBenefits);
-      const hiddenBenefitCount = allBenefits.length - displayBenefits.length;
-
-      if (displayBenefits.length > 0) {
+      // Show ALL matched benefits (highlighted)
+      if (matchedBenefits.length > 0) {
         extraHtml += `
-          <div class="jh-benefits-tags">
-            ${displayBenefits.map(b =>
-              `<span class="jh-benefit-tag ${b.matched ? 'jh-matched' : 'jh-ghost'}">${escapeHtml(formatBadgeLabel(b.name))}</span>`
+          <div class="jh-benefits-tags jh-responsive-tags">
+            ${matchedBenefits.map(b =>
+              `<span class="jh-benefit-tag jh-matched">${escapeHtml(formatBadgeLabel(b))}</span>`
             ).join('')}
-            ${hiddenBenefitCount > 0 ? `<span class="jh-benefit-tag jh-more" title="Click to see all ${allBenefits.length} benefits">+${hiddenBenefitCount} more</span>` : ''}
           </div>
         `;
       }
+
+      // Show "Missing" label for benefits user wants but job doesn't have
+      if (missingBenefits.length > 0) {
+        const missingTooltip = missingBenefits.map(b => escapeHtml(b)).join(', ');
+        extraHtml += `
+          <div class="jh-missing-benefits-container">
+            <span class="jh-benefit-tag jh-missing" title="${missingTooltip}" data-missing-count="${missingBenefits.length}">
+              Missing (${missingBenefits.length})
+            </span>
+            <div class="jh-missing-tooltip">
+              <div class="jh-missing-tooltip-header">Missing Benefits:</div>
+              <div class="jh-missing-tooltip-content">
+                ${missingBenefits.map(b => `<span class="jh-missing-benefit-item">${escapeHtml(b)}</span>`).join('')}
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      badgeCount = matchedBenefits.length + (missingBenefits.length > 0 ? 1 : 0);
     }
 
     // Bonus & Equity combined display
@@ -1233,8 +1257,8 @@ function getJobsSidebarHTML() {
           <span class="jh-brand-text">Job Filter</span>
         </div>
         <div class="jh-header-controls">
-          <button class="jh-btn-minimize" title="Minimize">−</button>
           <button class="jh-btn-settings" title="Edit Profile">⚙</button>
+          <button class="jh-btn-minimize" title="Minimize">−</button>
           <button class="jh-sidebar-close" title="Close">×</button>
         </div>
       </div>
@@ -1391,7 +1415,10 @@ function getSidebarStyles() {
       top: 52px;
       right: 0;
       width: 400px;
+      min-width: 280px;
+      max-width: 600px;
       height: calc(100vh - 52px);
+      min-height: 300px;
       background: #F4F7FA;
       border-left: 1px solid #D1D9E0;
       box-shadow: -8px 0 24px rgba(0,0,0,0.15);
@@ -1404,6 +1431,68 @@ function getSidebarStyles() {
       display: flex;
       flex-direction: column;
       transition: transform 0.25s ease, opacity 0.2s ease;
+    }
+
+    /* Resize handle on left edge */
+    .jh-resize-handle-left {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 6px;
+      height: 100%;
+      cursor: ew-resize;
+      background: transparent;
+      z-index: 10001;
+    }
+    .jh-resize-handle-left:hover,
+    .jh-resize-handle-left.jh-resizing {
+      background: linear-gradient(to right, rgba(88, 86, 214, 0.3), transparent);
+    }
+
+    /* Resize handle on bottom edge */
+    .jh-resize-handle-bottom {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 6px;
+      cursor: ns-resize;
+      background: transparent;
+      z-index: 10001;
+    }
+    .jh-resize-handle-bottom:hover,
+    .jh-resize-handle-bottom.jh-resizing {
+      background: linear-gradient(to bottom, transparent, rgba(88, 86, 214, 0.3));
+    }
+
+    /* Corner resize handle */
+    .jh-resize-handle-corner {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 12px;
+      height: 12px;
+      cursor: nesw-resize;
+      background: transparent;
+      z-index: 10002;
+    }
+    .jh-resize-handle-corner:hover,
+    .jh-resize-handle-corner.jh-resizing {
+      background: rgba(88, 86, 214, 0.4);
+      border-radius: 0 6px 0 0;
+    }
+
+    /* When resizing, prevent text selection */
+    #jh-sidebar-rail.jh-is-resizing {
+      user-select: none;
+    }
+    #jh-sidebar-rail.jh-is-resizing * {
+      pointer-events: none;
+    }
+    #jh-sidebar-rail.jh-is-resizing .jh-resize-handle-left,
+    #jh-sidebar-rail.jh-is-resizing .jh-resize-handle-bottom,
+    #jh-sidebar-rail.jh-is-resizing .jh-resize-handle-corner {
+      pointer-events: auto;
     }
 
     #jh-sidebar-rail.jh-hidden {
@@ -1999,6 +2088,80 @@ function getSidebarStyles() {
     .jh-benefit-tag.jh-more:hover {
       background: #E5E7EB;
       color: #374151;
+    }
+
+    /* Responsive tag containers - expand to fit content */
+    .jh-responsive-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 6px;
+    }
+
+    /* "Missing" badge - red/warning style with hover tooltip */
+    .jh-skill-tag.jh-missing,
+    .jh-benefit-tag.jh-missing {
+      background: #FEF2F2;
+      color: #DC2626;
+      border: 1px solid #FECACA;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    .jh-skill-tag.jh-missing:hover,
+    .jh-benefit-tag.jh-missing:hover {
+      background: #FEE2E2;
+      border-color: #F87171;
+    }
+
+    /* Missing skills/benefits container with tooltip */
+    .jh-missing-skills-container,
+    .jh-missing-benefits-container {
+      position: relative;
+      display: inline-block;
+      margin-top: 6px;
+    }
+
+    .jh-missing-tooltip {
+      display: none;
+      position: absolute;
+      bottom: 100%;
+      left: 0;
+      z-index: 999999;
+      min-width: 200px;
+      max-width: 300px;
+      background: #1F2937;
+      color: #F9FAFB;
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 6px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    .jh-missing-skills-container:hover .jh-missing-tooltip,
+    .jh-missing-benefits-container:hover .jh-missing-tooltip {
+      display: block;
+    }
+
+    .jh-missing-tooltip-header {
+      font-size: 11px;
+      font-weight: 600;
+      color: #F87171;
+      margin-bottom: 6px;
+    }
+
+    .jh-missing-tooltip-content {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .jh-missing-skill-item,
+    .jh-missing-benefit-item {
+      font-size: 10px;
+      background: #374151;
+      color: #F9FAFB;
+      padding: 2px 6px;
+      border-radius: 4px;
     }
 
     .jh-skills-summary,
@@ -3047,6 +3210,140 @@ function enableSidebarDrag(sidebar) {
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
   });
+}
+
+/**
+ * Add resize handles to the sidebar
+ */
+function addResizeHandles(sidebar) {
+  if (!sidebar) return;
+
+  // Left edge resize handle
+  const leftHandle = document.createElement('div');
+  leftHandle.className = 'jh-resize-handle-left';
+  sidebar.appendChild(leftHandle);
+
+  // Bottom edge resize handle
+  const bottomHandle = document.createElement('div');
+  bottomHandle.className = 'jh-resize-handle-bottom';
+  sidebar.appendChild(bottomHandle);
+
+  // Corner resize handle (bottom-left)
+  const cornerHandle = document.createElement('div');
+  cornerHandle.className = 'jh-resize-handle-corner';
+  sidebar.appendChild(cornerHandle);
+}
+
+/**
+ * Enable sidebar resizing via drag handles
+ */
+function enableSidebarResize(sidebar) {
+  if (!sidebar) return;
+
+  const SIDEBAR_SIZE_STORAGE_KEY = 'jh_sidebar_size';
+  const MIN_WIDTH = 280;
+  const MAX_WIDTH = 600;
+  const MIN_HEIGHT = 300;
+
+  // Apply saved size on load
+  if (chrome?.storage?.local) {
+    chrome.storage.local.get([SIDEBAR_SIZE_STORAGE_KEY], (result) => {
+      const size = result[SIDEBAR_SIZE_STORAGE_KEY];
+      if (size) {
+        if (size.width) sidebar.style.width = `${size.width}px`;
+        if (size.height) sidebar.style.height = `${size.height}px`;
+      }
+    });
+  }
+
+  const leftHandle = sidebar.querySelector('.jh-resize-handle-left');
+  const bottomHandle = sidebar.querySelector('.jh-resize-handle-bottom');
+  const cornerHandle = sidebar.querySelector('.jh-resize-handle-corner');
+
+  let isResizing = false;
+  let resizeType = null; // 'left', 'bottom', or 'corner'
+  let startX = 0;
+  let startY = 0;
+  let startWidth = 0;
+  let startHeight = 0;
+  let startLeft = 0;
+
+  const onMouseMove = (event) => {
+    if (!isResizing) return;
+    event.preventDefault();
+
+    const deltaX = startX - event.clientX;
+    const deltaY = event.clientY - startY;
+
+    if (resizeType === 'left' || resizeType === 'corner') {
+      // Resize width from left edge (increases when dragging left)
+      const newWidth = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startWidth + deltaX));
+      const widthDiff = newWidth - startWidth;
+      sidebar.style.width = `${newWidth}px`;
+      sidebar.style.left = `${startLeft - widthDiff}px`;
+      sidebar.style.right = 'auto';
+    }
+
+    if (resizeType === 'bottom' || resizeType === 'corner') {
+      // Resize height from bottom edge
+      const maxHeight = window.innerHeight - sidebar.getBoundingClientRect().top - 10;
+      const newHeight = Math.min(maxHeight, Math.max(MIN_HEIGHT, startHeight + deltaY));
+      sidebar.style.height = `${newHeight}px`;
+    }
+  };
+
+  const onMouseUp = () => {
+    if (!isResizing) return;
+    isResizing = false;
+    sidebar.classList.remove('jh-is-resizing');
+
+    if (leftHandle) leftHandle.classList.remove('jh-resizing');
+    if (bottomHandle) bottomHandle.classList.remove('jh-resizing');
+    if (cornerHandle) cornerHandle.classList.remove('jh-resizing');
+
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+
+    // Save the new size
+    if (chrome?.storage?.local) {
+      chrome.storage.local.set({
+        [SIDEBAR_SIZE_STORAGE_KEY]: {
+          width: sidebar.offsetWidth,
+          height: sidebar.offsetHeight
+        }
+      });
+    }
+  };
+
+  const startResize = (event, type) => {
+    event.preventDefault();
+    isResizing = true;
+    resizeType = type;
+    sidebar.classList.add('jh-is-resizing');
+
+    const handle = type === 'left' ? leftHandle : (type === 'bottom' ? bottomHandle : cornerHandle);
+    if (handle) handle.classList.add('jh-resizing');
+
+    const rect = sidebar.getBoundingClientRect();
+    startX = event.clientX;
+    startY = event.clientY;
+    startWidth = rect.width;
+    startHeight = rect.height;
+    startLeft = rect.left;
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  };
+
+  if (leftHandle) {
+    leftHandle.addEventListener('mousedown', (e) => startResize(e, 'left'));
+  }
+  if (bottomHandle) {
+    bottomHandle.addEventListener('mousedown', (e) => startResize(e, 'bottom'));
+  }
+  if (cornerHandle) {
+    cornerHandle.addEventListener('mousedown', (e) => startResize(e, 'corner'));
+  }
 }
 
 // ============================================================================

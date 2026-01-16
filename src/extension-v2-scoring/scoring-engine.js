@@ -387,18 +387,15 @@ function scoreSalary(jobPayload, userProfile) {
   const offeredSalary = salaryMax || salaryMin;
 
   // Handle missing salary data
-  // FIXED: Missing salary should score LOW (not 50%) because:
-  // 1. Salary transparency is a positive signal - lack of it is a yellow flag
-  // 2. Companies hiding salary often have budget constraints or lowball offers
-  // 3. User cannot make informed decision without this critical data
-  // Expert recommendation: Treat unknown as a risk factor, not neutral
+  // FIXED: Missing salary should score 0% because user requested full transparency
+  // No salary disclosed = cannot verify alignment = 0 points
   if (offeredSalary === null || offeredSalary === undefined) {
     return {
       criteria: 'Base Salary',
       criteria_description: `Whether the posted salary meets your $${formatSalary(floor)} minimum and $${formatSalary(target)} target`,
       actual_value: 'Not specified',
-      score: 10, // Low score - missing salary is a yellow flag
-      rationale: 'Salary not disclosed - unable to verify alignment with your requirements',
+      score: 0, // 0% - no salary disclosed means we can't evaluate
+      rationale: 'Salary not disclosed - unable to verify alignment',
       missing_data: true
     };
   }

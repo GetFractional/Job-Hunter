@@ -175,23 +175,32 @@ function parseSections(text) {
     fullText: text
   };
 
-  // Required section patterns
+  // Required section patterns - expanded to catch more job posting formats
   const requiredPatterns = [
-    /(?:required|minimum|essential|must[\s-]have|basic)\s*(?:skills?|qualifications?|requirements?|experience)?\s*:?\s*([\s\S]*?)(?=(?:preferred|desired|nice[\s-]to[\s-]have|bonus|additional|plus|ideal|$))/gi,
-    /what\s+(?:you(?:'ll)?|we(?:'re)?)\s+(?:need|looking\s+for)\s*:?\s*([\s\S]*?)(?=(?:preferred|desired|nice[\s-]to[\s-]have|bonus|plus|$))/gi,
-    /you\s+(?:should|must)\s+have\s*:?\s*([\s\S]*?)(?=(?:preferred|desired|nice[\s-]to[\s-]have|$))/gi
+    // Explicit "Required" headers
+    /(?:required|minimum|essential|must[\s-]have|basic)\s*(?:skills?|qualifications?|requirements?|experience)?\s*:?\s*([\s\S]*?)(?=(?:preferred|desired|nice[\s-]to[\s-]have|bonus|additional|plus|ideal|about\s+(?:us|the)|benefits|what\s+we\s+offer|$))/gi,
+    // "What you need" style
+    /what\s+(?:you(?:'ll)?|we(?:'re)?)\s+(?:need|looking\s+for|require)\s*:?\s*([\s\S]*?)(?=(?:preferred|desired|nice[\s-]to[\s-]have|bonus|plus|about|benefits|$))/gi,
+    // "You should/must have" style
+    /you\s+(?:should|must|will)\s+have\s*:?\s*([\s\S]*?)(?=(?:preferred|desired|nice[\s-]to[\s-]have|about|benefits|$))/gi,
+    // "Qualifications" section (common on LinkedIn)
+    /(?:^|\n)\s*qualifications?\s*:?\s*([\s\S]*?)(?=(?:preferred|desired|nice[\s-]to[\s-]have|bonus|about\s+(?:us|the)|benefits|responsibilities|$))/gi,
+    // "Requirements" section
+    /(?:^|\n)\s*requirements?\s*:?\s*([\s\S]*?)(?=(?:preferred|desired|nice[\s-]to[\s-]have|bonus|about|benefits|responsibilities|$))/gi,
+    // "Skills" section without qualifier (assume required)
+    /(?:^|\n)\s*(?:key\s+)?skills?\s*:?\s*([\s\S]*?)(?=(?:preferred|desired|nice[\s-]to[\s-]have|bonus|about|benefits|responsibilities|$))/gi
   ];
 
   // Desired section patterns
   const desiredPatterns = [
-    /(?:preferred|desired|nice[\s-]to[\s-]have|bonus|additional|plus)\s*(?:skills?|qualifications?|requirements?|experience)?\s*:?\s*([\s\S]*?)(?=(?:about\s+(?:us|the\s+company)|benefits|what\s+we\s+offer|$))/gi,
+    /(?:preferred|desired|nice[\s-]to[\s-]have|bonus|additional|plus)\s*(?:skills?|qualifications?|requirements?|experience)?\s*:?\s*([\s\S]*?)(?=(?:about\s+(?:us|the\s+company)|benefits|what\s+we\s+offer|responsibilities|$))/gi,
     /it(?:'s)?\s+a\s+plus\s+if\s*:?\s*([\s\S]*?)(?=(?:about|benefits|what\s+we|$))/gi
   ];
 
   // Try to extract required section
   for (const pattern of requiredPatterns) {
     const match = pattern.exec(text);
-    if (match && match[1]) {
+    if (match && match[1] && match[1].trim().length > 50) {
       result.requiredSection = match[1].trim();
       break;
     }
@@ -201,15 +210,17 @@ function parseSections(text) {
   // Try to extract desired section
   for (const pattern of desiredPatterns) {
     const match = pattern.exec(text);
-    if (match && match[1]) {
+    if (match && match[1] && match[1].trim().length > 20) {
       result.desiredSection = match[1].trim();
       break;
     }
     pattern.lastIndex = 0;
   }
 
-  // If no sections found, treat full text as required
-  if (!result.requiredSection && !result.desiredSection) {
+  // CRITICAL FIX: If no explicit required section found, treat ALL skills from
+  // the full text as required (this is the conservative/safe approach)
+  // Most job postings list core skills without explicit "Required:" headers
+  if (!result.requiredSection) {
     result.requiredSection = text;
   }
 
