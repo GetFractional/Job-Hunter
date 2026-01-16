@@ -435,6 +435,100 @@ function calculateSimilarity(str1, str2) {
 }
 
 // ============================================================================
+// V2 UPGRADE: DUAL-BUCKET FIT SCORING
+// ============================================================================
+
+/**
+ * Analyze job-skill fit using v2 dual-bucket scoring (70% skills, 30% tools)
+ * @param {string} jobDescriptionText - Full job description
+ * @param {Object} userProfile - User profile with skills and tools
+ * @param {Object} options - Analysis options
+ * @returns {Object} Complete analysis with dual-bucket fit score
+ */
+function analyzeJobSkillFitV2(jobDescriptionText, userProfile, options = {}) {
+  const startTime = performance.now();
+
+  // Step 1: Extract skills/tools from job description (v2 format)
+  const extraction = window.SkillExtractor
+    ? window.SkillExtractor.extractRequiredSkillConcepts(jobDescriptionText, options)
+    : { requiredCoreSkills: [], desiredCoreSkills: [], requiredTools: [], desiredTools: [], candidates: [], confidence: 0 };
+
+  // Step 2: Calculate fit score using FitScoreCalculator
+  const fitScoreResult = window.FitScoreCalculator
+    ? window.FitScoreCalculator.calculateFitScore(extraction, userProfile)
+    : createFallbackScore();
+
+  // Step 3: Build comprehensive result
+  return {
+    // Extraction results (v2 format)
+    extraction: {
+      requiredCoreSkills: extraction.requiredCoreSkills || [],
+      desiredCoreSkills: extraction.desiredCoreSkills || [],
+      requiredTools: extraction.requiredTools || [],
+      desiredTools: extraction.desiredTools || [],
+      candidates: extraction.candidates || [],
+      extractionConfidence: extraction.confidence || 0,
+      executionTime: extraction.executionTime || 0,
+      debug: extraction.debug || {}
+    },
+
+    // Fit score (v2 dual-bucket scoring)
+    fitScore: {
+      overall: fitScoreResult.overallScore,
+      label: getSkillFitLabelV2(fitScoreResult.overallScore),
+      breakdown: fitScoreResult.breakdown,
+      weightsUsed: fitScoreResult.weightsUsed,
+      penalties: fitScoreResult.breakdown?.penalties || []
+    },
+
+    // Metadata
+    userSkillCount: (userProfile.skills || []).length,
+    userToolCount: (userProfile.tools || []).length,
+    requiredCoreSkillsCount: (extraction.requiredCoreSkills || []).length,
+    requiredToolsCount: (extraction.requiredTools || []).length,
+    candidatesCount: (extraction.candidates || []).length,
+    analysisTime: performance.now() - startTime,
+
+    // Legacy compatibility
+    skillFitScore: Math.round(fitScoreResult.overallScore * 100),
+    skillFitLabel: getSkillFitLabelV2(fitScoreResult.overallScore)
+  };
+}
+
+/**
+ * Get fit label for v2 score (0-1 scale)
+ * @param {number} score - Fit score (0-1)
+ * @returns {string} Fit label
+ */
+function getSkillFitLabelV2(score) {
+  if (score >= 0.90) return 'Excellent Match';
+  if (score >= 0.75) return 'Strong Match';
+  if (score >= 0.60) return 'Good Match';
+  if (score >= 0.45) return 'Moderate Match';
+  if (score >= 0.30) return 'Partial Match';
+  return 'Weak Match';
+}
+
+/**
+ * Create fallback score if FitScoreCalculator not available
+ * @returns {Object} Fallback score
+ */
+function createFallbackScore() {
+  return {
+    overallScore: 0,
+    breakdown: {
+      coreSkills: { score: 0, requiredMatched: 0, requiredTotal: 0, desiredMatched: 0, desiredTotal: 0 },
+      tools: { score: 0, requiredMatched: 0, requiredTotal: 0, desiredMatched: 0, desiredTotal: 0 },
+      penalties: []
+    },
+    weightsUsed: {
+      coreSkillsWeight: 0.70,
+      toolsWeight: 0.30
+    }
+  };
+}
+
+// ============================================================================
 // EXPORTS
 // ============================================================================
 
@@ -447,7 +541,11 @@ if (typeof window !== 'undefined') {
     calculateSkillFitScore,
     getSkillFitLabel,
     formatForAirtable,
-    toCanonicalKey
+    toCanonicalKey,
+    // v2 UPGRADE
+    analyzeJobSkillFitV2,
+    getSkillFitLabelV2,
+    createFallbackScore
   };
 }
 
@@ -460,6 +558,10 @@ if (typeof module !== 'undefined' && module.exports) {
     calculateSkillFitScore,
     getSkillFitLabel,
     formatForAirtable,
-    toCanonicalKey
+    toCanonicalKey,
+    // v2 UPGRADE
+    analyzeJobSkillFitV2,
+    getSkillFitLabelV2,
+    createFallbackScore
   };
 }
