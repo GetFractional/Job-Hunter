@@ -18,13 +18,15 @@
 // ============================================================================
 
 /**
- * Normalize a skill phrase to its canonical form
+ * Normalize a skill phrase to its canonical form (v2 UPGRADE)
  * @param {string} phrase - Raw skill phrase from job description
  * @param {Object} options - Normalization options
  * @param {Array} options.taxonomy - Skill taxonomy array
  * @param {Map} options.canonicalRules - Manual mapping rules
  * @param {Map} options.synonymGroups - Synonym group mappings
  * @param {Object} options.fuzzyMatcher - SkillFuzzyMatcher instance
+ * @param {boolean} options.useAliases - Enable alias matching (v2)
+ * @param {boolean} options.dynamicThresholds - Use dynamic thresholds based on string length (v2)
  * @returns {Object} Normalization result
  */
 function normalizeSkillConcept(phrase, options) {
@@ -32,12 +34,13 @@ function normalizeSkillConcept(phrase, options) {
     taxonomy = [],
     canonicalRules = new Map(),
     synonymGroups = new Map(),
-    fuzzyMatcher = null
+    fuzzyMatcher = null,
+    useAliases = true,  // v2 UPGRADE
+    dynamicThresholds = true  // v2 UPGRADE
   } = options;
   const config = (typeof window !== 'undefined' && window.SkillConstants?.EXTRACTION_CONFIG)
     ? window.SkillConstants.EXTRACTION_CONFIG
     : {};
-  const fuzzyThreshold = typeof config.FUZZY_THRESHOLD === 'number' ? config.FUZZY_THRESHOLD : 0.35;
   const minConfidence = typeof config.MIN_CONFIDENCE === 'number' ? config.MIN_CONFIDENCE : 0.5;
 
   // Clean and normalize input
@@ -51,6 +54,24 @@ function normalizeSkillConcept(phrase, options) {
       confidence: 0,
       matchType: 'none'
     };
+  }
+
+  // PASS 0 (v2): Check SKILL_ALIASES map first
+  if (useAliases) {
+    const aliasMatch = findAliasMatch(cleaned);
+    if (aliasMatch) {
+      // Find the skill in taxonomy that matches the resolved alias
+      const resolvedSkill = findExactMatch(aliasMatch, taxonomy);
+      if (resolvedSkill) {
+        return {
+          normalized: resolvedSkill.name,
+          canonical: resolvedSkill.canonical,
+          matchedSkill: resolvedSkill,
+          confidence: 0.98,
+          matchType: 'alias'
+        };
+      }
+    }
   }
 
   // PASS 1: Exact match in taxonomy
@@ -77,8 +98,13 @@ function normalizeSkillConcept(phrase, options) {
     };
   }
 
-  // PASS 3: Fuzzy match
+  // PASS 3: Fuzzy match with DYNAMIC THRESHOLDS (v2 UPGRADE)
   if (fuzzyMatcher) {
+    // Calculate dynamic threshold based on string length
+    const fuzzyThreshold = dynamicThresholds
+      ? getDynamicThreshold(cleaned)
+      : (typeof config.FUZZY_THRESHOLD === 'number' ? config.FUZZY_THRESHOLD : 0.35);
+
     const fuzzyResults = fuzzyMatcher.search(cleaned, { limit: 1 });
     if (fuzzyResults.length > 0 && fuzzyResults[0].score <= fuzzyThreshold) {
       const match = fuzzyResults[0];
@@ -90,7 +116,8 @@ function normalizeSkillConcept(phrase, options) {
         matchedSkill: match.item,
         confidence: Math.max(minConfidence, confidence),
         matchType: 'fuzzy',
-        matchedTerm: match.matchedTerm
+        matchedTerm: match.matchedTerm,
+        threshold: fuzzyThreshold  // DEBUG: include threshold used
       };
     }
   }
@@ -230,6 +257,44 @@ function findSynonymMatch(phrase, synonymGroups, taxonomy) {
   }
 
   return null;
+}
+
+/**
+ * Find alias match in SKILL_ALIASES map (v2 UPGRADE)
+ * @param {string} phrase - Cleaned phrase
+ * @returns {string|null} Resolved skill name or null
+ */
+function findAliasMatch(phrase) {
+  const aliases = window.SkillConstants?.SKILL_ALIASES;
+  if (!aliases || !(aliases instanceof Map)) {
+    return null;
+  }
+
+  const normalized = phrase.toLowerCase().trim();
+  return aliases.get(normalized) || null;
+}
+
+/**
+ * Get dynamic fuzzy matching threshold based on string length (v2 UPGRADE)
+ * Short strings (GA4, CRM) need tighter matching than long phrases
+ * @param {string} phrase - Cleaned phrase
+ * @returns {number} Threshold value (0-1, lower = stricter)
+ */
+function getDynamicThreshold(phrase) {
+  const length = phrase.length;
+
+  // Short strings (<5 chars): Very strict (acronyms like GA4, CRM, SQL)
+  if (length < 5) {
+    return 0.2;
+  }
+
+  // Medium strings (5-15 chars): Moderate (HubSpot, Salesforce, Python)
+  if (length <= 15) {
+    return 0.35;
+  }
+
+  // Long phrases (>15 chars): Relaxed (lifecycle marketing, conversion rate optimization)
+  return 0.50;
 }
 
 // ============================================================================
@@ -377,7 +442,9 @@ if (typeof window !== 'undefined') {
     filterOutTools,
     filterOutGeneric,
     getConfidenceLabel,
-    buildSkillLookupMap
+    buildSkillLookupMap,
+    findAliasMatch,  // v2 UPGRADE
+    getDynamicThreshold  // v2 UPGRADE
   };
 }
 
@@ -390,6 +457,8 @@ if (typeof module !== 'undefined' && module.exports) {
     filterOutTools,
     filterOutGeneric,
     getConfidenceLabel,
-    buildSkillLookupMap
+    buildSkillLookupMap,
+    findAliasMatch,  // v2 UPGRADE
+    getDynamicThreshold  // v2 UPGRADE
   };
 }

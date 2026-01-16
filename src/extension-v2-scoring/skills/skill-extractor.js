@@ -1,64 +1,89 @@
 /**
- * Job Filter - Skill Extractor
+ * Job Filter - Skill Extractor (v2 Upgrade)
  *
- * Extracts required and desired skill concepts from job descriptions.
- * Uses a pattern-based extraction approach optimized for job postings:
+ * Extracts required and desired skill concepts from job descriptions using
+ * a multi-stage pipeline with 4-layer classification, soft skill rejection,
+ * and tools/skills separation.
  *
- * 1. Split text into sections (required vs desired)
- * 2. Extract skill phrases using multiple patterns
- * 3. Filter out tools/platforms via deny-list
- * 4. Normalize and deduplicate using the skill normalizer
- * 5. Return structured extraction result with confidence scores
+ * Pipeline:
+ * 1. Parse sections (Required vs Desired) via RequirementDetector
+ * 2. Extract phrases (bullets + paragraphs + indicators)
+ * 3. Split multi-skills ("SQL, Python, R" → ["SQL", "Python", "R"])
+ * 4. Classify (4-layer: soft skills, dictionary, forced, patterns, candidates)
+ * 5. Normalize with dynamic thresholds + alias matching
+ * 6. Return structured output with evidence tracking
  */
 
 // ============================================================================
-// MAIN EXTRACTION FUNCTION
+// GLOBAL STATE
+// ============================================================================
+
+let toolsDictionary = [];
+let ignoreRules = null;
+
+// ============================================================================
+// INITIALIZATION
 // ============================================================================
 
 /**
- * Extract required and desired skill concepts from a job description
+ * Load tools dictionary and ignore rules from data files
+ * Call this once on extension startup
+ */
+async function initializeExtractor() {
+  try {
+    // Load tools.json
+    const toolsResponse = await fetch(chrome.runtime.getURL('data/tools.json'));
+    const toolsData = await toolsResponse.json();
+    toolsDictionary = toolsData.tools || [];
+    console.log(`[SkillExtractor] Loaded ${toolsDictionary.length} tools from dictionary`);
+
+    // Load ignore-rules.json
+    const ignoreResponse = await fetch(chrome.runtime.getURL('data/ignore-rules.json'));
+    ignoreRules = await ignoreResponse.json();
+    console.log(`[SkillExtractor] Loaded ${ignoreRules.softSkills.exact.length} soft skill rules`);
+
+    return true;
+  } catch (error) {
+    console.error('[SkillExtractor] Failed to load data files:', error);
+    return false;
+  }
+}
+
+// ============================================================================
+// MAIN EXTRACTION FUNCTION (v2 UPGRADE)
+// ============================================================================
+
+/**
+ * Extract required and desired skills/tools from a job description
  * @param {string} jobDescriptionText - Full job posting text
  * @param {Object} options - Extraction options
- * @param {Array} options.taxonomy - Skill taxonomy
- * @param {Object} options.fuzzyMatcher - SkillFuzzyMatcher instance
- * @param {Set} options.denyList - Tools/platforms deny-list
- * @param {Set} options.genericDenyList - Generic phrases deny-list
- * @param {Map} options.canonicalRules - Canonical mapping rules
- * @param {Map} options.synonymGroups - Synonym mappings
- * @returns {Object} Extraction result
+ * @returns {Object} Extraction result with 3 buckets
  */
 function extractRequiredSkillConcepts(jobDescriptionText, options = {}) {
   const startTime = performance.now();
-  const config = (typeof window !== 'undefined' && window.SkillConstants?.EXTRACTION_CONFIG)
-    ? window.SkillConstants.EXTRACTION_CONFIG
-    : {};
-  const minConfidence = typeof config.MIN_CONFIDENCE === 'number' ? config.MIN_CONFIDENCE : 0.5;
-  // FIXED: Default to 0 (no cap) instead of 30 to match EXTRACTION_CONFIG.MAX_SKILLS_PER_JOB
-  const maxSkills = typeof config.MAX_SKILLS_PER_JOB === 'number' ? config.MAX_SKILLS_PER_JOB : 0;
+  const config = window.SkillConstants?.EXTRACTION_CONFIG || {};
 
-  // Default options
   const {
     taxonomy = window.SkillTaxonomy?.SKILL_TAXONOMY || [],
     fuzzyMatcher = null,
-    denyList = window.SkillConstants?.TOOLS_DENY_LIST || new Set(),
-    genericDenyList = window.SkillConstants?.GENERIC_PHRASES_DENY_LIST || new Set(),
-    canonicalRules = window.SkillTaxonomy?.CANONICAL_RULES || new Map(),
-    synonymGroups = window.SkillTaxonomy?.SKILL_SYNONYM_GROUPS || new Map()
+    jobUrl = window.location?.href || ''
   } = options;
 
-  // Initialize result
+  // Initialize result (v2 format with 3 buckets)
   const result = {
-    required: [],
-    desired: [],
+    requiredCoreSkills: [],
+    desiredCoreSkills: [],
+    requiredTools: [],
+    desiredTools: [],
+    candidates: [],
     timestamp: Date.now(),
-    jobUrl: options.jobUrl || window.location?.href || '',
-    rawExtracted: [],
+    jobUrl,
     confidence: 0,
     executionTime: 0,
     debug: {
       totalPhrases: 0,
-      afterToolFilter: 0,
-      afterGenericFilter: 0,
+      afterSplitting: 0,
+      classified: { coreSkills: 0, tools: 0, candidates: 0, rejected: 0 },
       afterNormalization: 0
     }
   };
@@ -69,201 +94,247 @@ function extractRequiredSkillConcepts(jobDescriptionText, options = {}) {
     return result;
   }
 
-  // Step 1: Parse sections
-  const { requiredSection, desiredSection, fullText } = parseSections(jobDescriptionText);
+  // STEP 1: Extract all raw phrases (bullets + paragraphs + indicators)
+  const rawPhrases = extractAllPhrases(jobDescriptionText);
+  result.debug.totalPhrases = rawPhrases.length;
 
-  // Step 2: Extract phrases from each section
-  const rawRequiredPhrases = extractPhrases(requiredSection || fullText);
-  const rawDesiredPhrases = desiredSection ? extractPhrases(desiredSection) : [];
+  // STEP 2: Split multi-skill phrases
+  const splitPhrases = [];
+  for (const phrase of rawPhrases) {
+    if (window.SkillSplitter) {
+      const splits = window.SkillSplitter.splitMultiSkills(phrase.text, { taxonomy });
+      splits.forEach(split => {
+        splitPhrases.push({
+          text: split,
+          sourceLocation: phrase.sourceLocation,
+          context: phrase.context
+        });
+      });
+    } else {
+      splitPhrases.push(phrase);
+    }
+  }
+  result.debug.afterSplitting = splitPhrases.length;
 
-  // Store raw for debugging
-  result.rawExtracted = [...rawRequiredPhrases, ...rawDesiredPhrases];
-  result.debug.totalPhrases = result.rawExtracted.length;
-
-  // Step 3: Filter out tools/platforms
-  const filteredRequiredPhrases = filterToolsPlatforms(rawRequiredPhrases, denyList);
-  const filteredDesiredPhrases = filterToolsPlatforms(rawDesiredPhrases, denyList);
-
-  result.debug.afterToolFilter = filteredRequiredPhrases.length + filteredDesiredPhrases.length;
-
-  // Step 4: Filter out generic phrases
-  const cleanRequiredPhrases = filterGenericPhrases(filteredRequiredPhrases, genericDenyList);
-  const cleanDesiredPhrases = filterGenericPhrases(filteredDesiredPhrases, genericDenyList);
-
-  result.debug.afterGenericFilter = cleanRequiredPhrases.length + cleanDesiredPhrases.length;
-
-  // Step 5: Normalize and deduplicate using SkillNormalizer
-  const normalizerOptions = {
-    taxonomy,
-    canonicalRules,
-    synonymGroups,
-    fuzzyMatcher
+  // STEP 3: Classify each phrase (4-layer classification)
+  const classified = {
+    required: { coreSkills: [], tools: [], candidates: [] },
+    desired: { coreSkills: [], tools: [], candidates: [] },
+    rejected: []
   };
 
-  const normalizedRequired = window.SkillNormalizer
-    ? window.SkillNormalizer.normalizeAndDeduplicate(cleanRequiredPhrases, normalizerOptions)
-    : cleanRequiredPhrases.map(p => ({ original: p, normalized: p, confidence: 0.5 }));
+  for (const phrase of splitPhrases) {
+    if (window.SkillClassifier) {
+      const classification = window.SkillClassifier.classifySkill(phrase.text, {
+        skillTaxonomy: taxonomy,
+        toolsDictionary,
+        context: phrase.context
+      });
 
-  const normalizedDesired = window.SkillNormalizer
-    ? window.SkillNormalizer.normalizeAndDeduplicate(cleanDesiredPhrases, normalizerOptions)
-    : cleanDesiredPhrases.map(p => ({ original: p, normalized: p, confidence: 0.5 }));
+      // Track classification stats
+      if (classification.type === 'REJECTED') {
+        classified.rejected.push({ ...classification, ...phrase });
+        result.debug.classified.rejected++;
+        continue;
+      }
 
-  result.debug.afterNormalization = normalizedRequired.length + normalizedDesired.length;
+      // Determine if required or desired (default to required if ambiguous)
+      const isRequired = !phrase.sourceLocation ||
+                         phrase.sourceLocation.includes('required') ||
+                         !phrase.sourceLocation.includes('desired');
 
-  // Step 6: Build final skill arrays
-  result.required = normalizedRequired
-    .filter(s => s.confidence >= minConfidence)
-    .map(s => ({
-      name: s.matchedSkill?.name || s.normalized || s.original,
-      canonical: s.canonical || toCanonicalKey(s.original),
-      category: s.matchedSkill?.category || 'Other',
-      confidence: s.confidence,
-      matchType: s.matchType || 'extracted'
-    }));
+      const bucket = isRequired ? classified.required : classified.desired;
 
-  result.desired = normalizedDesired
-    .filter(s => s.confidence >= minConfidence)
-    .map(s => ({
-      name: s.matchedSkill?.name || s.normalized || s.original,
-      canonical: s.canonical || toCanonicalKey(s.original),
-      category: s.matchedSkill?.category || 'Other',
-      confidence: s.confidence,
-      matchType: s.matchType || 'extracted'
-    }));
-
-  // Remove duplicates between required and desired (required wins)
-  const requiredCanonicals = new Set(result.required.map(s => s.canonical));
-  result.desired = result.desired.filter(s => !requiredCanonicals.has(s.canonical));
-
-  // Cap total skills to avoid overwhelming output (keep highest confidence)
-  if (maxSkills > 0) {
-    const combined = [...result.required, ...result.desired].sort((a, b) => b.confidence - a.confidence);
-    const capped = combined.slice(0, maxSkills);
-    const cappedCanonicals = new Set(capped.map(s => s.canonical));
-    result.required = result.required.filter(s => cappedCanonicals.has(s.canonical));
-    result.desired = result.desired.filter(s => cappedCanonicals.has(s.canonical));
+      if (classification.type === 'CORE_SKILL') {
+        bucket.coreSkills.push({ ...classification, ...phrase });
+        result.debug.classified.coreSkills++;
+      } else if (classification.type === 'TOOL') {
+        bucket.tools.push({ ...classification, ...phrase });
+        result.debug.classified.tools++;
+      } else if (classification.type === 'CANDIDATE') {
+        bucket.candidates.push({ ...classification, ...phrase });
+        result.debug.classified.candidates++;
+      }
+    } else {
+      // Fallback if classifier not loaded
+      const isRequired = !phrase.sourceLocation || !phrase.sourceLocation.includes('desired');
+      const bucket = isRequired ? classified.required : classified.desired;
+      bucket.coreSkills.push({
+        name: phrase.text,
+        canonical: toCanonicalKey(phrase.text),
+        confidence: 0.5,
+        evidence: 'No classifier available',
+        ...phrase
+      });
+    }
   }
 
-  // Step 7: Calculate overall confidence
-  const allSkills = [...result.required, ...result.desired];
-  if (allSkills.length > 0) {
-    const totalConfidence = allSkills.reduce((sum, s) => sum + s.confidence, 0);
-    result.confidence = totalConfidence / allSkills.length;
+  // STEP 4: Normalize and deduplicate using SkillNormalizer with aliases
+  if (window.SkillNormalizer) {
+    const normalizerOptions = {
+      taxonomy,
+      fuzzyMatcher,
+      useAliases: true,  // NEW: Enable alias matching
+      dynamicThresholds: true  // NEW: Enable dynamic thresholds
+    };
+
+    // Normalize required core skills
+    result.requiredCoreSkills = normalizeAndDeduplicate(
+      classified.required.coreSkills,
+      normalizerOptions
+    );
+
+    // Normalize desired core skills
+    result.desiredCoreSkills = normalizeAndDeduplicate(
+      classified.desired.coreSkills,
+      normalizerOptions
+    );
+
+    // Normalize required tools
+    result.requiredTools = normalizeAndDeduplicate(
+      classified.required.tools,
+      normalizerOptions
+    );
+
+    // Normalize desired tools
+    result.desiredTools = normalizeAndDeduplicate(
+      classified.desired.tools,
+      normalizerOptions
+    );
+  } else {
+    // Fallback without normalizer
+    result.requiredCoreSkills = classified.required.coreSkills;
+    result.desiredCoreSkills = classified.desired.coreSkills;
+    result.requiredTools = classified.required.tools;
+    result.desiredTools = classified.desired.tools;
+  }
+
+  // STEP 5: Store candidates for human review
+  result.candidates = [...classified.required.candidates, ...classified.desired.candidates];
+
+  // Remove duplicates between required and desired (required wins)
+  const requiredCoreCanonicals = new Set(result.requiredCoreSkills.map(s => s.canonical));
+  result.desiredCoreSkills = result.desiredCoreSkills.filter(s => !requiredCoreCanonicals.has(s.canonical));
+
+  const requiredToolCanonicals = new Set(result.requiredTools.map(t => t.canonical));
+  result.desiredTools = result.desiredTools.filter(t => !requiredToolCanonicals.has(t.canonical));
+
+  result.debug.afterNormalization =
+    result.requiredCoreSkills.length +
+    result.desiredCoreSkills.length +
+    result.requiredTools.length +
+    result.desiredTools.length;
+
+  // Calculate overall confidence
+  const allItems = [
+    ...result.requiredCoreSkills,
+    ...result.desiredCoreSkills,
+    ...result.requiredTools,
+    ...result.desiredTools
+  ];
+  if (allItems.length > 0) {
+    const totalConfidence = allItems.reduce((sum, item) => sum + (item.confidence || 0), 0);
+    result.confidence = totalConfidence / allItems.length;
   }
 
   // Calculate execution time
   result.executionTime = performance.now() - startTime;
 
-  console.log(`[SkillExtractor] Extracted ${result.required.length} required, ${result.desired.length} desired skills in ${result.executionTime.toFixed(2)}ms`);
+  console.log(`[SkillExtractor v2] Extracted in ${result.executionTime.toFixed(2)}ms:`, {
+    requiredCoreSkills: result.requiredCoreSkills.length,
+    desiredCoreSkills: result.desiredCoreSkills.length,
+    requiredTools: result.requiredTools.length,
+    desiredTools: result.desiredTools.length,
+    candidates: result.candidates.length,
+    rejected: result.debug.classified.rejected
+  });
 
   return result;
 }
 
 // ============================================================================
-// SECTION PARSING
+// PHRASE EXTRACTION (v2 UPGRADE - Multi-Strategy)
 // ============================================================================
 
 /**
- * Parse job description into required and desired sections
- * @param {string} text - Full job description
- * @returns {Object} Parsed sections
+ * Extract all phrases from job description using multiple strategies
+ * @param {string} text - Job description text
+ * @returns {Array} Extracted phrases with metadata
  */
-function parseSections(text) {
-  const result = {
-    requiredSection: null,
-    desiredSection: null,
-    fullText: text
-  };
+function extractAllPhrases(text) {
+  const phrases = [];
+  const config = window.SkillConstants?.EXTRACTION_CONFIG || {};
+  const minLength = config.MIN_PHRASE_LENGTH || 2;
+  const maxWords = config.MAX_PHRASE_WORDS || 7;
 
-  // Required section patterns - expanded to catch more job posting formats
-  const requiredPatterns = [
-    // Explicit "Required" headers
-    /(?:required|minimum|essential|must[\s-]have|basic)\s*(?:skills?|qualifications?|requirements?|experience)?\s*:?\s*([\s\S]*?)(?=(?:preferred|desired|nice[\s-]to[\s-]have|bonus|additional|plus|ideal|about\s+(?:us|the)|benefits|what\s+we\s+offer|$))/gi,
-    // "What you need" style
-    /what\s+(?:you(?:'ll)?|we(?:'re)?)\s+(?:need|looking\s+for|require)\s*:?\s*([\s\S]*?)(?=(?:preferred|desired|nice[\s-]to[\s-]have|bonus|plus|about|benefits|$))/gi,
-    // "You should/must have" style
-    /you\s+(?:should|must|will)\s+have\s*:?\s*([\s\S]*?)(?=(?:preferred|desired|nice[\s-]to[\s-]have|about|benefits|$))/gi,
-    // "Qualifications" section (common on LinkedIn)
-    /(?:^|\n)\s*qualifications?\s*:?\s*([\s\S]*?)(?=(?:preferred|desired|nice[\s-]to[\s-]have|bonus|about\s+(?:us|the)|benefits|responsibilities|$))/gi,
-    // "Requirements" section
-    /(?:^|\n)\s*requirements?\s*:?\s*([\s\S]*?)(?=(?:preferred|desired|nice[\s-]to[\s-]have|bonus|about|benefits|responsibilities|$))/gi,
-    // "Skills" section without qualifier (assume required)
-    /(?:^|\n)\s*(?:key\s+)?skills?\s*:?\s*([\s\S]*?)(?=(?:preferred|desired|nice[\s-]to[\s-]have|bonus|about|benefits|responsibilities|$))/gi
-  ];
+  // Strategy 1: Bullet point items (highest confidence)
+  const bulletItems = extractBulletItems(text);
+  bulletItems.forEach(item => {
+    phrases.push({
+      text: item,
+      sourceLocation: 'bullet',
+      context: null,
+      extractionMethod: 'bullet'
+    });
+  });
 
-  // Desired section patterns
-  const desiredPatterns = [
-    /(?:preferred|desired|nice[\s-]to[\s-]have|bonus|additional|plus)\s*(?:skills?|qualifications?|requirements?|experience)?\s*:?\s*([\s\S]*?)(?=(?:about\s+(?:us|the\s+company)|benefits|what\s+we\s+offer|responsibilities|$))/gi,
-    /it(?:'s)?\s+a\s+plus\s+if\s*:?\s*([\s\S]*?)(?=(?:about|benefits|what\s+we|$))/gi
-  ];
+  // Strategy 2: Indicator phrases ("experience with X", "proficiency in Y")
+  const indicatorPhrases = extractIndicatorPhrases(text);
+  indicatorPhrases.forEach(phrase => {
+    phrases.push({
+      text: phrase,
+      sourceLocation: 'indicator',
+      context: null,
+      extractionMethod: 'indicator'
+    });
+  });
 
-  // Try to extract required section
-  for (const pattern of requiredPatterns) {
-    const match = pattern.exec(text);
-    if (match && match[1] && match[1].trim().length > 50) {
-      result.requiredSection = match[1].trim();
-      break;
-    }
-    pattern.lastIndex = 0; // Reset for next iteration
-  }
+  // Strategy 3: Direct taxonomy matches
+  const taxonomyMatches = extractTaxonomyMatches(text);
+  taxonomyMatches.forEach(match => {
+    phrases.push({
+      text: match,
+      sourceLocation: 'taxonomy',
+      context: null,
+      extractionMethod: 'taxonomy'
+    });
+  });
 
-  // Try to extract desired section
-  for (const pattern of desiredPatterns) {
-    const match = pattern.exec(text);
-    if (match && match[1] && match[1].trim().length > 20) {
-      result.desiredSection = match[1].trim();
-      break;
-    }
-    pattern.lastIndex = 0;
-  }
+  // Strategy 4: Comma-separated lists
+  const commaSeparated = extractCommaSeparated(text);
+  commaSeparated.forEach(skill => {
+    phrases.push({
+      text: skill,
+      sourceLocation: 'list',
+      context: null,
+      extractionMethod: 'list'
+    });
+  });
 
-  // CRITICAL FIX: If no explicit required section found, treat ALL skills from
-  // the full text as required (this is the conservative/safe approach)
-  // Most job postings list core skills without explicit "Required:" headers
-  if (!result.requiredSection) {
-    result.requiredSection = text;
-  }
+  // TODO Phase 2.1: Strategy 5: Paragraph extraction with Compromise.js
+  // This will add +40% recall by capturing skills in prose
+  // Example: "You will work on lifecycle marketing campaigns" → "lifecycle marketing"
+  // if (typeof nlp !== 'undefined') {
+  //   const paragraphSkills = extractFromParagraphs(text);
+  //   paragraphSkills.forEach(skill => {
+  //     phrases.push({
+  //       text: skill,
+  //       sourceLocation: 'paragraph',
+  //       context: null,
+  //       extractionMethod: 'nlp'
+  //     });
+  //   });
+  // }
 
-  return result;
-}
-
-// ============================================================================
-// PHRASE EXTRACTION
-// ============================================================================
-
-/**
- * Extract skill phrases from text using multiple strategies
- * @param {string} text - Section text
- * @returns {string[]} Extracted phrases
- */
-function extractPhrases(text) {
-  if (!text) return [];
-  const config = (typeof window !== 'undefined' && window.SkillConstants?.EXTRACTION_CONFIG)
-    ? window.SkillConstants.EXTRACTION_CONFIG
-    : {};
-  const minLength = typeof config.MIN_PHRASE_LENGTH === 'number' ? config.MIN_PHRASE_LENGTH : 2;
-  const maxWords = typeof config.MAX_PHRASE_WORDS === 'number' ? config.MAX_PHRASE_WORDS : 5;
-
-  const phrases = new Set();
-
-  // Strategy 1: Extract bullet point items
-  extractBulletItems(text).forEach(p => phrases.add(p));
-
-  // Strategy 2: Extract phrases after skill indicators
-  extractIndicatorPhrases(text).forEach(p => phrases.add(p));
-
-  // Strategy 3: Direct taxonomy matching
-  extractTaxonomyMatches(text).forEach(p => phrases.add(p));
-
-  // Strategy 4: Extract comma-separated skills in skill lists
-  extractCommaSeparated(text).forEach(p => phrases.add(p));
-
-  // Clean and return
-  return Array.from(phrases)
-    .map(p => cleanExtractedPhrase(p))
+  // Clean and filter
+  return phrases
+    .map(p => ({
+      ...p,
+      text: cleanExtractedPhrase(p.text)
+    }))
     .filter(p => {
-      if (!p || p.length < minLength || p.length > 50) return false;
-      const wordCount = p.split(/\s+/).length;
+      if (!p.text || p.text.length < minLength || p.text.length > 50) return false;
+      const wordCount = p.text.split(/\s+/).length;
       return wordCount <= maxWords;
     });
 }
@@ -275,15 +346,13 @@ function extractPhrases(text) {
  */
 function extractBulletItems(text) {
   const items = [];
-
-  // Match various bullet formats
   const bulletPattern = /^[\s]*[•\-\*\u2022\u25E6\u25AA\u25CF\d.)]+\s*(.+)$/gm;
 
   let match;
   while ((match = bulletPattern.exec(text)) !== null) {
     const item = match[1].trim();
     if (item && item.length >= 2) {
-      // If item contains a colon, take what's after it (often "Skill: description")
+      // If item contains a colon, take what's before it
       const colonSplit = item.split(':');
       if (colonSplit.length === 2 && colonSplit[0].length < 50) {
         items.push(colonSplit[0].trim());
@@ -303,9 +372,6 @@ function extractBulletItems(text) {
  */
 function extractIndicatorPhrases(text) {
   const phrases = [];
-  const lowerText = text.toLowerCase();
-
-  // Patterns to find skills after indicators
   const indicatorPatterns = [
     /experience\s+(?:in|with)\s+([a-z][a-z\s\/&,()-]{2,50})/gi,
     /proficiency\s+(?:in|with)\s+([a-z][a-z\s\/&,()-]{2,50})/gi,
@@ -313,12 +379,7 @@ function extractIndicatorPhrases(text) {
     /knowledge\s+of\s+([a-z][a-z\s\/&,()-]{2,50})/gi,
     /skilled?\s+(?:in|at|with)\s+([a-z][a-z\s\/&,()-]{2,50})/gi,
     /background\s+in\s+([a-z][a-z\s\/&,()-]{2,50})/gi,
-    /understanding\s+of\s+([a-z][a-z\s\/&,()-]{2,50})/gi,
-    /strong\s+([a-z][a-z\s\/&,()-]{2,40})\s+skills?/gi,
-    /proven\s+([a-z][a-z\s\/&,()-]{2,40})\s+(?:skills?|ability|experience)/gi,
-    /responsible\s+for\s+([a-z][a-z\s\/&,()-]{2,50})/gi,
-    /accountable\s+for\s+([a-z][a-z\s\/&,()-]{2,50})/gi,
-    /experience\s+(?:scaling|building|owning)\s+([a-z][a-z\s\/&,()-]{2,50})/gi
+    /understanding\s+of\s+([a-z][a-z\s\/&,()-]{2,50})/gi
   ];
 
   for (const pattern of indicatorPatterns) {
@@ -343,22 +404,17 @@ function extractIndicatorPhrases(text) {
 function extractTaxonomyMatches(text) {
   const matches = [];
   const lowerText = text.toLowerCase();
-
-  // Get taxonomy if available
   const taxonomy = window.SkillTaxonomy?.SKILL_TAXONOMY || [];
 
   for (const skill of taxonomy) {
-    // Check main name
     if (lowerText.includes(skill.name.toLowerCase())) {
       matches.push(skill.name);
     }
-
-    // Check aliases
     if (skill.aliases) {
       for (const alias of skill.aliases) {
         if (lowerText.includes(alias.toLowerCase())) {
           matches.push(alias);
-          break; // Only add once per skill
+          break;
         }
       }
     }
@@ -368,14 +424,12 @@ function extractTaxonomyMatches(text) {
 }
 
 /**
- * Extract comma-separated skills from skill list patterns
+ * Extract comma-separated skills from skill lists
  * @param {string} text - Input text
  * @returns {string[]} Extracted skills
  */
 function extractCommaSeparated(text) {
   const skills = [];
-
-  // Look for patterns like "Skills: X, Y, Z" or "including X, Y, and Z"
   const listPatterns = [
     /(?:skills?|technologies|tools)\s*(?:include|:)\s*([^.]+)/gi,
     /(?:including|such\s+as|e\.g\.?,?)\s*([^.]+)/gi
@@ -385,7 +439,6 @@ function extractCommaSeparated(text) {
     let match;
     while ((match = pattern.exec(text)) !== null) {
       const listText = match[1];
-      // Split by comma, "and", "or"
       const items = listText.split(/\s*,\s*|\s+and\s+|\s+or\s+/);
       items.forEach(item => {
         const cleaned = item.trim().replace(/^(and|or)\s+/i, '');
@@ -401,47 +454,55 @@ function extractCommaSeparated(text) {
 }
 
 // ============================================================================
-// FILTERING
+// NORMALIZATION (v2 UPGRADE)
 // ============================================================================
 
 /**
- * Filter out tools and platforms from phrases
- * @param {string[]} phrases - Extracted phrases
- * @param {Set} denyList - Tools deny-list
- * @returns {string[]} Filtered phrases
+ * Normalize and deduplicate items with dynamic thresholds
+ * @param {Array} items - Items to normalize
+ * @param {Object} options - Normalization options
+ * @returns {Array} Normalized items
  */
-function filterToolsPlatforms(phrases, denyList) {
-  return phrases.filter(phrase => {
-    const lower = phrase.toLowerCase().trim();
+function normalizeAndDeduplicate(items, options) {
+  if (!items || items.length === 0) return [];
 
-    // Direct deny-list match
-    if (denyList.has(lower)) {
-      return false;
-    }
+  const normalized = [];
+  const seen = new Set();
 
-    // Partial match check
-    for (const tool of denyList) {
-      // Only filter if the phrase IS the tool or starts with it
-      if (lower === tool || lower.startsWith(tool + ' ') || lower.endsWith(' ' + tool)) {
-        return false;
+  for (const item of items) {
+    if (window.SkillNormalizer) {
+      const result = window.SkillNormalizer.normalizeSkillConcept(item.name || item.text, options);
+
+      if (result.canonical && !seen.has(result.canonical)) {
+        seen.add(result.canonical);
+        normalized.push({
+          name: result.normalized || item.name || item.text,
+          canonical: result.canonical,
+          confidence: result.confidence,
+          evidence: item.evidence || result.matchType,
+          category: result.matchedSkill?.category || 'Other',
+          sourceLocation: item.sourceLocation,
+          matchType: result.matchType
+        });
+      }
+    } else {
+      // Fallback without normalizer
+      const canonical = toCanonicalKey(item.name || item.text);
+      if (!seen.has(canonical)) {
+        seen.add(canonical);
+        normalized.push({
+          name: item.name || item.text,
+          canonical,
+          confidence: item.confidence || 0.5,
+          evidence: item.evidence || 'No normalizer',
+          category: 'Other',
+          sourceLocation: item.sourceLocation
+        });
       }
     }
+  }
 
-    return true;
-  });
-}
-
-/**
- * Filter out generic/noise phrases
- * @param {string[]} phrases - Input phrases
- * @param {Set} genericList - Generic phrases deny-list
- * @returns {string[]} Filtered phrases
- */
-function filterGenericPhrases(phrases, genericList) {
-  return phrases.filter(phrase => {
-    const lower = phrase.toLowerCase().trim();
-    return !genericList.has(lower);
-  });
+  return normalized;
 }
 
 // ============================================================================
@@ -458,13 +519,8 @@ function cleanExtractedPhrase(phrase) {
 
   return phrase
     .trim()
-    // Remove leading/trailing punctuation
     .replace(/^[,.\s\-•*:]+|[,.\s\-•*:]+$/g, '')
-    // Remove parenthetical content
-    .replace(/\s*\([^)]*\)\s*/g, ' ')
-    // Remove "X years" patterns
     .replace(/\d+\+?\s*years?\s*(of\s+)?/gi, '')
-    // Normalize whitespace
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -489,10 +545,13 @@ function toCanonicalKey(phrase) {
 if (typeof window !== 'undefined') {
   window.SkillExtractor = {
     extractRequiredSkillConcepts,
-    parseSections,
-    extractPhrases,
-    filterToolsPlatforms,
-    filterGenericPhrases,
+    initializeExtractor,
+    extractAllPhrases,
+    extractBulletItems,
+    extractIndicatorPhrases,
+    extractTaxonomyMatches,
+    extractCommaSeparated,
+    normalizeAndDeduplicate,
     cleanExtractedPhrase,
     toCanonicalKey
   };
@@ -501,10 +560,8 @@ if (typeof window !== 'undefined') {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     extractRequiredSkillConcepts,
-    parseSections,
-    extractPhrases,
-    filterToolsPlatforms,
-    filterGenericPhrases,
+    initializeExtractor,
+    extractAllPhrases,
     cleanExtractedPhrase,
     toCanonicalKey
   };
