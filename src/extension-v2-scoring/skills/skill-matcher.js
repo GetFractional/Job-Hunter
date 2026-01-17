@@ -263,6 +263,7 @@ function normalizeUserSkills(userSkills, taxonomy = []) {
 
 /**
  * Perform complete skill analysis: extract, match, and score
+ * v2 Upgrade: Uses 3-bucket system (CORE_SKILLS, TOOLS, CANDIDATES) with dual-bucket scoring
  * @param {string} jobDescriptionText - Full job description
  * @param {string[]} userProfileSkills - User's profile skills
  * @param {Object} options - Analysis options
@@ -271,6 +272,199 @@ function normalizeUserSkills(userSkills, taxonomy = []) {
 function analyzeJobSkillFit(jobDescriptionText, userProfileSkills, options = {}) {
   const startTime = performance.now();
 
+  // Check if v2 modules are available
+  const hasV2Modules = window.SkillClassifier && window.RequirementDetector && window.FitScoreCalculator;
+
+  if (hasV2Modules) {
+    return analyzeJobSkillFitV2(jobDescriptionText, userProfileSkills, options, startTime);
+  }
+
+  // Fallback to v1 analysis if v2 modules not loaded
+  return analyzeJobSkillFitV1(jobDescriptionText, userProfileSkills, options, startTime);
+}
+
+/**
+ * v2 Analysis: Full skill extraction with 3-bucket classification
+ * @private
+ */
+async function analyzeJobSkillFitV2(jobDescriptionText, userProfileSkills, options, startTime) {
+  try {
+    // Step 1: Extract raw skill phrases from job description
+    const extraction = window.SkillExtractor
+      ? window.SkillExtractor.extractRequiredSkillConcepts(jobDescriptionText, options)
+      : { required: [], desired: [], confidence: 0, rawExtracted: [] };
+
+    // Step 2: Load tools dictionary and ignore rules
+    const toolsDictionary = await window.SkillClassifier.loadToolsDictionary();
+    const ignoreRules = await window.SkillClassifier.loadIgnoreRules();
+
+    // Step 3: Get classification options
+    const classificationOptions = {
+      skillsTaxonomy: options.taxonomy || window.SkillTaxonomy?.SKILL_TAXONOMY || [],
+      toolsDictionary: toolsDictionary,
+      ignoreRules: ignoreRules,
+      forcedCoreSkills: window.SkillConstants?.FORCED_CORE_SKILLS || new Set(['sql', 'python', 'r']),
+      softSkillsPatterns: getSoftSkillsPatterns()
+    };
+
+    // Step 4: Classify extracted skills into buckets
+    const allExtractedPhrases = [
+      ...extraction.required.map(s => s.name || s),
+      ...extraction.desired.map(s => s.name || s)
+    ];
+
+    const classified = window.SkillClassifier.classifyBatch(allExtractedPhrases, classificationOptions);
+
+    // Step 5: Detect requirements (Required vs Desired)
+    const coreSkillsWithReqs = window.RequirementDetector.detectRequirements(
+      jobDescriptionText,
+      classified.coreSkills.map(s => ({ raw: s.raw, canonical: s.canonical }))
+    );
+
+    const toolsWithReqs = window.RequirementDetector.detectRequirements(
+      jobDescriptionText,
+      classified.tools.map(s => ({ raw: s.raw, canonical: s.canonical }))
+    );
+
+    // Step 6: Build 4-bucket structure for fit score calculator
+    const extractedSkillsV2 = {
+      requiredCoreSkills: coreSkillsWithReqs.required.map(s => ({
+        ...s,
+        canonical: s.canonical || toCanonicalKey(s.raw),
+        raw: s.raw,
+        confidence: s.confidence || 0.8,
+        evidence: s.evidence || 'Classified as required core skill',
+        userHasSkill: false // Will be set by matching
+      })),
+      desiredCoreSkills: coreSkillsWithReqs.desired.map(s => ({
+        ...s,
+        canonical: s.canonical || toCanonicalKey(s.raw),
+        raw: s.raw,
+        confidence: s.confidence || 0.8,
+        evidence: s.evidence || 'Classified as desired core skill'
+      })),
+      requiredTools: toolsWithReqs.required.map(s => ({
+        ...s,
+        canonical: s.canonical || toCanonicalKey(s.raw),
+        raw: s.raw,
+        confidence: s.confidence || 0.8,
+        evidence: s.evidence || 'Classified as required tool',
+        languageSignal: s.languageSignal
+      })),
+      desiredTools: toolsWithReqs.desired.map(s => ({
+        ...s,
+        canonical: s.canonical || toCanonicalKey(s.raw),
+        raw: s.raw,
+        confidence: s.confidence || 0.8,
+        evidence: s.evidence || 'Classified as desired tool'
+      })),
+      candidates: classified.candidates
+    };
+
+    // Step 7: Build user profile for scoring
+    const userProfile = buildUserProfileV2(userProfileSkills, options.taxonomy || window.SkillTaxonomy?.SKILL_TAXONOMY || [], toolsDictionary);
+
+    // Step 8: Match and mark user skills
+    markUserSkillMatches(extractedSkillsV2, userProfile);
+
+    // Step 9: Calculate fit score using v2 calculator
+    const fitScoreResult = window.FitScoreCalculator.calculateFitScore(extractedSkillsV2, userProfile);
+
+    // Step 10: Store candidates for feedback (if CandidateManager available)
+    if (window.CandidateManager && classified.candidates.length > 0) {
+      const candidateItems = classified.candidates.map(c =>
+        window.CandidateManager.createCandidate(c.raw, {
+          inferredType: c.inferredType,
+          confidence: c.confidence,
+          evidence: c.evidence
+        })
+      );
+      window.CandidateManager.storeCandidates(candidateItems);
+    }
+
+    // Step 11: Build comprehensive v2 result
+    const result = {
+      // v2 Extraction results (3-bucket)
+      extraction: {
+        requiredCoreSkills: extractedSkillsV2.requiredCoreSkills,
+        desiredCoreSkills: extractedSkillsV2.desiredCoreSkills,
+        requiredTools: extractedSkillsV2.requiredTools,
+        desiredTools: extractedSkillsV2.desiredTools,
+        candidates: extractedSkillsV2.candidates,
+        extractionConfidence: extraction.confidence,
+        executionTime: extraction.executionTime
+      },
+
+      // v2 Scoring results
+      scoring: {
+        overallScore: fitScoreResult.overallScore,
+        breakdown: fitScoreResult.breakdown,
+        coreSkillsDetails: fitScoreResult.coreSkillsDetails,
+        toolsDetails: fitScoreResult.toolsDetails,
+        penalties: fitScoreResult.penalties,
+        weightsUsed: fitScoreResult.weightsUsed
+      },
+
+      // Backward compatible fields
+      match: {
+        matched: [
+          ...fitScoreResult.coreSkillsDetails.matchedItems.map(i => i.item),
+          ...fitScoreResult.toolsDetails.matchedItems.map(i => i.item)
+        ],
+        missing: [
+          ...fitScoreResult.coreSkillsDetails.requiredMissing.map(i => i.raw || i.canonical),
+          ...fitScoreResult.toolsDetails.requiredMissing.map(i => i.raw || i.canonical)
+        ],
+        matchRatio: fitScoreResult.overallScore
+      },
+
+      desired: {
+        has: [
+          ...fitScoreResult.coreSkillsDetails.matchedItems.filter(i => i.type === 'desired').map(i => i.item),
+          ...fitScoreResult.toolsDetails.matchedItems.filter(i => i.type === 'desired').map(i => i.item)
+        ],
+        missing: [
+          ...fitScoreResult.coreSkillsDetails.desiredMissing.map(i => i.raw || i.canonical),
+          ...fitScoreResult.toolsDetails.desiredMissing.map(i => i.raw || i.canonical)
+        ]
+      },
+
+      // Scores (0-100 scale for UI compatibility)
+      skillFitScore: Math.round(fitScoreResult.overallScore * 100),
+      skillFitLabel: window.FitScoreCalculator.getFitLabel(fitScoreResult.overallScore),
+      breakdown: fitScoreResult.breakdown,
+
+      // Recommendations
+      recommendations: window.FitScoreCalculator.getRecommendations(fitScoreResult),
+
+      // Metadata
+      userSkillCount: userProfileSkills?.length || 0,
+      requiredSkillCount: extractedSkillsV2.requiredCoreSkills.length + extractedSkillsV2.requiredTools.length,
+      desiredSkillCount: extractedSkillsV2.desiredCoreSkills.length + extractedSkillsV2.desiredTools.length,
+      candidateCount: classified.candidates.length,
+      rejectedCount: classified.rejected.length,
+      analysisTime: performance.now() - startTime,
+      version: '2.0',
+
+      // For Airtable (v2 format)
+      airtablePayload: formatForAirtableV2(extractedSkillsV2, fitScoreResult, userProfile)
+    };
+
+    console.log(`[SkillMatcher v2] Analysis complete in ${result.analysisTime.toFixed(2)}ms`);
+    return result;
+
+  } catch (error) {
+    console.error('[SkillMatcher v2] Analysis error:', error);
+    // Fallback to v1 on error
+    return analyzeJobSkillFitV1(jobDescriptionText, userProfileSkills, options, startTime);
+  }
+}
+
+/**
+ * v1 Analysis: Original analysis for backward compatibility
+ * @private
+ */
+function analyzeJobSkillFitV1(jobDescriptionText, userProfileSkills, options, startTime) {
   // Step 1: Extract skills from job description
   const extraction = window.SkillExtractor
     ? window.SkillExtractor.extractRequiredSkillConcepts(jobDescriptionText, options)
@@ -329,9 +523,120 @@ function analyzeJobSkillFit(jobDescriptionText, userProfileSkills, options = {})
     requiredSkillCount: extraction.required.length,
     desiredSkillCount: extraction.desired.length,
     analysisTime: performance.now() - startTime,
+    version: '1.0',
 
     // For Airtable
     airtablePayload: formatForAirtable(requiredMatch, desiredMatch, extraction)
+  };
+}
+
+/**
+ * Build user profile for v2 scoring
+ * Separates user skills into coreSkills and tools
+ * @private
+ */
+function buildUserProfileV2(userProfileSkills, taxonomy, toolsDictionary) {
+  const coreSkills = [];
+  const tools = [];
+
+  if (!userProfileSkills || !Array.isArray(userProfileSkills)) {
+    return { coreSkills: [], tools: [] };
+  }
+
+  // Create a set of tool names for quick lookup
+  const toolNames = new Set(toolsDictionary.map(t => t.canonical));
+  const toolAliases = new Map();
+  toolsDictionary.forEach(t => {
+    (t.aliases || []).forEach(alias => {
+      toolAliases.set(alias.toLowerCase(), t.canonical);
+    });
+  });
+
+  for (const userSkill of userProfileSkills) {
+    const skillName = typeof userSkill === 'string' ? userSkill : (userSkill.name || userSkill.label || '');
+    const canonical = toCanonicalKey(skillName);
+
+    // Check if it's a tool
+    if (toolNames.has(canonical) || toolAliases.has(skillName.toLowerCase())) {
+      tools.push({
+        name: skillName,
+        canonical: canonical
+      });
+    } else {
+      // Default to core skill
+      coreSkills.push({
+        name: skillName,
+        canonical: canonical
+      });
+    }
+  }
+
+  return { coreSkills, tools };
+}
+
+/**
+ * Mark which extracted skills the user has
+ * @private
+ */
+function markUserSkillMatches(extractedSkillsV2, userProfile) {
+  const userCoreCanonicals = new Set(userProfile.coreSkills.map(s => s.canonical));
+  const userToolCanonicals = new Set(userProfile.tools.map(s => s.canonical));
+
+  // Mark core skills
+  for (const skill of extractedSkillsV2.requiredCoreSkills) {
+    skill.userHasSkill = userCoreCanonicals.has(skill.canonical);
+  }
+  for (const skill of extractedSkillsV2.desiredCoreSkills) {
+    skill.userHasSkill = userCoreCanonicals.has(skill.canonical);
+  }
+
+  // Mark tools
+  for (const tool of extractedSkillsV2.requiredTools) {
+    tool.userHasSkill = userToolCanonicals.has(tool.canonical);
+  }
+  for (const tool of extractedSkillsV2.desiredTools) {
+    tool.userHasSkill = userToolCanonicals.has(tool.canonical);
+  }
+}
+
+/**
+ * Get soft skills patterns from constants
+ * @private
+ */
+function getSoftSkillsPatterns() {
+  const patterns = window.SkillConstants?.SOFT_SKILLS_PATTERNS || [];
+  return patterns.map(p => {
+    if (typeof p === 'string') {
+      return new RegExp(p, 'i');
+    }
+    return p;
+  });
+}
+
+/**
+ * Format results for Airtable (v2 format)
+ * @private
+ */
+function formatForAirtableV2(extractedSkills, fitScoreResult, userProfile) {
+  const matchedCoreSkills = fitScoreResult.coreSkillsDetails.matchedItems.map(i => i.item);
+  const missingCoreSkills = fitScoreResult.coreSkillsDetails.requiredMissing.map(i => i.raw || i.canonical);
+  const matchedTools = fitScoreResult.toolsDetails.matchedItems.map(i => i.item);
+  const missingTools = fitScoreResult.toolsDetails.requiredMissing.map(i => i.raw || i.canonical);
+
+  return {
+    'Matched Core Skills': matchedCoreSkills.join(', '),
+    'Missing Core Skills': missingCoreSkills.join(', '),
+    'Matched Tools': matchedTools.join(', '),
+    'Missing Tools': missingTools.join(', '),
+    'Overall Fit Score': `${Math.round(fitScoreResult.overallScore * 100)}%`,
+    'Core Skills Score': `${Math.round(fitScoreResult.breakdown.coreSkillsScore * 100)}%`,
+    'Tools Score': `${Math.round(fitScoreResult.breakdown.toolsScore * 100)}%`,
+    'Total Penalties': fitScoreResult.breakdown.totalPenalty.toFixed(2),
+    'Required Core Skills Count': extractedSkills.requiredCoreSkills.length,
+    'Required Tools Count': extractedSkills.requiredTools.length,
+    'Candidates Count': extractedSkills.candidates.length,
+    'Extracted At': new Date().toISOString(),
+    'Version': '2.0'
   };
 }
 

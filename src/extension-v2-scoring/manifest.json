@@ -32,6 +32,7 @@
         "*://*.indeed.com/*"
       ],
       "js": [
+        "lib/compromise.js",
         "skills/skill-taxonomy.js",
         "skills/skill-constants.js",
         "skills/skill-classifier.js",
@@ -58,6 +59,7 @@
   "web_accessible_resources": [
     {
       "resources": [
+        "lib/compromise.js",
         "profile-setup.html",
         "profile-setup.css",
         "profile-setup.js",

@@ -258,6 +258,9 @@ function extractPhrases(text) {
   // Strategy 4: Extract comma-separated skills in skill lists
   extractCommaSeparated(text).forEach(p => phrases.add(p));
 
+  // Strategy 5: Extract noun phrases from paragraphs using Compromise.js (v2 Upgrade)
+  extractParagraphNounPhrases(text).forEach(p => phrases.add(p));
+
   // Clean and return
   return Array.from(phrases)
     .map(p => cleanExtractedPhrase(p))
@@ -266,6 +269,96 @@ function extractPhrases(text) {
       const wordCount = p.split(/\s+/).length;
       return wordCount <= maxWords;
     });
+}
+
+// ============================================================================
+// PARAGRAPH NLP EXTRACTION (Compromise.js - v2 Upgrade)
+// ============================================================================
+
+/**
+ * Extract noun phrases from paragraphs using Compromise.js NLP
+ * This captures skills mentioned in prose, not just bullet points
+ * Target: +40% recall improvement
+ * @param {string} text - Job description text
+ * @returns {string[]} Extracted noun phrases that could be skills/tools
+ */
+function extractParagraphNounPhrases(text) {
+  if (!text) return [];
+
+  // Check if Compromise.js (nlp) is available
+  const nlp = window.nlp || (typeof nlp !== 'undefined' ? nlp : null);
+  if (!nlp) {
+    console.warn('[SkillExtractor] Compromise.js not loaded - skipping paragraph NLP extraction');
+    return [];
+  }
+
+  const phrases = [];
+
+  try {
+    // Parse text with Compromise.js
+    const doc = nlp(text);
+
+    // Strategy 1: Extract noun phrases (compound nouns, noun chunks)
+    const nounPhrases = doc.nouns().out('array');
+    phrases.push(...nounPhrases);
+
+    // Strategy 2: Extract specific patterns for skills/tools
+    // Look for capitalized terms (brand names like HubSpot, Salesforce)
+    const properNouns = doc.match('#ProperNoun+').out('array');
+    phrases.push(...properNouns);
+
+    // Strategy 3: Extract acronyms (GA4, CRM, SQL, etc.)
+    const acronyms = doc.acronyms().out('array');
+    phrases.push(...acronyms);
+
+    // Strategy 4: Extract terms that look like technical skills
+    // Pattern: adjective? + noun (e.g., "lifecycle marketing", "data analysis")
+    const technicalTerms = doc.match('#Adjective? #Noun+').out('array');
+    phrases.push(...technicalTerms);
+
+    // Strategy 5: Extract gerund phrases (verbs used as nouns - "marketing", "segmentation")
+    const gerunds = doc.match('#Gerund').out('array');
+    phrases.push(...gerunds);
+
+  } catch (error) {
+    console.warn('[SkillExtractor] Compromise.js extraction failed:', error);
+  }
+
+  // Clean and filter the extracted phrases
+  return phrases
+    .map(p => cleanNlpPhrase(p))
+    .filter(p => {
+      if (!p || p.length < 2) return false;
+      // Filter out very long phrases (likely not skills)
+      const wordCount = p.split(/\s+/).length;
+      if (wordCount > 5) return false;
+      // Filter out single characters
+      if (p.length < 2) return false;
+      // Filter out common words that aren't skills
+      const commonWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'as', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'dare', 'ought', 'used', 'get', 'got', 'gets', 'getting']);
+      if (commonWords.has(p.toLowerCase())) return false;
+      return true;
+    });
+}
+
+/**
+ * Clean a phrase extracted via NLP
+ * @param {string} phrase - NLP extracted phrase
+ * @returns {string} Cleaned phrase
+ */
+function cleanNlpPhrase(phrase) {
+  if (!phrase || typeof phrase !== 'string') return '';
+
+  return phrase
+    .trim()
+    // Remove leading/trailing articles and prepositions
+    .replace(/^(the|a|an|and|or|with|for|to|of|in|on|at|by)\s+/gi, '')
+    .replace(/\s+(the|a|an|and|or|with|for|to|of|in|on|at|by)$/gi, '')
+    // Remove leading/trailing punctuation
+    .replace(/^[,.\s\-•*:;]+|[,.\s\-•*:;]+$/g, '')
+    // Normalize whitespace
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**
@@ -491,9 +584,11 @@ if (typeof window !== 'undefined') {
     extractRequiredSkillConcepts,
     parseSections,
     extractPhrases,
+    extractParagraphNounPhrases,
     filterToolsPlatforms,
     filterGenericPhrases,
     cleanExtractedPhrase,
+    cleanNlpPhrase,
     toCanonicalKey
   };
 }
@@ -503,9 +598,11 @@ if (typeof module !== 'undefined' && module.exports) {
     extractRequiredSkillConcepts,
     parseSections,
     extractPhrases,
+    extractParagraphNounPhrases,
     filterToolsPlatforms,
     filterGenericPhrases,
     cleanExtractedPhrase,
+    cleanNlpPhrase,
     toCanonicalKey
   };
 }

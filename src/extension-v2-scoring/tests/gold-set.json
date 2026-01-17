@@ -1,0 +1,170 @@
+{
+  "version": "1.0",
+  "description": "Gold set of real job descriptions for testing skill extraction pipeline",
+  "lastUpdated": "2026-01-17",
+  "testCases": [
+    {
+      "id": "job-001",
+      "source": "LinkedIn",
+      "title": "Product Manager",
+      "company": "TechCorp",
+      "description": "We are looking for a Product Manager to lead our growth initiatives.\n\nRequired Skills:\n- 5+ years of product management experience\n- SQL and Python proficiency for data analysis\n- Experience with product strategy and roadmapping\n- A/B testing and experimentation\n- HubSpot or similar CRM experience\n- Google Analytics 4 (GA4) proficiency\n\nPreferred:\n- Tableau or Power BI for visualization\n- Strong communication skills\n- Leadership experience",
+      "expected": {
+        "requiredCoreSkills": ["SQL", "Python", "product strategy", "A/B testing", "experimentation"],
+        "desiredCoreSkills": [],
+        "requiredTools": ["HubSpot", "Google Analytics 4"],
+        "desiredTools": ["Tableau", "Power BI"],
+        "rejected": ["communication skills", "leadership experience"],
+        "expectedFitScore": 0.78
+      }
+    },
+    {
+      "id": "job-002",
+      "source": "Greenhouse",
+      "title": "Marketing Manager",
+      "company": "GrowthCo",
+      "description": "Join our marketing team!\n\nResponsibilities:\n- Lead lifecycle marketing campaigns\n- Manage customer segmentation strategies\n- Own CRM strategy and execution\n\nRequirements:\n- Expert in Salesforce Marketing Cloud\n- Marketo certification preferred\n- Experience with customer segmentation\n- Lifecycle marketing expertise\n\nNice to have:\n- Excellent teamwork and communication\n- Problem-solving abilities",
+      "expected": {
+        "requiredCoreSkills": ["lifecycle marketing", "customer segmentation", "CRM strategy"],
+        "desiredCoreSkills": [],
+        "requiredTools": ["Salesforce Marketing Cloud"],
+        "desiredTools": ["Marketo"],
+        "rejected": ["teamwork", "communication", "problem-solving"],
+        "expectedFitScore": 0.65
+      }
+    },
+    {
+      "id": "job-003",
+      "source": "Lever",
+      "title": "Data Analyst",
+      "company": "DataDriven Inc",
+      "description": "Data Analyst - Remote\n\nAbout the role:\nWe need a data analyst to help us make sense of our customer data.\n\nYou will work on data modeling projects, build dashboards, and perform statistical analysis.\n\nMust have:\n- SQL (expert required)\n- Python or R programming\n- Statistics and data modeling\n- Looker or Tableau experience\n- Snowflake or BigQuery\n\nBonus:\n- Analytical thinking\n- Attention to detail",
+      "expected": {
+        "requiredCoreSkills": ["SQL", "Python", "R", "statistics", "data modeling"],
+        "desiredCoreSkills": [],
+        "requiredTools": ["Looker", "Tableau", "Snowflake", "BigQuery"],
+        "desiredTools": [],
+        "rejected": ["analytical thinking", "attention to detail"],
+        "expectedFitScore": 0.82
+      }
+    },
+    {
+      "id": "job-004",
+      "source": "LinkedIn",
+      "title": "Growth Marketing Lead",
+      "company": "StartupXYZ",
+      "description": "We're hiring a Growth Marketing Lead!\n\nYou'll be responsible for driving user acquisition and retention through data-driven marketing strategies.\n\nWhat you'll need:\n- 7+ years in growth marketing\n- Expertise in lifecycle marketing and customer journey optimization\n- Deep experience with marketing automation platforms (HubSpot, Marketo, or Klaviyo)\n- SQL for campaign analysis\n- GA4 and Mixpanel for analytics\n\nWhat would be nice:\n- Optimizely or VWO for experimentation\n- Self-starter attitude\n- Strong interpersonal skills",
+      "expected": {
+        "requiredCoreSkills": ["growth marketing", "lifecycle marketing", "customer journey optimization", "SQL", "campaign analysis"],
+        "desiredCoreSkills": [],
+        "requiredTools": ["HubSpot", "Marketo", "Klaviyo", "GA4", "Mixpanel"],
+        "desiredTools": ["Optimizely", "VWO"],
+        "rejected": ["self-starter", "interpersonal skills"],
+        "expectedFitScore": 0.72
+      }
+    },
+    {
+      "id": "job-005",
+      "source": "Indeed",
+      "title": "RevOps Manager",
+      "company": "SaaS Corp",
+      "description": "Revenue Operations Manager\n\nAbout Us:\nWe're a fast-growing B2B SaaS company looking for a RevOps leader.\n\nResponsibilities:\n• Design and optimize sales processes\n• Manage Salesforce CRM systems\n• Build reporting dashboards in Looker\n• Analyze revenue data using SQL\n\nRequirements:\n- Salesforce Administrator certification\n- SQL proficiency (must have)\n- Experience with Looker, Tableau, or Power BI\n- Revenue operations or sales operations background\n\nDesirable:\n- Python scripting\n- Great communication and presentation skills",
+      "expected": {
+        "requiredCoreSkills": ["SQL", "revenue operations", "sales operations"],
+        "desiredCoreSkills": ["Python"],
+        "requiredTools": ["Salesforce", "Looker", "Tableau", "Power BI"],
+        "desiredTools": [],
+        "rejected": ["communication", "presentation skills"],
+        "expectedFitScore": 0.70
+      }
+    },
+    {
+      "id": "job-006",
+      "source": "Greenhouse",
+      "title": "Customer Success Manager",
+      "company": "CustomerFirst",
+      "description": "Customer Success Manager - Enterprise\n\nJoin our world-class customer success team!\n\nWhat you'll do:\n- Manage enterprise customer relationships\n- Drive product adoption and retention\n- Identify upsell opportunities\n\nWhat we're looking for:\n- Experience with Gainsight or Totango\n- Salesforce proficiency\n- Data analysis skills (SQL preferred)\n- Customer lifecycle management\n\nBonus points:\n- Zendesk or Intercom experience\n- Strong leadership qualities\n- Excellent written and verbal communication",
+      "expected": {
+        "requiredCoreSkills": ["data analysis", "SQL", "customer lifecycle management"],
+        "desiredCoreSkills": [],
+        "requiredTools": ["Gainsight", "Totango", "Salesforce"],
+        "desiredTools": ["Zendesk", "Intercom"],
+        "rejected": ["leadership qualities", "communication"],
+        "expectedFitScore": 0.68
+      }
+    },
+    {
+      "id": "job-007",
+      "source": "LinkedIn",
+      "title": "Business Intelligence Analyst",
+      "company": "Analytics Pro",
+      "description": "BI Analyst\n\nWe need a skilled BI professional to transform data into insights.\n\nKey responsibilities include building executive dashboards, performing ad-hoc analysis, and maintaining data pipelines.\n\nRequired:\n- Advanced SQL (3+ years)\n- Tableau or Power BI expertise\n- Python for data manipulation\n- Experience with Snowflake, Redshift, or BigQuery\n- dbt for data transformation\n\nNice to have:\n- Looker modeling experience\n- Proactive and detail-oriented",
+      "expected": {
+        "requiredCoreSkills": ["SQL", "Python", "data manipulation", "data transformation"],
+        "desiredCoreSkills": [],
+        "requiredTools": ["Tableau", "Power BI", "Snowflake", "Redshift", "BigQuery", "dbt"],
+        "desiredTools": ["Looker"],
+        "rejected": ["proactive", "detail-oriented"],
+        "expectedFitScore": 0.75
+      }
+    },
+    {
+      "id": "job-008",
+      "source": "Lever",
+      "title": "Email Marketing Specialist",
+      "company": "EmailPro",
+      "description": "Email Marketing Specialist\n\nOwn our email marketing program end-to-end.\n\nYou'll craft compelling campaigns, segment audiences, and optimize for conversions.\n\nMust have experience with:\n- Klaviyo or Mailchimp\n- HTML/CSS for email templates\n- Segmentation and personalization\n- A/B testing methodologies\n\nPreferred:\n- Iterable or Braze experience\n- Creative problem-solving\n- Team collaboration",
+      "expected": {
+        "requiredCoreSkills": ["HTML", "CSS", "segmentation", "personalization", "A/B testing"],
+        "desiredCoreSkills": [],
+        "requiredTools": ["Klaviyo", "Mailchimp"],
+        "desiredTools": ["Iterable", "Braze"],
+        "rejected": ["problem-solving", "collaboration"],
+        "expectedFitScore": 0.60
+      }
+    },
+    {
+      "id": "job-009",
+      "source": "LinkedIn",
+      "title": "Marketing Analytics Manager",
+      "company": "DataMarketing",
+      "description": "Marketing Analytics Manager\n\nLead our marketing measurement and attribution efforts.\n\nIn this role, you will build attribution models, analyze campaign performance, and provide insights to optimize marketing spend.\n\nRequirements:\n- SQL expert (non-negotiable)\n- Python or R for statistical modeling\n- Google Analytics 4, Adobe Analytics\n- Experience with MMM or MTA models\n- Amplitude or Mixpanel\n\nDesired:\n- Segment CDP experience\n- Strong analytical mindset\n- Ability to work independently",
+      "expected": {
+        "requiredCoreSkills": ["SQL", "Python", "R", "statistical modeling", "MMM", "MTA"],
+        "desiredCoreSkills": [],
+        "requiredTools": ["Google Analytics 4", "Adobe Analytics", "Amplitude", "Mixpanel"],
+        "desiredTools": ["Segment"],
+        "rejected": ["analytical mindset", "work independently"],
+        "expectedFitScore": 0.77
+      }
+    },
+    {
+      "id": "job-010",
+      "source": "Greenhouse",
+      "title": "Demand Generation Manager",
+      "company": "DemandGen Co",
+      "description": "Demand Generation Manager\n\nDrive pipeline through integrated marketing campaigns.\n\nResponsibilities:\n- Plan and execute multi-channel campaigns\n- Manage paid advertising (Google Ads, LinkedIn Ads, Facebook Ads)\n- Optimize landing pages for conversion\n- Report on campaign performance\n\nRequired skills:\n- HubSpot Marketing Hub (certified preferred)\n- Google Ads certification\n- LinkedIn Campaign Manager\n- SQL for reporting\n- Landing page optimization\n\nNice to have:\n- Unbounce or Instapage\n- Motivated self-starter\n- Excellent time management",
+      "expected": {
+        "requiredCoreSkills": ["SQL", "landing page optimization", "multi-channel campaigns"],
+        "desiredCoreSkills": [],
+        "requiredTools": ["HubSpot", "Google Ads", "LinkedIn Ads", "Facebook Ads", "LinkedIn Campaign Manager"],
+        "desiredTools": ["Unbounce", "Instapage"],
+        "rejected": ["self-starter", "time management"],
+        "expectedFitScore": 0.69
+      }
+    }
+  ],
+  "validationRules": {
+    "recallTarget": 0.85,
+    "precisionTarget": 0.75,
+    "softSkillRejectionRate": 1.0,
+    "candidateBucketMaxPercent": 0.15,
+    "performanceTargetMs": 1000
+  },
+  "metrics": {
+    "totalTestCases": 10,
+    "expectedCoreSkillsCount": 45,
+    "expectedToolsCount": 55,
+    "expectedRejectedCount": 25
+  }
+}

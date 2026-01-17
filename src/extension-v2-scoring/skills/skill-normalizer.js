@@ -77,11 +77,17 @@ function normalizeSkillConcept(phrase, options) {
     };
   }
 
-  // PASS 3: Fuzzy match
+  // PASS 3: Fuzzy match with dynamic thresholds (v2 Upgrade)
+  // The fuzzy matcher now uses dynamic thresholds based on query length:
+  // - Short strings (<5 chars): threshold 0.20 (GA4, CRM, SQL)
+  // - Medium strings (5-15 chars): threshold 0.35 (HubSpot, Snowflake)
+  // - Long phrases (>15 chars): threshold 0.50 (lifecycle marketing)
   if (fuzzyMatcher) {
+    // Let fuzzy matcher use its dynamic threshold logic
     const fuzzyResults = fuzzyMatcher.search(cleaned, { limit: 1 });
-    if (fuzzyResults.length > 0 && fuzzyResults[0].score <= fuzzyThreshold) {
+    if (fuzzyResults.length > 0) {
       const match = fuzzyResults[0];
+      // Dynamic threshold is already applied by fuzzy matcher
       // Convert fuzzy score (0=best) to confidence (1=best)
       const confidence = 1 - match.score;
       return {
@@ -90,7 +96,8 @@ function normalizeSkillConcept(phrase, options) {
         matchedSkill: match.item,
         confidence: Math.max(minConfidence, confidence),
         matchType: 'fuzzy',
-        matchedTerm: match.matchedTerm
+        matchedTerm: match.matchedTerm,
+        scoreUsed: match.score // v2: Include raw score for debugging
       };
     }
   }

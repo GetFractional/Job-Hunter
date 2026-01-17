@@ -27,7 +27,17 @@ class SkillFuzzyMatcher {
       keys: options.keys || ['name', 'aliases'],
       minMatchCharLength: options.minMatchCharLength || 2,
       includeScore: options.includeScore !== false,
+      useDynamicThreshold: options.useDynamicThreshold !== false, // v2 Upgrade: Enable dynamic thresholds by default
       ...options
+    };
+
+    // Dynamic threshold configuration (v2 Upgrade)
+    // Short strings need looser matching (acronyms like GA4, CRM)
+    // Long phrases need stricter matching (lifecycle marketing)
+    this.dynamicThresholdConfig = {
+      short: { maxLength: 5, threshold: 0.20 },    // GA4, CRM, SQL
+      medium: { maxLength: 15, threshold: 0.35 },  // HubSpot, Snowflake
+      long: { threshold: 0.50 }                    // lifecycle marketing
     };
 
     // Build searchable index
@@ -35,6 +45,29 @@ class SkillFuzzyMatcher {
     this.skills = skills;
 
     console.log(`[FuzzyMatcher] Initialized with ${skills.length} skills, ${this.index.size} indexed terms`);
+  }
+
+  /**
+   * Calculate dynamic threshold based on query string length (v2 Upgrade)
+   * @param {string} query - The search query
+   * @returns {number} Appropriate threshold for this query
+   */
+  _getDynamicThreshold(query) {
+    if (!this.options.useDynamicThreshold) {
+      return this.options.threshold;
+    }
+
+    const length = (query || '').length;
+
+    if (length < this.dynamicThresholdConfig.short.maxLength) {
+      return this.dynamicThresholdConfig.short.threshold;
+    }
+
+    if (length <= this.dynamicThresholdConfig.medium.maxLength) {
+      return this.dynamicThresholdConfig.medium.threshold;
+    }
+
+    return this.dynamicThresholdConfig.long.threshold;
   }
 
   /**
@@ -104,7 +137,8 @@ class SkillFuzzyMatcher {
       return [];
     }
 
-    const threshold = options.threshold || this.options.threshold;
+    // v2 Upgrade: Use dynamic threshold based on query length
+    const threshold = options.threshold || this._getDynamicThreshold(normalizedQuery);
     const limit = options.limit || 10;
     const results = [];
 

@@ -116,7 +116,7 @@ async function updateCandidateFeedback(canonical, feedback) {
 
     // If user classified, add to appropriate dictionary
     if (feedback.action === 'classify' && feedback.classifiedAs) {
-      await promoteToDict ionary(candidates[candidateIndex], feedback.classifiedAs);
+      await promoteToDictionary(candidates[candidateIndex], feedback.classifiedAs);
     }
 
     console.log(`[CandidateManager] Updated feedback for: ${canonical}`);
