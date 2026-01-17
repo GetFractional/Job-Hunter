@@ -4,7 +4,7 @@
   "description": "Job Filter v2 - Skills & Tools Extraction Pipeline",
   "scripts": {
     "build": "echo 'Build script placeholder - add webpack/vite if needed'",
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
+    "test": "node node_modules/jest/bin/jest.js --config=jest.config.cjs"
   },
   "dependencies": {
     "compromise": "^14.13.0"

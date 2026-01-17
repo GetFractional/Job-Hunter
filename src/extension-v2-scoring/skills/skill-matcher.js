@@ -1,11 +1,18 @@
 /**
- * Job Filter - Skill Matcher
+ * Job Filter - Skill Matcher (v2 Upgrade)
  *
  * Compares extracted required skills against user profile skills to calculate:
  * - Matched skills (user HAS these required skills)
  * - Missing skills (user LACKS these required skills)
  * - Skill match ratio (matched / required)
  * - Desired skills the user is missing
+ *
+ * v2 Upgrade Features:
+ * - Integration with FitScoreCalculator for dual-bucket scoring
+ * - Separate matching for core skills and tools
+ * - Penalty system for missing required items
+ * - Evidence tracking for match decisions
+ * - Recommendations based on score breakdown
  */
 
 // ============================================================================
@@ -396,6 +403,203 @@ function formatForAirtable(requiredMatch, desiredMatch, extraction) {
 }
 
 // ============================================================================
+// V2 MATCHING WITH FIT SCORE CALCULATOR
+// ============================================================================
+
+/**
+ * Analyze job skill fit using the v2 dual-bucket scoring system
+ * This is the new main entry point that uses FitScoreCalculator
+ *
+ * @param {Object} extractedSkills - Classified extraction result from extractAndClassifySkills()
+ * @param {Object} userProfile - User profile with coreSkills and tools arrays
+ * @param {Object} options - Analysis options
+ * @returns {Object} Complete fit analysis with score breakdown and recommendations
+ */
+function analyzeJobSkillFitV2(extractedSkills, userProfile, options = {}) {
+  const startTime = performance.now();
+
+  // Validate inputs
+  const validation = window.FitScoreCalculator?.validateInputs?.(extractedSkills, userProfile);
+  if (validation && !validation.valid) {
+    console.error('[SkillMatcher v2] Validation errors:', validation.errors);
+    return {
+      overallScore: 0,
+      fitLabel: 'Unable to Calculate',
+      error: validation.errors,
+      warnings: validation.warnings
+    };
+  }
+
+  // Use FitScoreCalculator if available
+  const fitCalculator = window.FitScoreCalculator;
+  if (!fitCalculator) {
+    console.warn('[SkillMatcher v2] FitScoreCalculator not available, using legacy scoring');
+    return analyzeJobSkillFit(
+      null, // No jobDescriptionText in v2 flow
+      userProfile.coreSkills?.concat(userProfile.tools || []) || [],
+      options
+    );
+  }
+
+  // Mark user skills as matched in the extracted skills
+  const markedExtraction = markUserMatches(extractedSkills, userProfile);
+
+  // Calculate fit score using dual-bucket system
+  const fitScore = fitCalculator.calculateFitScore(markedExtraction, userProfile, options);
+
+  // Get recommendations
+  const recommendations = fitCalculator.getRecommendations(fitScore);
+
+  // Build comprehensive result
+  const result = {
+    // Score summary
+    overallScore: fitScore.overallScore,
+    fitLabel: fitCalculator.getFitLabel(fitScore.overallScore),
+    fitColor: fitCalculator.getScoreColor(fitScore.overallScore),
+
+    // Detailed breakdown
+    breakdown: fitScore.breakdown,
+    coreSkillsDetails: fitScore.coreSkillsDetails,
+    toolsDetails: fitScore.toolsDetails,
+
+    // Penalties
+    penalties: fitScore.penalties,
+    totalPenalty: fitScore.breakdown.totalPenalty,
+
+    // Matched/Missing
+    match: {
+      coreSkills: {
+        matched: fitScore.coreSkillsDetails.matchedItems.filter(i => i.type === 'required'),
+        missing: fitScore.coreSkillsDetails.requiredMissing,
+        matchRatio: fitScore.coreSkillsDetails.requiredTotal > 0
+          ? fitScore.coreSkillsDetails.requiredMatched / fitScore.coreSkillsDetails.requiredTotal
+          : 1
+      },
+      tools: {
+        matched: fitScore.toolsDetails.matchedItems.filter(i => i.type === 'required'),
+        missing: fitScore.toolsDetails.requiredMissing,
+        matchRatio: fitScore.toolsDetails.requiredTotal > 0
+          ? fitScore.toolsDetails.requiredMatched / fitScore.toolsDetails.requiredTotal
+          : 1
+      }
+    },
+
+    // Desired skills
+    desired: {
+      coreSkills: {
+        matched: fitScore.coreSkillsDetails.matchedItems.filter(i => i.type === 'desired'),
+        missing: fitScore.coreSkillsDetails.desiredMissing
+      },
+      tools: {
+        matched: fitScore.toolsDetails.matchedItems.filter(i => i.type === 'desired'),
+        missing: fitScore.toolsDetails.desiredMissing
+      }
+    },
+
+    // Recommendations
+    recommendations,
+
+    // Candidates for review
+    candidates: extractedSkills.candidates || [],
+
+    // Metadata
+    weightsUsed: fitScore.weightsUsed,
+    metadata: {
+      ...fitScore.metadata,
+      analysisTime: performance.now() - startTime
+    },
+
+    // For Airtable export
+    airtablePayload: formatForAirtableV2(fitScore, extractedSkills)
+  };
+
+  console.log(
+    `[SkillMatcher v2] Fit Score: ${(result.overallScore * 100).toFixed(1)}% (${result.fitLabel}) ` +
+    `- Core: ${(fitScore.coreSkillsDetails.score * 100).toFixed(1)}%, ` +
+    `Tools: ${(fitScore.toolsDetails.score * 100).toFixed(1)}%`
+  );
+
+  return result;
+}
+
+/**
+ * Mark which extracted skills the user has
+ * @param {Object} extractedSkills - Classified extraction result
+ * @param {Object} userProfile - User profile
+ * @returns {Object} Extraction with userHasSkill flags updated
+ */
+function markUserMatches(extractedSkills, userProfile) {
+  // Normalize user skills for comparison
+  const userCoreCanonicals = new Set(
+    (userProfile.coreSkills || []).map(s =>
+      typeof s === 'string'
+        ? s.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
+        : s.canonical || s.name?.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
+    )
+  );
+
+  const userToolCanonicals = new Set(
+    (userProfile.tools || []).map(t =>
+      typeof t === 'string'
+        ? t.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
+        : t.canonical || t.name?.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
+    )
+  );
+
+  // Also check combined skills
+  const allUserCanonicals = new Set([...userCoreCanonicals, ...userToolCanonicals]);
+
+  // Create copy and mark matches
+  const marked = JSON.parse(JSON.stringify(extractedSkills));
+
+  // Mark core skills
+  (marked.requiredCoreSkills || []).forEach(skill => {
+    skill.userHasSkill = userCoreCanonicals.has(skill.canonical) || allUserCanonicals.has(skill.canonical);
+  });
+
+  (marked.desiredCoreSkills || []).forEach(skill => {
+    skill.userHasSkill = userCoreCanonicals.has(skill.canonical) || allUserCanonicals.has(skill.canonical);
+  });
+
+  // Mark tools
+  (marked.requiredTools || []).forEach(tool => {
+    tool.userHasSkill = userToolCanonicals.has(tool.canonical) || allUserCanonicals.has(tool.canonical);
+  });
+
+  (marked.desiredTools || []).forEach(tool => {
+    tool.userHasSkill = userToolCanonicals.has(tool.canonical) || allUserCanonicals.has(tool.canonical);
+  });
+
+  return marked;
+}
+
+/**
+ * Format v2 results for Airtable
+ * @param {Object} fitScore - Fit score result
+ * @param {Object} extractedSkills - Extracted skills
+ * @returns {Object} Airtable payload
+ */
+function formatForAirtableV2(fitScore, extractedSkills) {
+  return {
+    'Fit Score': `${(fitScore.overallScore * 100).toFixed(1)}%`,
+    'Fit Label': window.FitScoreCalculator?.getFitLabel(fitScore.overallScore) || 'N/A',
+    'Core Skills Score': `${(fitScore.coreSkillsDetails.score * 100).toFixed(1)}%`,
+    'Tools Score': `${(fitScore.toolsDetails.score * 100).toFixed(1)}%`,
+    'Required Core Skills Matched': fitScore.coreSkillsDetails.requiredMatched,
+    'Required Core Skills Total': fitScore.coreSkillsDetails.requiredTotal,
+    'Required Tools Matched': fitScore.toolsDetails.requiredMatched,
+    'Required Tools Total': fitScore.toolsDetails.requiredTotal,
+    'Missing Required Skills': fitScore.coreSkillsDetails.requiredMissing
+      .map(s => s.raw || s.canonical).join(', '),
+    'Missing Required Tools': fitScore.toolsDetails.requiredMissing
+      .map(t => t.raw || t.canonical).join(', '),
+    'Total Penalty': fitScore.breakdown.totalPenalty,
+    'Candidates Count': extractedSkills.candidates?.length || 0,
+    'Analyzed At': new Date().toISOString()
+  };
+}
+
+// ============================================================================
 // UTILITY FUNCTIONS
 // ============================================================================
 
@@ -440,6 +644,7 @@ function calculateSimilarity(str1, str2) {
 
 if (typeof window !== 'undefined') {
   window.SkillMatcher = {
+    // Legacy methods (v1)
     matchSkillConcepts,
     matchDesiredSkills,
     normalizeUserSkills,
@@ -447,12 +652,17 @@ if (typeof window !== 'undefined') {
     calculateSkillFitScore,
     getSkillFitLabel,
     formatForAirtable,
-    toCanonicalKey
+    toCanonicalKey,
+    // v2 methods - uses FitScoreCalculator
+    analyzeJobSkillFitV2,
+    markUserMatches,
+    formatForAirtableV2
   };
 }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    // Legacy methods (v1)
     matchSkillConcepts,
     matchDesiredSkills,
     normalizeUserSkills,
@@ -460,6 +670,10 @@ if (typeof module !== 'undefined' && module.exports) {
     calculateSkillFitScore,
     getSkillFitLabel,
     formatForAirtable,
-    toCanonicalKey
+    toCanonicalKey,
+    // v2 methods - uses FitScoreCalculator
+    analyzeJobSkillFitV2,
+    markUserMatches,
+    formatForAirtableV2
   };
 }

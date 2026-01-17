@@ -1,17 +1,89 @@
 /**
- * Job Filter - Skill Normalizer
+ * Job Filter - Skill Normalizer (v2 Upgrade)
  *
- * Normalizes raw skill phrases to canonical skill concepts using a 4-pass approach:
+ * Normalizes raw skill phrases to canonical skill concepts using a 5-pass approach:
  *
+ * PASS 0: Alias Resolution - Check SKILL_ALIASES map (GA4 → Google Analytics 4) (NEW v2)
  * PASS 1: Exact Match - Direct lookup in taxonomy
  * PASS 2: Canonical Rules - Apply manual mappings (e.g., "CRO" → "conversion rate optimization")
- * PASS 3: Fuzzy Match - Use fuzzy matcher against taxonomy names + aliases
+ * PASS 3: Fuzzy Match - Use fuzzy matcher with DYNAMIC thresholds (NEW v2)
+ *         - Short strings (<5 chars): threshold 0.2 (strict, for GA4, CRM)
+ *         - Medium strings (5-15 chars): threshold 0.35 (balanced, for HubSpot, Snowflake)
+ *         - Long phrases (>15 chars): threshold 0.50 (loose, for lifecycle marketing)
  * PASS 4: Synonym Resolution - Check if phrase is a synonym of a known skill
+ *
+ * v2 Upgrade Features:
+ * - Dynamic Fuse.js thresholds based on string length
+ * - Alias matching using SKILL_ALIASES map
+ * - ignoreLocation: true for acronyms, false for phrases
+ * - Evidence tracking for match type and confidence
  *
  * Also handles:
  * - Deduplication by canonical key
  * - Confidence scoring for each match
  */
+
+// ============================================================================
+// DYNAMIC FUSE.JS THRESHOLDS (v2 Upgrade)
+// ============================================================================
+
+/**
+ * Get dynamic Fuse.js threshold based on string length
+ * @param {string} phrase - Input phrase
+ * @returns {Object} Fuse.js options with dynamic threshold
+ */
+function getDynamicFuseOptions(phrase) {
+  const length = phrase ? phrase.length : 0;
+
+  // Short strings (<5 chars): strict threshold for acronyms like GA4, CRM, SQL
+  if (length < 5) {
+    return {
+      threshold: 0.2,
+      ignoreLocation: true,
+      distance: 10
+    };
+  }
+
+  // Medium strings (5-15 chars): balanced for tool names like HubSpot, Snowflake
+  if (length <= 15) {
+    return {
+      threshold: 0.35,
+      ignoreLocation: true,
+      distance: 50
+    };
+  }
+
+  // Long phrases (>15 chars): looser for multi-word skills like "lifecycle marketing"
+  return {
+    threshold: 0.50,
+    ignoreLocation: false,
+    distance: 100
+  };
+}
+
+/**
+ * Resolve phrase using SKILL_ALIASES map
+ * @param {string} phrase - Input phrase
+ * @returns {Object|null} Alias resolution result or null
+ */
+function resolveAlias(phrase) {
+  if (!phrase) return null;
+
+  const aliases = window.SkillConstants?.SKILL_ALIASES || new Map();
+  const normalized = phrase.toLowerCase().trim();
+
+  if (aliases.has(normalized)) {
+    const canonical = aliases.get(normalized);
+    return {
+      aliasedFrom: phrase,
+      resolvedTo: canonical,
+      confidence: 0.95,
+      matchType: 'alias'
+    };
+  }
+
+  return null;
+}
 
 // ============================================================================
 // SKILL NORMALIZER
@@ -37,7 +109,6 @@ function normalizeSkillConcept(phrase, options) {
   const config = (typeof window !== 'undefined' && window.SkillConstants?.EXTRACTION_CONFIG)
     ? window.SkillConstants.EXTRACTION_CONFIG
     : {};
-  const fuzzyThreshold = typeof config.FUZZY_THRESHOLD === 'number' ? config.FUZZY_THRESHOLD : 0.35;
   const minConfidence = typeof config.MIN_CONFIDENCE === 'number' ? config.MIN_CONFIDENCE : 0.5;
 
   // Clean and normalize input
@@ -49,7 +120,34 @@ function normalizeSkillConcept(phrase, options) {
       canonical: null,
       matchedSkill: null,
       confidence: 0,
-      matchType: 'none'
+      matchType: 'none',
+      evidence: 'Phrase too short or invalid'
+    };
+  }
+
+  // PASS 0 (NEW v2): Alias resolution (GA4 → Google Analytics 4)
+  const aliasMatch = resolveAlias(cleaned);
+  if (aliasMatch) {
+    // Now find the resolved skill in taxonomy
+    const resolvedSkill = findExactMatch(aliasMatch.resolvedTo, taxonomy);
+    if (resolvedSkill) {
+      return {
+        normalized: resolvedSkill.name,
+        canonical: resolvedSkill.canonical,
+        matchedSkill: resolvedSkill,
+        confidence: 0.95,
+        matchType: 'alias',
+        evidence: `Alias match: "${cleaned}" → "${aliasMatch.resolvedTo}"`
+      };
+    }
+    // Even if not in taxonomy, return the resolved form
+    return {
+      normalized: aliasMatch.resolvedTo,
+      canonical: toCanonicalKey(aliasMatch.resolvedTo),
+      matchedSkill: null,
+      confidence: 0.90,
+      matchType: 'alias',
+      evidence: `Alias match: "${cleaned}" → "${aliasMatch.resolvedTo}"`
     };
   }
 
@@ -61,7 +159,8 @@ function normalizeSkillConcept(phrase, options) {
       canonical: exactMatch.canonical,
       matchedSkill: exactMatch,
       confidence: 1.0,
-      matchType: 'exact'
+      matchType: 'exact',
+      evidence: `Exact match in taxonomy: "${exactMatch.name}"`
     };
   }
 
@@ -73,14 +172,18 @@ function normalizeSkillConcept(phrase, options) {
       canonical: canonicalMatch.canonical,
       matchedSkill: canonicalMatch,
       confidence: 0.95,
-      matchType: 'canonical'
+      matchType: 'canonical',
+      evidence: `Canonical rule match: "${cleaned}" → "${canonicalMatch.name}"`
     };
   }
 
-  // PASS 3: Fuzzy match
+  // PASS 3: Fuzzy match with DYNAMIC thresholds (v2 upgrade)
   if (fuzzyMatcher) {
+    // Get dynamic threshold based on phrase length
+    const fuseOptions = getDynamicFuseOptions(cleaned);
+
     const fuzzyResults = fuzzyMatcher.search(cleaned, { limit: 1 });
-    if (fuzzyResults.length > 0 && fuzzyResults[0].score <= fuzzyThreshold) {
+    if (fuzzyResults.length > 0 && fuzzyResults[0].score <= fuseOptions.threshold) {
       const match = fuzzyResults[0];
       // Convert fuzzy score (0=best) to confidence (1=best)
       const confidence = 1 - match.score;
@@ -90,7 +193,8 @@ function normalizeSkillConcept(phrase, options) {
         matchedSkill: match.item,
         confidence: Math.max(minConfidence, confidence),
         matchType: 'fuzzy',
-        matchedTerm: match.matchedTerm
+        matchedTerm: match.matchedTerm,
+        evidence: `Fuzzy match (threshold ${fuseOptions.threshold}): "${cleaned}" → "${match.item.name}" (score: ${match.score.toFixed(3)})`
       };
     }
   }
@@ -103,7 +207,8 @@ function normalizeSkillConcept(phrase, options) {
       canonical: synonymMatch.canonical,
       matchedSkill: synonymMatch,
       confidence: 0.85,
-      matchType: 'synonym'
+      matchType: 'synonym',
+      evidence: `Synonym match: "${cleaned}" → "${synonymMatch.name}"`
     };
   }
 
@@ -113,7 +218,8 @@ function normalizeSkillConcept(phrase, options) {
     canonical: toCanonicalKey(cleaned),
     matchedSkill: null,
     confidence: 0.3, // Low confidence for unmatched
-    matchType: 'unmatched'
+    matchType: 'unmatched',
+    evidence: 'No match found in taxonomy, aliases, or fuzzy search'
   };
 }
 
@@ -377,7 +483,10 @@ if (typeof window !== 'undefined') {
     filterOutTools,
     filterOutGeneric,
     getConfidenceLabel,
-    buildSkillLookupMap
+    buildSkillLookupMap,
+    // v2 additions
+    getDynamicFuseOptions,
+    resolveAlias
   };
 }
 
@@ -390,6 +499,9 @@ if (typeof module !== 'undefined' && module.exports) {
     filterOutTools,
     filterOutGeneric,
     getConfidenceLabel,
-    buildSkillLookupMap
+    buildSkillLookupMap,
+    // v2 additions
+    getDynamicFuseOptions,
+    resolveAlias
   };
 }

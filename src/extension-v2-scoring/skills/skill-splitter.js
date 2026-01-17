@@ -16,6 +16,18 @@
 // MAIN SPLITTING FUNCTION
 // ============================================================================
 
+// Known single-character skills (programming languages)
+const SINGLE_CHAR_SKILLS = new Set(['r', 'c']);
+
+/**
+ * Check if a skill is a valid single-character skill
+ * @param {string} skill - Skill to check
+ * @returns {boolean} True if valid single-char skill
+ */
+function isValidSingleCharSkill(skill) {
+  return skill && skill.length === 1 && SINGLE_CHAR_SKILLS.has(skill.toLowerCase());
+}
+
 /**
  * Split a phrase that may contain multiple skills
  * @param {string} phrase - Raw phrase from job description
@@ -77,9 +89,10 @@ function splitMultiSkills(phrase, options = {}) {
   }
 
   // Step 3: Clean and deduplicate
+  // Allow single-char skills for known programming languages (R, C)
   const cleaned_skills = skills
     .map(s => cleanSkillFragment(s))
-    .filter(s => s && s.length >= 2);
+    .filter(s => s && (s.length >= 2 || isValidSingleCharSkill(s)));
 
   return deduplicateSkills(cleaned_skills);
 }
@@ -360,7 +373,9 @@ if (typeof window !== 'undefined') {
     cleanSkillFragment,
     deduplicateSkills,
     findKnownSkill,
-    handleEdgeCases
+    handleEdgeCases,
+    isValidSingleCharSkill,
+    SINGLE_CHAR_SKILLS
   };
 }
 
@@ -377,6 +392,8 @@ if (typeof module !== 'undefined' && module.exports) {
     cleanSkillFragment,
     deduplicateSkills,
     findKnownSkill,
-    handleEdgeCases
+    handleEdgeCases,
+    isValidSingleCharSkill,
+    SINGLE_CHAR_SKILLS
   };
 }

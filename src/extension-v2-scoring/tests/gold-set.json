@@ -1,0 +1,287 @@
+{
+  "version": "1.0",
+  "description": "Gold set for evaluating skill extraction pipeline - 25 real job description samples",
+  "evaluationMetrics": {
+    "targetRecall": 0.85,
+    "targetPrecision": 0.75,
+    "targetSoftSkillRejectionRate": 1.0,
+    "targetCandidateBucketSize": 0.15
+  },
+  "testCases": [
+    {
+      "id": "1",
+      "title": "Senior Product Manager",
+      "company": "TechCorp",
+      "source": "LinkedIn",
+      "description": "We are looking for a Senior Product Manager to lead our growth initiatives. Requirements: - 5+ years of product management experience - Strong SQL and data analysis skills - Experience with experimentation and A/B testing - Proficiency in product strategy and roadmap development - Experience with HubSpot or similar CRM - GA4 and analytics tools Nice to have: - Python scripting skills - Experience with Amplitude or Mixpanel - Excellent communication and leadership skills",
+      "expectedCoreSkills": ["SQL", "data analysis", "experimentation", "A/B testing", "product strategy", "Python"],
+      "expectedTools": ["HubSpot", "GA4", "Amplitude", "Mixpanel"],
+      "expectedRejected": ["communication", "leadership"],
+      "expectedFitScore": 0.78
+    },
+    {
+      "id": "2",
+      "title": "Growth Marketing Manager",
+      "company": "SaaSStartup",
+      "source": "Greenhouse",
+      "description": "Growth Marketing Manager needed for fast-paced startup. Required: Lifecycle marketing expertise, Customer segmentation and funnel optimization, Proficiency in Salesforce, Marketo, and Braze, SQL for data analysis, Experience scaling customer acquisition. Preferred: Python for automation, Experience with Looker or Tableau, Knowledge of conversion rate optimization. We value teamwork and collaboration.",
+      "expectedCoreSkills": ["lifecycle marketing", "customer segmentation", "funnel optimization", "SQL", "data analysis", "conversion rate optimization"],
+      "expectedTools": ["Salesforce", "Marketo", "Braze", "Looker", "Tableau"],
+      "expectedRejected": ["teamwork", "collaboration"],
+      "expectedFitScore": 0.72
+    },
+    {
+      "id": "3",
+      "title": "Data Analyst",
+      "company": "FinanceInc",
+      "source": "Lever",
+      "description": "Join our analytics team as a Data Analyst. You must have: Expert SQL skills (required), Python or R programming, Statistical analysis and data modeling experience, Experience with Snowflake or BigQuery, Tableau or Power BI for visualization. Bonus: Machine learning fundamentals, dbt experience. Looking for a detail-oriented self-starter with problem-solving abilities.",
+      "expectedCoreSkills": ["SQL", "Python", "R", "statistical analysis", "data modeling", "machine learning"],
+      "expectedTools": ["Snowflake", "BigQuery", "Tableau", "Power BI", "dbt"],
+      "expectedRejected": ["detail-oriented", "self-starter", "problem-solving"],
+      "expectedFitScore": 0.82
+    },
+    {
+      "id": "4",
+      "title": "Revenue Operations Manager",
+      "company": "B2BSoftware",
+      "source": "LinkedIn",
+      "description": "RevOps Manager to optimize our go-to-market operations. Requirements include: Revenue operations experience, CRM strategy and Salesforce administration, Data analysis and reporting using SQL, Experience with Outreach and Gong, Pipeline management and forecasting. Nice to have: Python scripting, Experience with ZoomInfo or Clearbit, Strong communication skills.",
+      "expectedCoreSkills": ["revenue operations", "CRM strategy", "data analysis", "SQL", "pipeline management", "forecasting"],
+      "expectedTools": ["Salesforce", "Outreach", "Gong", "ZoomInfo", "Clearbit"],
+      "expectedRejected": ["communication"],
+      "expectedFitScore": 0.75
+    },
+    {
+      "id": "5",
+      "title": "Marketing Operations Specialist",
+      "company": "MarTechCo",
+      "source": "Greenhouse",
+      "description": "Marketing Ops role focused on automation and analytics. Must have experience with: Marketing automation platforms (Marketo, Pardot), SQL for data extraction, Campaign analytics and reporting, A/B testing and experimentation, Email marketing strategy. Preferred: JavaScript for custom integrations, Segment or mParticle CDP experience, Google Analytics 4. Team player with attention to detail.",
+      "expectedCoreSkills": ["marketing automation", "SQL", "campaign analytics", "A/B testing", "experimentation", "email marketing", "JavaScript"],
+      "expectedTools": ["Marketo", "Pardot", "Segment", "mParticle", "Google Analytics 4"],
+      "expectedRejected": ["team player", "attention to detail"],
+      "expectedFitScore": 0.68
+    },
+    {
+      "id": "6",
+      "title": "Customer Success Manager",
+      "company": "CustomerFirst",
+      "source": "LinkedIn",
+      "description": "CSM to drive customer retention and expansion. You will need: Customer lifecycle management experience, Data analysis skills (SQL preferred), Experience with Gainsight or Totango, CRM proficiency (Salesforce), Understanding of SaaS metrics (NRR, churn). Plus: Intercom or Zendesk experience. Must have excellent communication and interpersonal skills.",
+      "expectedCoreSkills": ["customer lifecycle management", "data analysis", "SQL"],
+      "expectedTools": ["Gainsight", "Totango", "Salesforce", "Intercom", "Zendesk"],
+      "expectedRejected": ["communication", "interpersonal skills"],
+      "expectedFitScore": 0.65
+    },
+    {
+      "id": "7",
+      "title": "Business Intelligence Analyst",
+      "company": "DataDriven",
+      "source": "Lever",
+      "description": "BI Analyst to build dashboards and insights. Required qualifications: Advanced SQL skills, Data modeling and warehouse design, Looker or Tableau expertise, Python for data transformation, Statistical analysis. Desired: dbt or Airflow experience, BigQuery or Redshift, Strong analytical thinking and problem-solving.",
+      "expectedCoreSkills": ["SQL", "data modeling", "Python", "data transformation", "statistical analysis"],
+      "expectedTools": ["Looker", "Tableau", "dbt", "Airflow", "BigQuery", "Redshift"],
+      "expectedRejected": ["analytical thinking", "problem-solving"],
+      "expectedFitScore": 0.80
+    },
+    {
+      "id": "8",
+      "title": "Demand Generation Manager",
+      "company": "B2BMarketing",
+      "source": "LinkedIn",
+      "description": "Lead our demand gen efforts. You should have: Experience with ABM strategies, Proficiency in 6sense or Demandbase, Content marketing and SEO, HubSpot or Marketo, SQL for attribution analysis, Google Ads and LinkedIn Ads. Nice to have: Drift or Qualified for conversational marketing. Results-oriented with strong communication.",
+      "expectedCoreSkills": ["ABM", "account based marketing", "content marketing", "SEO", "SQL", "attribution analysis"],
+      "expectedTools": ["6sense", "Demandbase", "HubSpot", "Marketo", "Google Ads", "LinkedIn Ads", "Drift", "Qualified"],
+      "expectedRejected": ["results-oriented", "communication"],
+      "expectedFitScore": 0.70
+    },
+    {
+      "id": "9",
+      "title": "Product Analyst",
+      "company": "ProductLed",
+      "source": "Greenhouse",
+      "description": "Product Analyst for our PLG motion. Requirements: SQL expertise (must have), Product analytics with Amplitude or Mixpanel, Experimentation design and analysis, Python for data analysis, User behavior analysis. Preferred: Pendo or FullStory, Segment experience. Self-motivated with attention to detail.",
+      "expectedCoreSkills": ["SQL", "product analytics", "experimentation", "Python", "data analysis", "user behavior analysis"],
+      "expectedTools": ["Amplitude", "Mixpanel", "Pendo", "FullStory", "Segment"],
+      "expectedRejected": ["self-motivated", "attention to detail"],
+      "expectedFitScore": 0.76
+    },
+    {
+      "id": "10",
+      "title": "E-commerce Manager",
+      "company": "RetailBrand",
+      "source": "LinkedIn",
+      "description": "E-commerce Manager for our DTC brand. Looking for: Shopify Plus experience, Google Analytics 4 and GA4 events, Klaviyo email marketing, Facebook Ads and Meta advertising, Conversion rate optimization. Plus: Attentive SMS, Triple Whale attribution. Must be a team player with strong organizational skills.",
+      "expectedCoreSkills": ["conversion rate optimization"],
+      "expectedTools": ["Shopify Plus", "Google Analytics 4", "GA4", "Klaviyo", "Facebook Ads", "Meta", "Attentive", "Triple Whale"],
+      "expectedRejected": ["team player", "organizational skills"],
+      "expectedFitScore": 0.60
+    },
+    {
+      "id": "11",
+      "title": "Marketing Analyst",
+      "company": "AgencyCo",
+      "source": "Lever",
+      "description": "Marketing Analyst to support client analytics. You need: SQL and data visualization, Google Analytics and GA4, Looker Studio or Data Studio, Excel and Google Sheets (advanced), Marketing attribution modeling. Nice to have: Python, R, Supermetrics. Detail-oriented with problem-solving skills.",
+      "expectedCoreSkills": ["SQL", "data visualization", "marketing attribution", "Excel"],
+      "expectedTools": ["Google Analytics", "GA4", "Looker Studio", "Data Studio", "Google Sheets", "Supermetrics"],
+      "expectedRejected": ["detail-oriented", "problem-solving"],
+      "expectedFitScore": 0.72
+    },
+    {
+      "id": "12",
+      "title": "CRM Manager",
+      "company": "SalesOps",
+      "source": "LinkedIn",
+      "description": "CRM Manager to own our Salesforce instance. Requirements: Salesforce administration and configuration, SQL for reporting, Data hygiene and deduplication, Integration with marketing tools, Process automation with Flows. Preferred: Salesforce Marketing Cloud, CPQ experience. Strong communication and leadership abilities.",
+      "expectedCoreSkills": ["Salesforce administration", "SQL", "data hygiene", "process automation"],
+      "expectedTools": ["Salesforce", "Salesforce Marketing Cloud", "CPQ"],
+      "expectedRejected": ["communication", "leadership"],
+      "expectedFitScore": 0.68
+    },
+    {
+      "id": "13",
+      "title": "Growth Product Manager",
+      "company": "GrowthStartup",
+      "source": "Greenhouse",
+      "description": "Growth PM to drive user activation. You bring: Product-led growth experience, Experimentation and A/B testing, SQL for analysis, Amplitude or Mixpanel, User onboarding optimization, Feature adoption analysis. Plus: Python, Segment CDP. Collaborative team player.",
+      "expectedCoreSkills": ["product-led growth", "experimentation", "A/B testing", "SQL", "user onboarding", "feature adoption"],
+      "expectedTools": ["Amplitude", "Mixpanel", "Segment"],
+      "expectedRejected": ["collaborative", "team player"],
+      "expectedFitScore": 0.74
+    },
+    {
+      "id": "14",
+      "title": "Digital Marketing Manager",
+      "company": "DigitalAgency",
+      "source": "LinkedIn",
+      "description": "Digital Marketing Manager for full-funnel campaigns. Must have: Paid media experience (Google Ads, Facebook Ads, LinkedIn Ads), SEO and content strategy, Marketing automation (HubSpot or Marketo), Google Analytics 4, Conversion tracking and attribution. Desired: Programmatic advertising, DV360. Excellent communication skills required.",
+      "expectedCoreSkills": ["paid media", "SEO", "content strategy", "marketing automation", "conversion tracking", "attribution", "programmatic advertising"],
+      "expectedTools": ["Google Ads", "Facebook Ads", "LinkedIn Ads", "HubSpot", "Marketo", "Google Analytics 4", "DV360"],
+      "expectedRejected": ["communication"],
+      "expectedFitScore": 0.70
+    },
+    {
+      "id": "15",
+      "title": "Sales Operations Analyst",
+      "company": "SalesForce",
+      "source": "Lever",
+      "description": "Sales Ops Analyst to optimize sales processes. Requirements: Salesforce reporting and dashboards, SQL for data analysis, Pipeline analytics, Territory planning, Forecasting models. Nice to have: Tableau, Clari, Gong. Self-starter with attention to detail.",
+      "expectedCoreSkills": ["Salesforce reporting", "SQL", "data analysis", "pipeline analytics", "territory planning", "forecasting"],
+      "expectedTools": ["Salesforce", "Tableau", "Clari", "Gong"],
+      "expectedRejected": ["self-starter", "attention to detail"],
+      "expectedFitScore": 0.75
+    },
+    {
+      "id": "16",
+      "title": "Lifecycle Marketing Manager",
+      "company": "SubscriptionCo",
+      "source": "LinkedIn",
+      "description": "Own our lifecycle marketing strategy. You need: Lifecycle marketing and retention, Customer segmentation, Email marketing (Klaviyo or Braze), SMS marketing (Attentive or Postscript), SQL for analysis, Churn prevention strategies. Plus: Python automation. Strong communicator.",
+      "expectedCoreSkills": ["lifecycle marketing", "retention", "customer segmentation", "email marketing", "SMS marketing", "SQL", "churn prevention"],
+      "expectedTools": ["Klaviyo", "Braze", "Attentive", "Postscript"],
+      "expectedRejected": ["communicator"],
+      "expectedFitScore": 0.78
+    },
+    {
+      "id": "17",
+      "title": "Data Engineer",
+      "company": "DataPlatform",
+      "source": "Greenhouse",
+      "description": "Data Engineer to build our data infrastructure. Required: SQL and Python, ETL/ELT pipelines, Snowflake or BigQuery, dbt for transformations, Airflow or Prefect, Data modeling. Preferred: Fivetran, Segment, AWS or GCP. Problem-solver with strong analytical skills.",
+      "expectedCoreSkills": ["SQL", "Python", "ETL", "ELT", "data modeling"],
+      "expectedTools": ["Snowflake", "BigQuery", "dbt", "Airflow", "Prefect", "Fivetran", "Segment", "AWS", "GCP"],
+      "expectedRejected": ["problem-solver", "analytical skills"],
+      "expectedFitScore": 0.85
+    },
+    {
+      "id": "18",
+      "title": "Performance Marketing Manager",
+      "company": "PerformanceCo",
+      "source": "LinkedIn",
+      "description": "Performance Marketing Manager for paid acquisition. Must have: Google Ads (Search, Display, YouTube), Facebook/Meta Ads, LinkedIn Ads, Attribution modeling, SQL for analysis, Budget optimization. Nice to have: TikTok Ads, The Trade Desk. Results-driven with attention to detail.",
+      "expectedCoreSkills": ["paid acquisition", "attribution modeling", "SQL", "budget optimization"],
+      "expectedTools": ["Google Ads", "Facebook Ads", "Meta Ads", "LinkedIn Ads", "TikTok Ads", "The Trade Desk"],
+      "expectedRejected": ["results-driven", "attention to detail"],
+      "expectedFitScore": 0.72
+    },
+    {
+      "id": "19",
+      "title": "Customer Analytics Manager",
+      "company": "CustomerData",
+      "source": "Lever",
+      "description": "Customer Analytics Manager for insights team. You bring: Customer analytics and segmentation, SQL (expert level), Python or R for analysis, CDP experience (Segment, mParticle), Looker or Tableau, Cohort analysis and LTV modeling. Plus: Machine learning. Curious with strong communication.",
+      "expectedCoreSkills": ["customer analytics", "segmentation", "SQL", "Python", "R", "cohort analysis", "LTV modeling", "machine learning"],
+      "expectedTools": ["Segment", "mParticle", "Looker", "Tableau"],
+      "expectedRejected": ["curious", "communication"],
+      "expectedFitScore": 0.80
+    },
+    {
+      "id": "20",
+      "title": "Marketing Technology Manager",
+      "company": "MarTechStack",
+      "source": "LinkedIn",
+      "description": "MarTech Manager to own our marketing stack. Requirements: Marketing technology strategy, Integration architecture, Salesforce and HubSpot, CDP implementation (Segment), SQL for data, JavaScript for tracking, Vendor management. Preferred: APIs and webhooks. Strong organizational and communication skills.",
+      "expectedCoreSkills": ["marketing technology", "integration architecture", "SQL", "JavaScript", "vendor management"],
+      "expectedTools": ["Salesforce", "HubSpot", "Segment"],
+      "expectedRejected": ["organizational", "communication"],
+      "expectedFitScore": 0.70
+    },
+    {
+      "id": "21",
+      "title": "Email Marketing Specialist",
+      "company": "EmailFirst",
+      "source": "Greenhouse",
+      "description": "Email Marketing Specialist for our campaigns. You need: Email marketing strategy, HTML/CSS for email, Klaviyo or Mailchimp, A/B testing, Deliverability optimization, Segmentation. Nice to have: SQL, Litmus, Email on Acid. Detail-oriented team player.",
+      "expectedCoreSkills": ["email marketing", "HTML", "CSS", "A/B testing", "deliverability", "segmentation", "SQL"],
+      "expectedTools": ["Klaviyo", "Mailchimp", "Litmus"],
+      "expectedRejected": ["detail-oriented", "team player"],
+      "expectedFitScore": 0.65
+    },
+    {
+      "id": "22",
+      "title": "Web Analytics Manager",
+      "company": "WebAnalytics",
+      "source": "LinkedIn",
+      "description": "Web Analytics Manager for our digital properties. Must have: Google Analytics 4 implementation, Tag management (GTM), Conversion tracking, SQL for data analysis, A/B testing platforms (Optimizely, VWO), Attribution analysis. Preferred: JavaScript, BigQuery. Analytical thinker.",
+      "expectedCoreSkills": ["GA4 implementation", "tag management", "conversion tracking", "SQL", "A/B testing", "attribution analysis", "JavaScript"],
+      "expectedTools": ["Google Analytics 4", "GTM", "Optimizely", "VWO", "BigQuery"],
+      "expectedRejected": ["analytical thinker"],
+      "expectedFitScore": 0.75
+    },
+    {
+      "id": "23",
+      "title": "Partner Marketing Manager",
+      "company": "PartnerCo",
+      "source": "Lever",
+      "description": "Partner Marketing Manager for our ecosystem. Requirements: Partner marketing programs, Co-marketing campaigns, Salesforce PRM, HubSpot, Content creation, SQL for reporting. Nice to have: Impact.com, PartnerStack. Excellent communication and relationship-building.",
+      "expectedCoreSkills": ["partner marketing", "co-marketing", "content creation", "SQL"],
+      "expectedTools": ["Salesforce", "HubSpot", "Impact.com", "PartnerStack"],
+      "expectedRejected": ["communication", "relationship-building"],
+      "expectedFitScore": 0.68
+    },
+    {
+      "id": "24",
+      "title": "GTM Strategy Manager",
+      "company": "GoToMarket",
+      "source": "LinkedIn",
+      "description": "GTM Strategy Manager for market expansion. You bring: Go-to-market strategy, Market analysis, Competitive intelligence, Pricing strategy, SQL for data, Salesforce and HubSpot, Cross-functional collaboration. Preferred: Product marketing, ABM. Strategic thinker with leadership skills.",
+      "expectedCoreSkills": ["go-to-market strategy", "market analysis", "competitive intelligence", "pricing strategy", "SQL", "product marketing", "ABM"],
+      "expectedTools": ["Salesforce", "HubSpot"],
+      "expectedRejected": ["strategic thinker", "leadership"],
+      "expectedFitScore": 0.72
+    },
+    {
+      "id": "25",
+      "title": "Conversion Rate Optimization Manager",
+      "company": "CROAgency",
+      "source": "Greenhouse",
+      "description": "CRO Manager to drive website optimization. Must have: Conversion rate optimization, A/B testing (Optimizely, VWO, AB Tasty), User research and heatmaps (Hotjar, FullStory), Landing page optimization, SQL for analysis, Google Analytics 4. Nice to have: JavaScript, Unbounce. Data-driven with attention to detail.",
+      "expectedCoreSkills": ["conversion rate optimization", "A/B testing", "user research", "landing page optimization", "SQL"],
+      "expectedTools": ["Optimizely", "VWO", "AB Tasty", "Hotjar", "FullStory", "Google Analytics 4", "Unbounce"],
+      "expectedRejected": ["data-driven", "attention to detail"],
+      "expectedFitScore": 0.78
+    }
+  ]
+}
