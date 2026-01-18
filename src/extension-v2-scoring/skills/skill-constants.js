@@ -290,7 +290,8 @@ const FIT_SCORE_CONFIG = {
 const FORCED_CORE_SKILLS = new Set([
   "sql",
   "python",
-  "r",
+  // REMOVED: "r" - single char causes too many false positives
+  // R programming is handled with explicit context matching in skill-extractor.js
   "javascript",
   "java",
   "c++",
@@ -335,11 +336,13 @@ const FORCED_CORE_SKILLS = new Set([
 // ============================================================================
 
 const SOFT_SKILLS_PATTERNS = [
-  // Generic soft skills
+  // Generic soft skills - including compound forms
   /\b(communication|leadership|teamwork|collaboration|problem[\s-]solving)\b/i,
+  /\bteam\s+leadership\b/i,  // Explicitly catch "Team Leadership"
   /\b(motivated|enthusiastic|passionate|proactive|driven)\b/i,
   /\b(detail[\s-]oriented|results[\s-]oriented|goal[\s-]oriented)\b/i,
   /\b(team\s+player|self[\s-]starter|fast[\s-]learner|quick[\s-]learner)\b/i,
+  /\b(interpersonal|organizational)\b/i,
 
   // Ability/skills phrases
   /\b(strong|excellent|good|great)\s+(communication|interpersonal|organizational)\b/i,
@@ -353,7 +356,17 @@ const SOFT_SKILLS_PATTERNS = [
   // Work style phrases
   /\bwork\s+(independently|under\s+pressure)\b/i,
   /\b(attention\s+to\s+detail|time\s+management|multitasking)\b/i,
-  /\b(flexible|adaptable|resilient)\b/i
+  /\b(flexible|adaptable|resilient)\b/i,
+
+  // Additional soft skills commonly leaking through
+  /\b(relationship\s+building|relationship\s+management)\b/i,
+  /\b(people\s+management|stakeholder\s+management)\b/i,
+  /\b(written\s+communication|verbal\s+communication|oral\s+communication)\b/i,
+  /\b(negotiation|conflict\s+resolution|decision[\s-]making)\b/i,
+  /\b(mentoring|coaching|training)\b/i,
+  /\b(influencing|persuasion|diplomacy)\b/i,
+  /\b(accountability|ownership|initiative)\b/i,
+  /\b(prioritization|delegation|coordination)\b/i
 ];
 
 // ============================================================================

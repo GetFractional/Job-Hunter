@@ -16,16 +16,21 @@
 // MAIN SPLITTING FUNCTION
 // ============================================================================
 
-// Known single-character skills (programming languages)
-const SINGLE_CHAR_SKILLS = new Set(['r', 'c']);
+// REMOVED: Single-character skills cause too many false positives
+// 'R' and 'C' should only be matched when explicitly mentioned with context
+// like "R programming", "R language", "statistical programming in R"
+// The skill-extractor handles these cases with explicit pattern matching
+const SINGLE_CHAR_SKILLS = new Set([]); // Empty - disabled
 
 /**
  * Check if a skill is a valid single-character skill
+ * Currently disabled due to false positive issues
  * @param {string} skill - Skill to check
- * @returns {boolean} True if valid single-char skill
+ * @returns {boolean} Always returns false now
  */
 function isValidSingleCharSkill(skill) {
-  return skill && skill.length === 1 && SINGLE_CHAR_SKILLS.has(skill.toLowerCase());
+  // Disabled - single char skills cause too many false positives
+  return false;
 }
 
 /**

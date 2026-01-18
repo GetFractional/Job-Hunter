@@ -94,41 +94,110 @@ function extractNounPhrasesWithCompromise(text) {
 
 /**
  * Fallback noun phrase extraction without Compromise.js
+ * Enhanced to extract more skill-like phrases from job descriptions
  * @param {string} text - Text to extract from
  * @returns {string[]} Array of noun phrases
  */
 function extractNounPhrasesFallback(text) {
   if (!text) return [];
 
-  const phrases = [];
+  const phrases = new Set();
 
-  // Extract capitalized phrases (likely proper nouns/tools)
+  // Pattern 1: Capitalized phrases (proper nouns/tools like "Google Analytics", "HubSpot")
   const capitalizedPattern = /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g;
   let match;
   while ((match = capitalizedPattern.exec(text)) !== null) {
     const phrase = match[0];
     if (phrase.length >= 2 && phrase.length <= 50) {
-      phrases.push(phrase);
+      phrases.add(phrase);
     }
   }
 
-  // Extract common skill patterns
+  // Pattern 2: Common multi-word skill patterns (e.g., "lifecycle marketing", "data analysis")
   const skillPatterns = [
-    /\b(?:data|product|lifecycle|customer|revenue|growth|marketing)\s+(?:analysis|strategy|operations|management|optimization)\b/gi,
-    /\b[a-z]+\s+(?:marketing|analysis|development|engineering|operations)\b/gi
+    // Core business skills
+    /\b(?:data|product|lifecycle|customer|revenue|growth|marketing|content|demand)\s+(?:analysis|strategy|operations|management|optimization|marketing|generation|development|engineering)\b/gi,
+    /\b[a-z]+\s+(?:marketing|analysis|development|engineering|operations|strategy|optimization|management|generation|automation)\b/gi,
+
+    // Technical skills
+    /\b(?:machine\s+learning|deep\s+learning|data\s+science|data\s+engineering|data\s+modeling)\b/gi,
+    /\b(?:api\s+integration|system\s+integration|etl|data\s+pipeline)\b/gi,
+    /\b(?:a\/b\s+testing|split\s+testing|experimentation|multivariate\s+testing)\b/gi,
+
+    // Analytics & BI
+    /\b(?:web\s+analytics|product\s+analytics|marketing\s+analytics|business\s+intelligence)\b/gi,
+    /\b(?:cohort\s+analysis|funnel\s+analysis|attribution\s+modeling|statistical\s+analysis)\b/gi,
+    /\b(?:kpi|okr|roi|cac|ltv|arpu|mrr|arr)\b/gi,
+
+    // Marketing specific
+    /\b(?:seo|sem|ppc|cro|abm|plg)\b/gi,
+    /\b(?:email\s+marketing|content\s+marketing|social\s+media\s+marketing|performance\s+marketing)\b/gi,
+    /\b(?:lead\s+generation|demand\s+generation|lead\s+nurturing|customer\s+acquisition)\b/gi,
+    /\b(?:conversion\s+rate\s+optimization|landing\s+page\s+optimization|funnel\s+optimization)\b/gi,
+    /\b(?:go[\s-]to[\s-]market|gtm|product[\s-]led\s+growth|sales[\s-]led\s+growth)\b/gi,
+    /\b(?:account[\s-]based\s+marketing|field\s+marketing|partner\s+marketing|influencer\s+marketing)\b/gi,
+
+    // Operations
+    /\b(?:revenue\s+operations|marketing\s+operations|sales\s+operations|revops|mops|salesops)\b/gi,
+    /\b(?:crm\s+administration|process\s+optimization|workflow\s+automation)\b/gi,
+    /\b(?:pipeline\s+management|territory\s+planning|sales\s+forecasting)\b/gi,
+
+    // Product & UX
+    /\b(?:product\s+management|product\s+strategy|user\s+research|ux\s+design|ui\s+design)\b/gi,
+    /\b(?:roadmap\s+planning|feature\s+prioritization|customer\s+journey\s+mapping)\b/gi,
+
+    // Programming languages (must be explicit matches)
+    /\b(?:python|sql|javascript|typescript|java|ruby|scala|golang|swift|kotlin)\b/gi,
+
+    // Common acronyms in context
+    /\b(?:bi|ml|ai|nlp|etl|api|crm|erp|cdp)\b/gi
   ];
 
   for (const pattern of skillPatterns) {
     while ((match = pattern.exec(text)) !== null) {
       const phrase = match[0];
-      if (phrase.length >= 3 && phrase.length <= 50) {
-        phrases.push(phrase);
+      if (phrase.length >= 2 && phrase.length <= 50) {
+        phrases.add(phrase);
       }
     }
     pattern.lastIndex = 0;
   }
 
-  return phrases;
+  // Pattern 3: Extract phrases after "experience with/in" indicators
+  const indicatorPatterns = [
+    /experience\s+(?:in|with)\s+([a-z][a-z\s\/&-]{2,40})(?=[,.\n]|$)/gi,
+    /proficiency\s+(?:in|with)\s+([a-z][a-z\s\/&-]{2,40})(?=[,.\n]|$)/gi,
+    /expertise\s+(?:in|with)\s+([a-z][a-z\s\/&-]{2,40})(?=[,.\n]|$)/gi,
+    /knowledge\s+of\s+([a-z][a-z\s\/&-]{2,40})(?=[,.\n]|$)/gi,
+    /background\s+in\s+([a-z][a-z\s\/&-]{2,40})(?=[,.\n]|$)/gi
+  ];
+
+  for (const pattern of indicatorPatterns) {
+    while ((match = pattern.exec(text)) !== null) {
+      const phrase = match[1]?.trim();
+      if (phrase && phrase.length >= 3 && phrase.length <= 50) {
+        // Clean up trailing words that aren't part of the skill
+        const cleaned = phrase.replace(/\s+(and|or|with|for|to|of|in|at)$/i, '');
+        if (cleaned.length >= 3) {
+          phrases.add(cleaned);
+        }
+      }
+    }
+    pattern.lastIndex = 0;
+  }
+
+  // Pattern 4: Extract ALL-CAPS acronyms (CRM, SQL, API, etc.)
+  const acronymPattern = /\b[A-Z]{2,6}\b/g;
+  while ((match = acronymPattern.exec(text)) !== null) {
+    const acronym = match[0];
+    // Filter out common non-skill acronyms
+    const nonSkillAcronyms = new Set(['AND', 'THE', 'FOR', 'WITH', 'FROM', 'THAT', 'THIS', 'WILL', 'HAVE', 'YOUR', 'ABOUT', 'MORE', 'MUST', 'LIKE']);
+    if (!nonSkillAcronyms.has(acronym)) {
+      phrases.add(acronym);
+    }
+  }
+
+  return Array.from(phrases);
 }
 
 // ============================================================================
@@ -231,11 +300,16 @@ function extractRequiredSkillConcepts(jobDescriptionText, options = {}) {
   result.debug.afterNormalization = normalizedRequired.length + normalizedDesired.length;
 
   // Step 6: Build final skill arrays
+  // IMPORTANT: Preserve exact job language in 'name', use 'canonical' for matching
   result.required = normalizedRequired
     .filter(s => s.confidence >= minConfidence)
     .map(s => ({
-      name: s.matchedSkill?.name || s.normalized || s.original,
+      // Preserve exact job language - show what the job actually says
+      name: s.original || s.normalized || s.matchedSkill?.name,
+      // Canonical is used for deduplication and matching to user skills
       canonical: s.canonical || toCanonicalKey(s.original),
+      // Track the taxonomy skill name for reference (useful for ATS matching)
+      taxonomyMatch: s.matchedSkill?.name || null,
       category: s.matchedSkill?.category || 'Other',
       confidence: s.confidence,
       matchType: s.matchType || 'extracted'
@@ -244,8 +318,12 @@ function extractRequiredSkillConcepts(jobDescriptionText, options = {}) {
   result.desired = normalizedDesired
     .filter(s => s.confidence >= minConfidence)
     .map(s => ({
-      name: s.matchedSkill?.name || s.normalized || s.original,
+      // Preserve exact job language - show what the job actually says
+      name: s.original || s.normalized || s.matchedSkill?.name,
+      // Canonical is used for deduplication and matching to user skills
       canonical: s.canonical || toCanonicalKey(s.original),
+      // Track the taxonomy skill name for reference (useful for ATS matching)
+      taxonomyMatch: s.matchedSkill?.name || null,
       category: s.matchedSkill?.category || 'Other',
       confidence: s.confidence,
       matchType: s.matchType || 'extracted'
@@ -541,6 +619,10 @@ function parseSections(text) {
     fullText: text
   };
 
+  if (!text || typeof text !== 'string') {
+    return result;
+  }
+
   // Required section patterns - expanded to catch more job posting formats
   const requiredPatterns = [
     // Explicit "Required" headers
@@ -554,19 +636,28 @@ function parseSections(text) {
     // "Requirements" section
     /(?:^|\n)\s*requirements?\s*:?\s*([\s\S]*?)(?=(?:preferred|desired|nice[\s-]to[\s-]have|bonus|about|benefits|responsibilities|$))/gi,
     // "Skills" section without qualifier (assume required)
-    /(?:^|\n)\s*(?:key\s+)?skills?\s*:?\s*([\s\S]*?)(?=(?:preferred|desired|nice[\s-]to[\s-]have|bonus|about|benefits|responsibilities|$))/gi
+    /(?:^|\n)\s*(?:key\s+)?skills?\s*:?\s*([\s\S]*?)(?=(?:preferred|desired|nice[\s-]to[\s-]have|bonus|about|benefits|responsibilities|$))/gi,
+    // "What you'll bring" style (common on Indeed)
+    /what\s+you(?:'ll)?\s+bring\s*:?\s*([\s\S]*?)(?=(?:preferred|desired|nice|bonus|about|benefits|what\s+we|$))/gi,
+    // "Responsibilities" often contains skill indicators too
+    /(?:^|\n)\s*responsibilities\s*:?\s*([\s\S]*?)(?=(?:qualifications|requirements|skills|preferred|about|benefits|$))/gi,
+    // "About the role" sometimes has skills
+    /about\s+(?:the\s+)?role\s*:?\s*([\s\S]*?)(?=(?:qualifications|requirements|skills|preferred|about\s+us|benefits|$))/gi,
+    // "Experience" section
+    /(?:^|\n)\s*experience\s*:?\s*([\s\S]*?)(?=(?:qualifications|requirements|skills|preferred|about|benefits|$))/gi
   ];
 
   // Desired section patterns
   const desiredPatterns = [
     /(?:preferred|desired|nice[\s-]to[\s-]have|bonus|additional|plus)\s*(?:skills?|qualifications?|requirements?|experience)?\s*:?\s*([\s\S]*?)(?=(?:about\s+(?:us|the\s+company)|benefits|what\s+we\s+offer|responsibilities|$))/gi,
-    /it(?:'s)?\s+a\s+plus\s+if\s*:?\s*([\s\S]*?)(?=(?:about|benefits|what\s+we|$))/gi
+    /it(?:'s)?\s+a\s+plus\s+if\s*:?\s*([\s\S]*?)(?=(?:about|benefits|what\s+we|$))/gi,
+    /would\s+be\s+(?:nice|great|a\s+plus)\s*:?\s*([\s\S]*?)(?=(?:about|benefits|$))/gi
   ];
 
-  // Try to extract required section
+  // Try to extract required section - lowered minimum to 30 chars
   for (const pattern of requiredPatterns) {
     const match = pattern.exec(text);
-    if (match && match[1] && match[1].trim().length > 50) {
+    if (match && match[1] && match[1].trim().length > 30) {
       result.requiredSection = match[1].trim();
       break;
     }
@@ -576,7 +667,7 @@ function parseSections(text) {
   // Try to extract desired section
   for (const pattern of desiredPatterns) {
     const match = pattern.exec(text);
-    if (match && match[1] && match[1].trim().length > 20) {
+    if (match && match[1] && match[1].trim().length > 15) {
       result.desiredSection = match[1].trim();
       break;
     }
@@ -587,6 +678,8 @@ function parseSections(text) {
   // the full text as required (this is the conservative/safe approach)
   // Most job postings list core skills without explicit "Required:" headers
   if (!result.requiredSection) {
+    // Log for debugging
+    console.log('[SkillExtractor] No required section found, using full text');
     result.requiredSection = text;
   }
 
@@ -725,7 +818,7 @@ function extractIndicatorPhrases(text) {
 }
 
 /**
- * Extract direct matches from taxonomy
+ * Extract direct matches from taxonomy using word boundary matching
  * @param {string} text - Input text
  * @returns {string[]} Matched terms
  */
@@ -736,16 +829,50 @@ function extractTaxonomyMatches(text) {
   // Get taxonomy if available
   const taxonomy = window.SkillTaxonomy?.SKILL_TAXONOMY || [];
 
+  // Skills that require special handling due to short names or common substrings
+  const shortSkillsRequiringContext = new Set([
+    'r programming', 'r language', 'r statistics',  // R programming language
+    'c programming', 'c language',  // C programming language
+    'go programming', 'go language', 'golang'  // Go language
+  ]);
+
   for (const skill of taxonomy) {
-    // Check main name
-    if (lowerText.includes(skill.name.toLowerCase())) {
-      matches.push(skill.name);
+    const skillNameLower = skill.name.toLowerCase();
+
+    // Skip "R Programming" entirely - it causes too many false positives
+    // Only match if explicitly mentioned with context like "R programming" or "statistical R"
+    if (skillNameLower === 'r programming') {
+      // Only match if we see explicit R programming context
+      if (/\b(?:r\s+programming|r\s+language|statistical\s+r|r\s+(?:for\s+)?statistics|programming\s+in\s+r)\b/i.test(text)) {
+        matches.push('R Programming');
+      }
+      continue;
     }
 
-    // Check aliases
+    // Use word boundary matching for all other skills
+    // This prevents "marketing" from matching "remarketing" or "R" from matching "or"
+    const escapedName = skillNameLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const nameRegex = new RegExp(`\\b${escapedName}\\b`, 'i');
+
+    if (nameRegex.test(text)) {
+      matches.push(skill.name);
+      continue; // Found main name, no need to check aliases
+    }
+
+    // Check aliases with word boundary matching
     if (skill.aliases) {
       for (const alias of skill.aliases) {
-        if (lowerText.includes(alias.toLowerCase())) {
+        const aliasLower = alias.toLowerCase();
+
+        // Skip short/problematic aliases that need special handling
+        if (shortSkillsRequiringContext.has(aliasLower)) {
+          continue;
+        }
+
+        const escapedAlias = aliasLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const aliasRegex = new RegExp(`\\b${escapedAlias}\\b`, 'i');
+
+        if (aliasRegex.test(text)) {
           matches.push(alias);
           break; // Only add once per skill
         }

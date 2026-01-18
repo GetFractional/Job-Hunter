@@ -44,6 +44,7 @@
         "skills/skill-extractor.js",
         "skills/skill-matcher.js",
         "skills/skill-integration.js",
+        "skills/special-requirements.js",
         "skills/index.js",
         "scoring-engine.js",
         "results-dashboard.js",
@@ -78,6 +79,7 @@
         "skills/skill-extractor.js",
         "skills/skill-matcher.js",
         "skills/skill-integration.js",
+        "skills/special-requirements.js",
         "skills/index.js",
         "skill-match.css"
       ],
