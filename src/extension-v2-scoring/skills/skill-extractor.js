@@ -785,22 +785,29 @@ function extractBulletItems(text) {
  */
 function extractIndicatorPhrases(text) {
   const phrases = [];
-  const lowerText = text.toLowerCase();
 
-  // Patterns to find skills after indicators
+  // Patterns to find skills after indicators - ENHANCED for prose-style job descriptions
   const indicatorPatterns = [
-    /experience\s+(?:in|with)\s+([a-z][a-z\s\/&,()-]{2,50})/gi,
-    /proficiency\s+(?:in|with)\s+([a-z][a-z\s\/&,()-]{2,50})/gi,
-    /expertise\s+(?:in|with)\s+([a-z][a-z\s\/&,()-]{2,50})/gi,
-    /knowledge\s+of\s+([a-z][a-z\s\/&,()-]{2,50})/gi,
-    /skilled?\s+(?:in|at|with)\s+([a-z][a-z\s\/&,()-]{2,50})/gi,
-    /background\s+in\s+([a-z][a-z\s\/&,()-]{2,50})/gi,
-    /understanding\s+of\s+([a-z][a-z\s\/&,()-]{2,50})/gi,
+    /experience\s+(?:in|with)\s+([a-z][a-z\s\/&,()-]{2,80})/gi,
+    /proficiency\s+(?:in|with)\s+([a-z][a-z\s\/&,()-]{2,80})/gi,
+    /expertise\s+(?:in|with)\s+([a-z][a-z\s\/&,()-]{2,80})/gi,
+    /(?:deep|strong|solid)\s+expertise\s+(?:in|with)\s+([a-z][a-z\s\/&,()-]{2,80})/gi,
+    /knowledge\s+of\s+([a-z][a-z\s\/&,()-]{2,80})/gi,
+    /skilled?\s+(?:in|at|with)\s+([a-z][a-z\s\/&,()-]{2,80})/gi,
+    /background\s+in\s+([a-z][a-z\s\/&,()-]{2,80})/gi,
+    /understanding\s+of\s+([a-z][a-z\s\/&,()-]{2,80})/gi,
     /strong\s+([a-z][a-z\s\/&,()-]{2,40})\s+skills?/gi,
     /proven\s+([a-z][a-z\s\/&,()-]{2,40})\s+(?:skills?|ability|experience)/gi,
-    /responsible\s+for\s+([a-z][a-z\s\/&,()-]{2,50})/gi,
-    /accountable\s+for\s+([a-z][a-z\s\/&,()-]{2,50})/gi,
-    /experience\s+(?:scaling|building|owning)\s+([a-z][a-z\s\/&,()-]{2,50})/gi
+    /responsible\s+for\s+([a-z][a-z\s\/&,()-]{2,80})/gi,
+    /accountable\s+for\s+([a-z][a-z\s\/&,()-]{2,80})/gi,
+    /experience\s+(?:scaling|building|owning|managing|leading)\s+([a-z][a-z\s\/&,()-]{2,80})/gi,
+    // New patterns for prose-style descriptions
+    /(?:years?\s+of\s+)?experience\s+(?:in|with)\s+([a-z][a-z\s\/&,()-]{2,80})/gi,
+    /proven\s+(?:track\s+record|experience)\s+(?:in|with|of)\s+([a-z][a-z\s\/&,()-]{2,80})/gi,
+    /mastery\s+of\s+([a-z][a-z\s\/&,()-]{2,80})/gi,
+    /fluent\s+(?:in|with)\s+([a-z][a-z\s\/&,()-]{2,80})/gi,
+    /demonstrated\s+(?:expertise|experience|skill)\s+(?:in|with)\s+([a-z][a-z\s\/&,()-]{2,80})/gi,
+    /hands[\s-]on\s+experience\s+(?:with|in)\s+([a-z][a-z\s\/&,()-]{2,80})/gi
   ];
 
   for (const pattern of indicatorPatterns) {
@@ -808,7 +815,18 @@ function extractIndicatorPhrases(text) {
     while ((match = pattern.exec(text)) !== null) {
       const phrase = match[1].trim();
       if (phrase) {
-        phrases.push(phrase);
+        // If the phrase contains commas, split it into individual skills
+        if (phrase.includes(',')) {
+          const parts = phrase.split(/\s*,\s*|\s+and\s+|\s+or\s+/);
+          parts.forEach(part => {
+            const cleaned = part.trim().replace(/^(and|or)\s+/i, '');
+            if (cleaned && cleaned.length >= 2 && cleaned.length <= 60) {
+              phrases.push(cleaned);
+            }
+          });
+        } else {
+          phrases.push(phrase);
+        }
       }
     }
     pattern.lastIndex = 0;
@@ -892,23 +910,34 @@ function extractCommaSeparated(text) {
   const skills = [];
 
   // Look for patterns like "Skills: X, Y, Z" or "including X, Y, and Z"
+  // ENHANCED to catch more prose patterns
   const listPatterns = [
-    /(?:skills?|technologies|tools)\s*(?:include|:)\s*([^.]+)/gi,
-    /(?:including|such\s+as|e\.g\.?,?)\s*([^.]+)/gi
+    /(?:skills?|technologies|tools|platforms|systems)\s*(?:include|:)\s*([^.]+)/gi,
+    /(?:including|such\s+as|e\.g\.?,?|like)\s*([^.]+)/gi,
+    // Expertise/experience in lists
+    /expertise\s+in\s+([^.]+(?:,\s+[^.]+)+)/gi,
+    /experience\s+(?:with|in)\s+([^.]+(?:,\s+[^.]+)+)/gi,
+    // Proficiency patterns
+    /proficient\s+(?:in|with)\s+([^.]+(?:,\s+[^.]+)+)/gi,
+    // Managing/optimizing multiple things
+    /(?:managing|optimizing|building|scaling|leading)\s+([^.]+(?:,\s+[^.]+)+(?:\s+and\s+[^.]+)?)/gi
   ];
 
   for (const pattern of listPatterns) {
     let match;
     while ((match = pattern.exec(text)) !== null) {
       const listText = match[1];
-      // Split by comma, "and", "or"
-      const items = listText.split(/\s*,\s*|\s+and\s+|\s+or\s+/);
-      items.forEach(item => {
-        const cleaned = item.trim().replace(/^(and|or)\s+/i, '');
-        if (cleaned && cleaned.length >= 2 && cleaned.length <= 40) {
-          skills.push(cleaned);
-        }
-      });
+      // Only process if it looks like a list (has commas)
+      if (listText.includes(',')) {
+        // Split by comma, "and", "or"
+        const items = listText.split(/\s*,\s*|\s+and\s+|\s+or\s+/);
+        items.forEach(item => {
+          const cleaned = item.trim().replace(/^(and|or)\s+/i, '');
+          if (cleaned && cleaned.length >= 2 && cleaned.length <= 50) {
+            skills.push(cleaned);
+          }
+        });
+      }
     }
     pattern.lastIndex = 0;
   }

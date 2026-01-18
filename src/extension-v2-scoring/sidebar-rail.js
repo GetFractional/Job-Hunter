@@ -483,10 +483,17 @@ function updateProfileMismatchWarnings(sidebar, scoreResult) {
     warnings.push(`Experience gap: Job requires ${expItem.required_years}+ years`);
   }
 
-  // Check skills gap
+  // Check skills gap - calculate percentage consistently with the card display
   const skillsItem = userToJobBreakdown.find(b => b.criteria === 'Skills Overlap');
-  if (skillsItem && skillsItem.match_percentage && skillsItem.match_percentage < 30) {
-    warnings.push(`Skills gap: Only ${skillsItem.match_percentage}% of your skills match`);
+  if (skillsItem) {
+    const matchedSkills = skillsItem.matched_skills || [];
+    const unmatchedSkills = skillsItem.unmatched_skills || [];
+    const actualTotal = matchedSkills.length + unmatchedSkills.length;
+    // Calculate percentage the same way as renderBreakdownItems
+    const displayPercentage = actualTotal > 0 ? Math.round((matchedSkills.length / actualTotal) * 100) : (skillsItem.match_percentage || 0);
+    if (displayPercentage < 30 && actualTotal > 0) {
+      warnings.push(`Skills gap: Only ${displayPercentage}% of required skills match`);
+    }
   }
 
   // Check industry mismatch
