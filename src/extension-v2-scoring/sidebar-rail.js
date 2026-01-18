@@ -260,9 +260,73 @@ async function updateSkillCriteriaAsync(sidebar, scoreResult, jobData, userProfi
     const maxScore = skillsItem.max_score || 50;
     skillsItem.score = Math.round((percentage / 100) * maxScore);
 
+    // Extract and display tools using v2 extraction
+    await extractAndDisplayTools(sidebar, descriptionText, userToJob, userProfile);
+
     updateScoreBreakdown(sidebar, scoreResult, userProfile);
   } catch (error) {
     console.warn('[Job Filter Sidebar] Skill match failed:', error);
+  }
+}
+
+/**
+ * Extract tools from job description and add to breakdown
+ */
+async function extractAndDisplayTools(sidebar, descriptionText, userToJobBreakdown, userProfile) {
+  try {
+    // Use v2 extraction to get tools
+    const extractAndClassify = window.SkillExtractor?.extractAndClassifySkills;
+    if (!extractAndClassify) {
+      console.log('[Job Filter Sidebar] v2 extraction not available for tools');
+      return;
+    }
+
+    const extraction = await extractAndClassify(descriptionText, {
+      taxonomy: window.SkillTaxonomy?.SKILL_TAXONOMY || [],
+      fuzzyMatcher: null,
+      denyList: window.SkillConstants?.TOOLS_DENY_LIST || [],
+      genericDenyList: window.SkillConstants?.GENERIC_PHRASES_DENY_LIST || [],
+      canonicalRules: window.SkillTaxonomy?.CANONICAL_RULES || [],
+      synonymGroups: window.SkillTaxonomy?.SKILL_SYNONYM_GROUPS || {}
+    });
+
+    if (!extraction) return;
+
+    const requiredTools = (extraction.requiredTools || []).map(t => t.name || t).filter(Boolean);
+    const desiredTools = (extraction.desiredTools || []).map(t => t.name || t).filter(Boolean);
+    const allTools = [...requiredTools, ...desiredTools];
+
+    // Only add Tools card if we found tools
+    if (allTools.length === 0) return;
+
+    // Check if Tools item already exists
+    let toolsItem = userToJobBreakdown.find(item => item.criteria === 'Required Tools');
+    if (!toolsItem) {
+      // Create a new Tools item
+      toolsItem = {
+        criteria: 'Required Tools',
+        criteria_description: 'Software, platforms, and technologies required for this role',
+        actual_value: `${allTools.length} tools found`,
+        score: 25, // Informational - no match scoring for now
+        max_score: 50,
+        rationale: 'Tools extracted from job description',
+        weight: 0, // Don't affect overall score
+        required_tools: requiredTools,
+        desired_tools: desiredTools,
+        all_tools: allTools
+      };
+      userToJobBreakdown.push(toolsItem);
+    } else {
+      // Update existing item
+      toolsItem.required_tools = requiredTools;
+      toolsItem.desired_tools = desiredTools;
+      toolsItem.all_tools = allTools;
+      toolsItem.actual_value = `${allTools.length} tools found`;
+    }
+
+    console.log(`[Job Filter Sidebar] Extracted ${requiredTools.length} required tools, ${desiredTools.length} desired tools`);
+  } catch (error) {
+    console.warn('[Job Filter Sidebar] Tools extraction failed:', error);
   }
 }
 
@@ -483,10 +547,17 @@ function updateProfileMismatchWarnings(sidebar, scoreResult) {
     warnings.push(`Experience gap: Job requires ${expItem.required_years}+ years`);
   }
 
-  // Check skills gap
+  // Check skills gap - calculate percentage consistently with the card display
   const skillsItem = userToJobBreakdown.find(b => b.criteria === 'Skills Overlap');
-  if (skillsItem && skillsItem.match_percentage && skillsItem.match_percentage < 30) {
-    warnings.push(`Skills gap: Only ${skillsItem.match_percentage}% of your skills match`);
+  if (skillsItem) {
+    const matchedSkills = skillsItem.matched_skills || [];
+    const unmatchedSkills = skillsItem.unmatched_skills || [];
+    const actualTotal = matchedSkills.length + unmatchedSkills.length;
+    // Calculate percentage the same way as renderBreakdownItems
+    const displayPercentage = actualTotal > 0 ? Math.round((matchedSkills.length / actualTotal) * 100) : (skillsItem.match_percentage || 0);
+    if (displayPercentage < 30 && actualTotal > 0) {
+      warnings.push(`Skills gap: Only ${displayPercentage}% of required skills match`);
+    }
   }
 
   // Check industry mismatch
@@ -587,6 +658,7 @@ function renderBreakdownItems(breakdown, type, userProfile = null) {
       'Organizational Stability': 'Org Stability',
       'Industry Experience': 'Industry',
       'Skills Overlap': 'Skills',
+      'Required Tools': 'Tools',
       'Benefits Package': 'Benefits',
       'Business Lifecycle': 'Lifecycle',
       'Base Salary': 'Base Salary',
@@ -727,6 +799,49 @@ function renderBreakdownItems(breakdown, type, userProfile = null) {
       badgeCount = displayMatched.length + (missingPreferred.length > 0 ? 1 : 0);
     }
 
+    // Tools display - show required and desired tools from job description
+    if (item.criteria === 'Required Tools') {
+      const requiredTools = item.required_tools || [];
+      const desiredTools = item.desired_tools || [];
+      const allTools = item.all_tools || [...requiredTools, ...desiredTools];
+
+      // Show summary
+      if (requiredTools.length > 0 || desiredTools.length > 0) {
+        const summaryParts = [];
+        if (requiredTools.length > 0) summaryParts.push(`${requiredTools.length} required`);
+        if (desiredTools.length > 0) summaryParts.push(`${desiredTools.length} nice-to-have`);
+        extraHtml += `<div class="jh-tools-summary">${summaryParts.join(', ')}</div>`;
+      }
+
+      // Show required tools (highlighted differently)
+      if (requiredTools.length > 0) {
+        extraHtml += `
+          <div class="jh-tools-section">
+            <div class="jh-tools-tags jh-responsive-tags">
+              ${requiredTools.map(t =>
+                `<span class="jh-tool-tag jh-required">${escapeHtml(formatBadgeLabel(t))}</span>`
+              ).join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      // Show desired tools (muted style)
+      if (desiredTools.length > 0) {
+        extraHtml += `
+          <div class="jh-tools-section jh-desired-tools">
+            <div class="jh-tools-tags jh-responsive-tags">
+              ${desiredTools.map(t =>
+                `<span class="jh-tool-tag jh-desired">${escapeHtml(formatBadgeLabel(t))}</span>`
+              ).join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      badgeCount = allTools.length;
+    }
+
     // Bonus & Equity combined display
     if (item.criteria === 'Bonus & Equity') {
       extraHtml += `<div class="jh-actual-value">${escapeHtml(item.actual_value || '--')}</div>`;
@@ -786,7 +901,7 @@ function renderBreakdownItems(breakdown, type, userProfile = null) {
     }
 
     // Actual value display for other criteria
-    else if (item.actual_value && !['Benefits Package', 'Benefits', 'Bonus & Equity', 'Skills Overlap', 'Experience Level', 'Base Salary'].includes(item.criteria)) {
+    else if (item.actual_value && !['Benefits Package', 'Benefits', 'Bonus & Equity', 'Skills Overlap', 'Required Tools', 'Experience Level', 'Base Salary'].includes(item.criteria)) {
       extraHtml += `<div class="jh-actual-value">${escapeHtml(item.actual_value)}</div>`;
     }
 
@@ -797,8 +912,8 @@ function renderBreakdownItems(breakdown, type, userProfile = null) {
     const scoreDisplay = `${percentage}%`;
 
     const criteriaKey = getCriteriaKey(item.criteria);
-    // Determine if this item should be full-width (Skills and Benefits) or can be in grid
-    const isFullWidth = ['skills', 'benefits'].includes(criteriaKey);
+    // Determine if this item should be full-width (Skills, Benefits, and Tools) or can be in grid
+    const isFullWidth = ['skills', 'benefits', 'tools'].includes(criteriaKey);
     const sizeClass = 'jh-size-1';
     const compactClass = criteriaKey === 'base salary' ? 'jh-compact-card' : '';
     const badgeClass = isFullWidth ? 'jh-badge-card' : '';
@@ -2212,9 +2327,56 @@ function getSidebarStyles() {
     }
 
     .jh-skills-summary,
-    .jh-benefits-summary {
+    .jh-benefits-summary,
+    .jh-tools-summary {
       font-size: 11px;
       color: #6B7280;
+      margin-top: 6px;
+    }
+
+    /* ========================================
+       TOOLS TAGS - Show required and desired tools
+       ======================================== */
+
+    .jh-tools-section {
+      margin-top: 8px;
+    }
+
+    .jh-tools-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+
+    .jh-tool-tag {
+      font-size: 10px;
+      font-weight: 500;
+      padding: 3px 8px;
+      border-radius: 12px;
+      background: transparent;
+      color: #9CA3AF;
+      border: 1px dashed #D1D9E0;
+      max-width: 100%;
+      display: inline-block;
+      word-break: break-word;
+      white-space: normal;
+    }
+
+    /* Required tools - teal/cyan color to differentiate from skills */
+    .jh-tool-tag.jh-required {
+      background: #F0FDFA;
+      color: #0D9488;
+      border: 1px solid #99F6E4;
+    }
+
+    /* Desired/nice-to-have tools - lighter/muted style */
+    .jh-tool-tag.jh-desired {
+      background: #F9FAFB;
+      color: #6B7280;
+      border: 1px dashed #D1D9E0;
+    }
+
+    .jh-desired-tools {
       margin-top: 6px;
     }
 
@@ -2910,6 +3072,8 @@ function getCriteriaKey(criteria) {
     'industry': 'industry',
     'skills overlap': 'skills',
     'skills': 'skills',
+    'required tools': 'tools',
+    'tools': 'tools',
     'benefits package': 'benefits',
     'benefits': 'benefits',
     'lifecycle stage': 'lifecycle',
@@ -2930,6 +3094,7 @@ function sortCriteriaByOrder(criteriaList, customOrder) {
     'industry',
     'benefits',
     'skills',
+    'tools',
     'lifecycle',
     'org stability'
   ];
@@ -3086,9 +3251,9 @@ function applyGridLayout(breakdownList) {
 function updateBadgeOverflow(breakdownList) {
   if (!breakdownList) return;
 
-  const tagSections = breakdownList.querySelectorAll('.jh-skill-tags, .jh-benefits-tags');
+  const tagSections = breakdownList.querySelectorAll('.jh-skill-tags, .jh-benefits-tags, .jh-tools-tags');
   tagSections.forEach((section) => {
-    if (section.classList.contains('jh-benefits-tags') || section.classList.contains('jh-skill-tags')) {
+    if (section.classList.contains('jh-benefits-tags') || section.classList.contains('jh-skill-tags') || section.classList.contains('jh-tools-tags')) {
       return;
     }
     const badges = Array.from(section.querySelectorAll('span'));
