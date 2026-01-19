@@ -32,6 +32,7 @@
         "*://*.indeed.com/*"
       ],
       "js": [
+        "node_modules/compromise/builds/compromise.js",
         "skills/skill-taxonomy.js",
         "skills/skill-constants.js",
         "skills/skill-classifier.js",

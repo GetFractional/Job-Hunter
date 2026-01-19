@@ -259,27 +259,31 @@ const EXTRACTION_CONFIG = {
 // ============================================================================
 
 const FIT_SCORE_CONFIG = {
-  // Weight distribution between core skills and tools
-  CORE_SKILLS_WEIGHT: 0.70,  // 70% of overall score
-  TOOLS_WEIGHT: 0.30,         // 30% of overall score
-
-  // Multipliers for required vs desired items
-  REQUIRED_MULTIPLIER: 2.0,   // Required items count 2x
-  DESIRED_MULTIPLIER: 1.0,    // Desired items count 1x
-
-  // Penalty values for missing items
-  PENALTY_MISSING_REQUIRED_SKILL: -0.10,
-  PENALTY_MISSING_REQUIRED_TOOL_EXPERT: -0.15,  // When "expert required" language detected
-  PENALTY_MISSING_REQUIRED_TOOL_STANDARD: -0.12,
-  PENALTY_MISSING_DESIRED_TOOL: -0.05,
-
-  // Maximum total penalty cap
-  MAX_TOTAL_PENALTY: -0.50,
-
-  // Confidence thresholds for classification
-  HIGH_CONFIDENCE_THRESHOLD: 0.85,
-  MEDIUM_CONFIDENCE_THRESHOLD: 0.65,
-  LOW_CONFIDENCE_THRESHOLD: 0.45
+  weights: {
+    coreSkills: 0.70,
+    tools: 0.30
+  },
+  multipliers: {
+    required: 2.0,
+    desired: 1.0
+  },
+  penalties: {
+    missingRequiredSkill: -0.10,
+    missingRequiredToolExpertLanguage: -0.15,
+    missingRequiredTool: -0.12,
+    missingDesiredTool: -0.05,
+    maxPenalty: -0.50
+  },
+  requirementLanguage: {
+    expertKeywords: ['expert', 'proficient', 'mastery', 'advanced'],
+    requiredKeywords: ['required', 'must have', 'essential', 'critical'],
+    desiredKeywords: ['preferred', 'nice to have', 'helpful', 'a plus']
+  },
+  confidenceThresholds: {
+    high: 0.85,
+    medium: 0.65,
+    low: 0.45
+  }
 };
 
 // ============================================================================
@@ -373,6 +377,83 @@ const SOFT_SKILLS_PATTERNS = [
 // SKILL ALIASES (v2 Upgrade)
 // Maps common abbreviations and variations to canonical skill names
 // ============================================================================
+
+const ALIASES = {
+  // Analytics & BI Tools
+  ga4: "Google Analytics 4",
+  "google analytics 4": "Google Analytics 4",
+  ga: "Google Analytics",
+  gtm: "Google Tag Manager",
+
+  // CRM Systems
+  sfdc: "Salesforce",
+  sf: "Salesforce",
+  "hubspot crm": "HubSpot",
+  hubspot: "HubSpot",
+
+  // Data Platforms
+  bq: "BigQuery",
+  aws: "Amazon Web Services",
+  gcp: "Google Cloud Platform",
+
+  // Programming & Databases
+  js: "JavaScript",
+  ts: "TypeScript",
+  py: "Python",
+  postgres: "PostgreSQL",
+  mongo: "MongoDB",
+
+  // Marketing Automation
+  sfmc: "Salesforce Marketing Cloud",
+  mcae: "Marketing Cloud Account Engagement",
+
+  // Skills & Concepts
+  cro: "Conversion Rate Optimization",
+  seo: "Search Engine Optimization",
+  sem: "Search Engine Marketing",
+  ppc: "Pay Per Click",
+  cpa: "Cost Per Acquisition",
+  ltv: "Lifetime Value",
+  cac: "Customer Acquisition Cost",
+  mrr: "Monthly Recurring Revenue",
+  arr: "Annual Recurring Revenue",
+  kpi: "Key Performance Indicator",
+  okr: "Objectives and Key Results",
+  roi: "Return on Investment",
+  roas: "Return on Ad Spend",
+  abm: "Account Based Marketing",
+  plg: "Product Led Growth",
+  slg: "Sales Led Growth",
+  gtm: "Go To Market",
+  mvp: "Minimum Viable Product",
+  pmf: "Product Market Fit",
+
+  // Data & Analytics
+  etl: "Extract Transform Load",
+  elt: "Extract Load Transform",
+  cdp: "Customer Data Platform",
+  dwh: "Data Warehouse",
+  bi: "Business Intelligence",
+  ml: "Machine Learning",
+  ai: "Artificial Intelligence",
+  nlp: "Natural Language Processing",
+
+  // Operations
+  revops: "Revenue Operations",
+  salesops: "Sales Operations",
+  marketingops: "Marketing Operations",
+  bizops: "Business Operations",
+  devops: "Development Operations",
+  secops: "Security Operations",
+
+  // Business Concepts
+  b2b: "Business To Business",
+  b2c: "Business To Consumer",
+  d2c: "Direct To Consumer",
+  saas: "Software As A Service",
+  paas: "Platform As A Service",
+  iaas: "Infrastructure As A Service"
+};
 
 const SKILL_ALIASES = new Map([
   // Analytics & BI Tools
@@ -489,6 +570,7 @@ if (typeof window !== 'undefined') {
     FIT_SCORE_CONFIG,
     FORCED_CORE_SKILLS,
     SOFT_SKILLS_PATTERNS,
+    ALIASES,
     SKILL_ALIASES
   };
 }
@@ -504,6 +586,7 @@ if (typeof module !== 'undefined' && module.exports) {
     FIT_SCORE_CONFIG,
     FORCED_CORE_SKILLS,
     SOFT_SKILLS_PATTERNS,
+    ALIASES,
     SKILL_ALIASES
   };
 }

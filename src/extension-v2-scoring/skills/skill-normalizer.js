@@ -69,7 +69,13 @@ function getDynamicFuseOptions(phrase) {
 function resolveAlias(phrase) {
   if (!phrase) return null;
 
-  const aliases = window.SkillConstants?.SKILL_ALIASES || new Map();
+  const aliases = window.SkillConstants?.SKILL_ALIASES
+    || new Map(
+      Object.entries(window.SkillConstants?.ALIASES || {}).map(([key, value]) => [
+        key.toLowerCase(),
+        value
+      ])
+    );
   const normalized = phrase.toLowerCase().trim();
 
   if (aliases.has(normalized)) {

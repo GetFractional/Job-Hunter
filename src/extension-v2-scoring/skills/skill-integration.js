@@ -90,10 +90,14 @@ const SkillExtractionService = (function() {
 
       // Get user profile skills
       let userSkills = options.userSkills || [];
+      let userTools = options.userTools || [];
       if (userSkills.length === 0 && typeof chrome !== 'undefined') {
         try {
           const profile = await chrome.storage.local.get('jh_user_profile');
           userSkills = profile?.jh_user_profile?.background?.core_skills || [];
+          if (userTools.length === 0) {
+            userTools = profile?.jh_user_profile?.background?.tools || [];
+          }
         } catch (e) {
           console.warn('[SkillService] Could not load user profile:', e);
         }
@@ -110,13 +114,137 @@ const SkillExtractionService = (function() {
         jobUrl: options.jobUrl || window.location?.href || ''
       };
 
-      // Run full analysis
-      const result = window.SkillMatcher?.analyzeJobSkillFit
-        ? window.SkillMatcher.analyzeJobSkillFit(jobDescriptionText, userSkills, extractionOptions)
-        : await fallbackAnalysis(jobDescriptionText, userSkills, extractionOptions);
+      const userProfileOverride = options.userProfile || null;
+
+      const userProfile = userProfileOverride || {
+        coreSkills: userSkills,
+        tools: userTools
+      };
+
+      let result = null;
+
+      if (window.SkillExtractor?.extractAndClassifySkills && window.FitScoreCalculator) {
+        const extraction = await window.SkillExtractor.extractAndClassifySkills(
+          jobDescriptionText,
+          extractionOptions
+        );
+
+        const markedExtraction = window.SkillMatcher?.markUserMatches
+          ? window.SkillMatcher.markUserMatches(extraction, userProfile)
+          : extraction;
+
+        const fitScore = window.FitScoreCalculator.calculateFitScore(
+          markedExtraction,
+          userProfile,
+          options
+        );
+
+        const requiredCore = markedExtraction.requiredCoreSkills || [];
+        const desiredCore = markedExtraction.desiredCoreSkills || [];
+
+        const matchedRequired = requiredCore.filter(item => item.userHasSkill);
+        const missingRequired = requiredCore.filter(item => !item.userHasSkill);
+        const matchedDesired = desiredCore.filter(item => item.userHasSkill);
+        const missingDesired = desiredCore.filter(item => !item.userHasSkill);
+
+        const rejected = markedExtraction.rejected || [];
+        const softSkillRejected = rejected.filter(item =>
+          String(item.evidence || '').toLowerCase().includes('soft skill')
+        );
+        const softSkillExamples = softSkillRejected
+          .map(item => item.raw)
+          .filter(Boolean)
+          .slice(0, 5);
+
+        const totalExtracted = markedExtraction.debug?.totalExtracted
+          || (requiredCore.length + desiredCore.length +
+            (markedExtraction.requiredTools?.length || 0) +
+            (markedExtraction.desiredTools?.length || 0) +
+            (markedExtraction.candidates?.length || 0) +
+            rejected.length);
+
+        const classifiedCount =
+          requiredCore.length +
+          desiredCore.length +
+          (markedExtraction.requiredTools?.length || 0) +
+          (markedExtraction.desiredTools?.length || 0);
+
+        const extractionCompleteness = totalExtracted > 0
+          ? Math.min(1, classifiedCount / totalExtracted)
+          : 0;
+
+        const analysis = {
+          requiredCoreSkills: requiredCore,
+          desiredCoreSkills: desiredCore,
+          requiredTools: markedExtraction.requiredTools || [],
+          desiredTools: markedExtraction.desiredTools || [],
+          candidates: markedExtraction.candidates || [],
+          scoring: {
+            overallScore: fitScore.overallScore,
+            breakdown: fitScore.breakdown,
+            weightsUsed: fitScore.weightsUsed,
+            penalties: fitScore.penalties
+          },
+          quality: {
+            totalItemsExtracted: totalExtracted,
+            softSkillsRejected: softSkillRejected.length,
+            softSkillExamples,
+            extractionCompleteness,
+            note: extractionCompleteness >= 0.85
+              ? 'High completeness; soft skills successfully filtered'
+              : 'Review extraction for completeness'
+          }
+        };
+
+        const toMatchDetail = (item) => ({
+          ...item,
+          name: item.raw || item.canonical || '',
+          canonical: item.canonical || '',
+          category: item.category || 'Other',
+          confidence: typeof item.confidence === 'number' ? item.confidence : 1
+        });
+
+        result = {
+          jobUrl: extraction.metadata?.jobUrl || options.jobUrl || window.location?.href || '',
+          jobTitle: options.jobTitle || '',
+          company: options.company || '',
+          extractedAt: extraction.metadata?.extractedAt || new Date().toISOString(),
+          analysis,
+          extraction: {
+            required: requiredCore,
+            desired: desiredCore,
+            extractionConfidence: extractionCompleteness,
+            executionTime: extraction.metadata?.executionTime
+          },
+          match: {
+            matched: matchedRequired.map(item => item.raw || item.canonical),
+            missing: missingRequired.map(item => item.raw || item.canonical),
+            matchRatio: requiredCore.length > 0 ? matchedRequired.length / requiredCore.length : 0,
+            matchedDetails: matchedRequired.map(toMatchDetail),
+            missingDetails: missingRequired.map(toMatchDetail)
+          },
+          desired: {
+            has: matchedDesired.map(item => item.raw || item.canonical),
+            missing: missingDesired.map(item => item.raw || item.canonical),
+            ratio: desiredCore.length > 0 ? matchedDesired.length / desiredCore.length : 0
+          },
+          skillFitScore: Math.round(fitScore.overallScore * 100),
+          skillFitLabel: window.FitScoreCalculator?.getFitLabel
+            ? window.FitScoreCalculator.getFitLabel(fitScore.overallScore)
+            : 'N/A',
+          airtablePayload: window.SkillMatcher?.formatForAirtableV2
+            ? window.SkillMatcher.formatForAirtableV2(fitScore, markedExtraction)
+            : {}
+        };
+      } else {
+        // Run legacy analysis fallback
+        result = window.SkillMatcher?.analyzeJobSkillFit
+          ? window.SkillMatcher.analyzeJobSkillFit(jobDescriptionText, userSkills, extractionOptions)
+          : await fallbackAnalysis(jobDescriptionText, userSkills, extractionOptions);
+      }
 
       // Add metadata
-      result.serviceVersion = '1.0.0';
+      result.serviceVersion = '2.0.0';
       result.totalTime = performance.now() - startTime;
       result.cached = false;
 

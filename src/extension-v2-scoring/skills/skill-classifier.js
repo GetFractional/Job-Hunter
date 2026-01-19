@@ -187,6 +187,16 @@ function checkSoftSkillRejection(cleaned, ignoreRules, softSkillsPatterns) {
  * @returns {Object} Match result
  */
 function checkExactDictionaryMatch(cleaned, skillsTaxonomy, toolsDictionary) {
+  const normalize = (value) => (value || '').toLowerCase().trim();
+  const matchesSubstring = (phrase, term) => {
+    const normalizedTerm = normalize(term);
+    if (!normalizedTerm || normalizedTerm.length < 4) return false;
+    if (normalizedTerm.includes(' ')) {
+      return phrase.includes(normalizedTerm);
+    }
+    return new RegExp(`\\b${normalizedTerm}\\b`, 'i').test(phrase);
+  };
+
   // Check tools dictionary first (tools.json)
   for (const tool of toolsDictionary) {
     // Check canonical name
@@ -219,6 +229,22 @@ function checkExactDictionaryMatch(cleaned, skillsTaxonomy, toolsDictionary) {
         canonical: tool.canonical,
         dictionary: 'tools',
         item: tool
+      };
+    }
+
+    // Substring match for tool names within longer phrases
+    if (
+      matchesSubstring(cleaned, tool.name) ||
+      matchesSubstring(cleaned, tool.canonical?.replace(/_/g, ' ')) ||
+      (tool.aliases && tool.aliases.some(alias => matchesSubstring(cleaned, alias)))
+    ) {
+      return {
+        matched: true,
+        type: 'TOOL',
+        canonical: tool.canonical,
+        dictionary: 'tools',
+        item: tool,
+        evidence: 'Tool name substring match'
       };
     }
   }
@@ -469,11 +495,31 @@ async function loadToolsDictionary() {
   try {
     const response = await fetch(chrome.runtime.getURL('data/tools.json'));
     const data = await response.json();
-    return data.tools || [];
+    const tools = data.tools || [];
+    if (tools.length > 0) {
+      return tools;
+    }
+    console.warn('[SkillClassifier] tools.json empty, falling back to TOOLS_DENY_LIST');
   } catch (error) {
     console.error('[SkillClassifier] Failed to load tools.json:', error);
-    return [];
   }
+
+  const fallbackList = window.SkillConstants?.TOOLS_DENY_LIST;
+  if (fallbackList && typeof fallbackList.forEach === 'function') {
+    const fallbackTools = [];
+    fallbackList.forEach((item) => {
+      const name = String(item || '').trim();
+      if (!name) return;
+      fallbackTools.push({
+        canonical: name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''),
+        name,
+        aliases: []
+      });
+    });
+    return fallbackTools;
+  }
+
+  return [];
 }
 
 /**

@@ -222,22 +222,22 @@ function classifyPhrase(phrase, sections, fullText) {
 
   if (signals.expertRequired) {
     level = 'required';
-    multiplier = 2.2; // Extra emphasis for "expert required"
-    languageSignal = 'expert_required';
+    multiplier = getMultiplier(level, 'expert required');
+    languageSignal = 'expert required';
     evidence = 'Expert level explicitly required';
   } else if (signals.mustHave) {
     level = 'required';
-    multiplier = 2.0;
-    languageSignal = 'must_have';
+    multiplier = getMultiplier(level, 'required');
+    languageSignal = 'required';
     evidence = 'Must have language detected';
   } else if (signals.yearsRequired) {
     level = 'required';
-    multiplier = 2.0;
-    languageSignal = `${signals.yearsCount}_years_required`;
+    multiplier = getMultiplier(level, 'required');
+    languageSignal = `${signals.yearsCount} years required`;
     evidence = `${signals.yearsCount}+ years required`;
   } else if (signals.preferred) {
     level = 'desired';
-    multiplier = 1.0;
+    multiplier = getMultiplier(level, 'preferred');
     languageSignal = 'preferred';
     evidence = 'Preferred/nice-to-have language detected';
   }
@@ -256,6 +256,12 @@ function classifyPhrase(phrase, sections, fullText) {
  * @returns {Object} Detected signals
  */
 function detectLanguageSignals(context, skillPhrase) {
+  const config = window.SkillConstants?.FIT_SCORE_CONFIG || {};
+  const languageConfig = config.requirementLanguage || {};
+  const expertKeywords = languageConfig.expertKeywords || [];
+  const requiredKeywords = languageConfig.requiredKeywords || [];
+  const desiredKeywords = languageConfig.desiredKeywords || [];
+
   const signals = {
     expertRequired: false,
     mustHave: false,
@@ -264,34 +270,20 @@ function detectLanguageSignals(context, skillPhrase) {
     preferred: false
   };
 
-  // Expert required patterns
-  const expertPatterns = [
-    /expert\s+(?:level\s+)?(?:required|needed)/i,
-    /advanced\s+(?:level\s+)?(?:required|needed)/i,
-    /deep\s+(?:expertise|knowledge|experience)\s+(?:required|needed)/i
-  ];
+  const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const buildRegex = (keywords) => {
+    if (!keywords.length) return null;
+    return new RegExp(`\\b(?:${keywords.map(escapeRegex).join('|')})\\b`, 'i');
+  };
 
-  for (const pattern of expertPatterns) {
-    if (pattern.test(context)) {
-      signals.expertRequired = true;
-      break;
-    }
+  const expertRegex = buildRegex(expertKeywords);
+  if (expertRegex && expertRegex.test(context)) {
+    signals.expertRequired = true;
   }
 
-  // Must have patterns
-  const mustHavePatterns = [
-    /must\s+have/i,
-    /required\s+skill/i,
-    /essential\s+skill/i,
-    /mandatory/i,
-    /critical\s+skill/i
-  ];
-
-  for (const pattern of mustHavePatterns) {
-    if (pattern.test(context)) {
-      signals.mustHave = true;
-      break;
-    }
+  const requiredRegex = buildRegex(requiredKeywords);
+  if (requiredRegex && requiredRegex.test(context)) {
+    signals.mustHave = true;
   }
 
   // Years of experience patterns
@@ -301,21 +293,9 @@ function detectLanguageSignals(context, skillPhrase) {
     signals.yearsCount = parseInt(yearsMatch[1], 10);
   }
 
-  // Preferred/nice-to-have patterns
-  const preferredPatterns = [
-    /preferred/i,
-    /nice[\s-]to[\s-]have/i,
-    /bonus/i,
-    /plus/i,
-    /ideal(?:ly)?/i,
-    /desired/i
-  ];
-
-  for (const pattern of preferredPatterns) {
-    if (pattern.test(context)) {
-      signals.preferred = true;
-      break;
-    }
+  const preferredRegex = buildRegex(desiredKeywords);
+  if (preferredRegex && preferredRegex.test(context)) {
+    signals.preferred = true;
   }
 
   return signals;
@@ -334,6 +314,40 @@ function detectBatch(jobs) {
   return jobs.map(job => detectRequirements(job.jobText, job.extractedPhrases));
 }
 
+/**
+ * Analyze a section for language intensity and return multipliers per phrase.
+ * Keeps backward compatibility with callers expecting analyzeSection().
+ * @param {string} sectionText - Section text (required/desired)
+ * @returns {{ multipliers: Object }}
+ */
+function analyzeSection(sectionText) {
+  const result = {
+    multipliers: {}
+  };
+
+  if (!sectionText || typeof sectionText !== 'string') {
+    return result;
+  }
+
+  const patterns = [
+    { regex: /expert(?:ise)?\s+(?:in|with)\s+([a-z][a-z0-9\s/&-]{2,50})/gi, level: 'required', signal: 'expert required' },
+    { regex: /advanced\s+(?:in|with)\s+([a-z][a-z0-9\s/&-]{2,50})/gi, level: 'required', signal: 'expert required' },
+    { regex: /must\s+have\s+([a-z][a-z0-9\s/&-]{2,50})/gi, level: 'required', signal: 'required' }
+  ];
+
+  patterns.forEach(({ regex, level, signal }) => {
+    let match;
+    while ((match = regex.exec(sectionText)) !== null) {
+      const phrase = (match[1] || '').trim();
+      if (!phrase) continue;
+      result.multipliers[phrase] = getMultiplier(level, signal);
+    }
+    regex.lastIndex = 0;
+  });
+
+  return result;
+}
+
 // ============================================================================
 // UTILITIES
 // ============================================================================
@@ -345,13 +359,13 @@ function detectBatch(jobs) {
  * @returns {number} Multiplier value
  */
 function getMultiplier(level, languageSignal = null) {
+  const config = window.SkillConstants?.FIT_SCORE_CONFIG || {};
+  const multipliers = config.multipliers || {};
+
   if (level === 'required') {
-    if (languageSignal === 'expert_required') {
-      return 2.2;
-    }
-    return 2.0;
+    return multipliers.required || 2.0;
   }
-  return 1.0;
+  return multipliers.desired || 1.0;
 }
 
 /**
@@ -363,21 +377,22 @@ function getMultiplier(level, languageSignal = null) {
  */
 function getPenalty(level, type, languageSignal = null) {
   const config = window.SkillConstants?.FIT_SCORE_CONFIG || {};
+  const penalties = config.penalties || {};
 
   if (level === 'required') {
     if (type === 'CORE_SKILL') {
-      return config.PENALTY_MISSING_REQUIRED_SKILL || -0.10;
+      return penalties.missingRequiredSkill ?? -0.10;
     }
     if (type === 'TOOL') {
-      if (languageSignal === 'expert_required') {
-        return config.PENALTY_MISSING_REQUIRED_TOOL_EXPERT || -0.15;
+      if (languageSignal && languageSignal.includes('expert')) {
+        return penalties.missingRequiredToolExpertLanguage ?? -0.15;
       }
-      return config.PENALTY_MISSING_REQUIRED_TOOL_STANDARD || -0.12;
+      return penalties.missingRequiredTool ?? -0.12;
     }
   }
 
   if (level === 'desired' && type === 'TOOL') {
-    return config.PENALTY_MISSING_DESIRED_TOOL || -0.05;
+    return penalties.missingDesiredTool ?? -0.05;
   }
 
   return 0;
@@ -394,6 +409,7 @@ if (typeof window !== 'undefined') {
     classifyPhrase,
     detectLanguageSignals,
     detectBatch,
+    analyzeSection,
     getMultiplier,
     getPenalty
   };
@@ -406,6 +422,7 @@ if (typeof module !== 'undefined' && module.exports) {
     classifyPhrase,
     detectLanguageSignals,
     detectBatch,
+    analyzeSection,
     getMultiplier,
     getPenalty
   };

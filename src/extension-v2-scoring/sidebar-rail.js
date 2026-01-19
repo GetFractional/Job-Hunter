@@ -292,8 +292,18 @@ async function extractAndDisplayTools(sidebar, descriptionText, userToJobBreakdo
 
     if (!extraction) return;
 
-    const requiredTools = (extraction.requiredTools || []).map(t => t.name || t).filter(Boolean);
-    const desiredTools = (extraction.desiredTools || []).map(t => t.name || t).filter(Boolean);
+    const normalizeToolName = (tool) => {
+      if (!tool) return '';
+      if (typeof tool === 'string') return tool;
+      return tool.name || tool.raw || tool.canonical || '';
+    };
+
+    const requiredTools = (extraction.requiredTools || [])
+      .map(normalizeToolName)
+      .filter(Boolean);
+    const desiredTools = (extraction.desiredTools || [])
+      .map(normalizeToolName)
+      .filter(Boolean);
     const allTools = [...requiredTools, ...desiredTools];
 
     // Only add Tools card if we found tools

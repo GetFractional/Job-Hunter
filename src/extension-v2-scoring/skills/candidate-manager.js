@@ -27,10 +27,20 @@ function createCandidate(raw, options = {}) {
     confidence = 0.35,
     evidence = 'No clear classification',
     sourceLocation = 'unknown',
-    context = null
+    context = null,
+    jobUrl = '',
+    extractedAt = null,
+    reason = null,
+    suggestedAction = null
   } = options;
 
+  const timestamp = extractedAt || new Date().toISOString();
+  const id = (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : `candidate_${Date.now()}_${Math.random().toString(16).slice(2, 10)}`;
+
   return {
+    id,
     raw,
     canonical: raw.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''),
     inferredType,
@@ -38,8 +48,22 @@ function createCandidate(raw, options = {}) {
     evidence,
     sourceLocation,
     context,
-    timestamp: Date.now(),
-    userFeedback: null
+    reason,
+    suggestedAction,
+    jobUrl,
+    extractedAt: timestamp,
+    userActions: {
+      reviewed: false,
+      reviewedAt: null,
+      action: null,
+      actionAt: null
+    },
+    history: [
+      {
+        action: 'extracted',
+        timestamp
+      }
+    ]
   };
 }
 
@@ -103,13 +127,24 @@ async function updateCandidateFeedback(canonical, feedback) {
       return false;
     }
 
-    // Update feedback
-    candidates[candidateIndex].userFeedback = {
+    const timestamp = new Date().toISOString();
+    candidates[candidateIndex].userActions = {
+      reviewed: true,
+      reviewedAt: timestamp,
       action: feedback.action, // 'accept', 'reject', 'classify'
-      classifiedAs: feedback.classifiedAs, // 'CORE_SKILL', 'TOOL', or null
-      note: feedback.note || null,
-      timestamp: Date.now()
+      actionAt: timestamp
     };
+    candidates[candidateIndex].userFeedback = {
+      action: feedback.action,
+      classifiedAs: feedback.classifiedAs,
+      note: feedback.note || null,
+      timestamp
+    };
+    candidates[candidateIndex].history = candidates[candidateIndex].history || [];
+    candidates[candidateIndex].history.push({
+      action: feedback.action,
+      timestamp
+    });
 
     // Store updated candidates
     await chrome.storage.local.set({ candidateSkills: candidates });

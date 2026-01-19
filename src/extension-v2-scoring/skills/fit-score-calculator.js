@@ -30,13 +30,7 @@
  * @returns {Object} Fit score result
  */
 function calculateFitScore(extractedSkills, userProfile, options = {}) {
-  const config = window.SkillConstants?.FIT_SCORE_CONFIG || {
-    CORE_SKILLS_WEIGHT: 0.70,
-    TOOLS_WEIGHT: 0.30,
-    REQUIRED_MULTIPLIER: 2.0,
-    DESIRED_MULTIPLIER: 1.0,
-    MAX_TOTAL_PENALTY: -0.50
-  };
+  const config = getFitScoreConfig();
 
   const {
     weightsOverride = null
@@ -44,8 +38,8 @@ function calculateFitScore(extractedSkills, userProfile, options = {}) {
 
   // Use custom weights if provided
   const weights = weightsOverride || {
-    coreSkillsWeight: config.CORE_SKILLS_WEIGHT,
-    toolsWeight: config.TOOLS_WEIGHT
+    coreSkillsWeight: config.weights.coreSkills,
+    toolsWeight: config.weights.tools
   };
 
   // Step 1: Calculate core skills score
@@ -53,7 +47,7 @@ function calculateFitScore(extractedSkills, userProfile, options = {}) {
     extractedSkills.requiredCoreSkills || [],
     extractedSkills.desiredCoreSkills || [],
     userProfile.coreSkills || [],
-    config
+    config.multipliers
   );
 
   // Step 2: Calculate tools score
@@ -61,7 +55,7 @@ function calculateFitScore(extractedSkills, userProfile, options = {}) {
     extractedSkills.requiredTools || [],
     extractedSkills.desiredTools || [],
     userProfile.tools || [],
-    config
+    config.multipliers
   );
 
   // Step 3: Calculate penalties
@@ -78,17 +72,23 @@ function calculateFitScore(extractedSkills, userProfile, options = {}) {
     (coreSkillsScore.score * weights.coreSkillsWeight) +
     (toolsScore.score * weights.toolsWeight);
 
-  const totalPenalty = Math.max(penalties.totalPenalty, config.MAX_TOTAL_PENALTY);
+  const totalPenalty = Math.max(penalties.totalPenalty, config.penalties.maxPenalty);
   const overallScore = Math.max(0, Math.min(1, rawScore + totalPenalty));
 
   // Step 5: Build result
   return {
     overallScore,
     breakdown: {
+      coreSkillsMatched: coreSkillsScore.requiredMatched + coreSkillsScore.desiredMatched,
+      coreSkillsTotal: coreSkillsScore.requiredTotal + coreSkillsScore.desiredTotal,
       coreSkillsScore: coreSkillsScore.score,
+      toolsMatched: toolsScore.requiredMatched + toolsScore.desiredMatched,
+      toolsTotal: toolsScore.requiredTotal + toolsScore.desiredTotal,
       toolsScore: toolsScore.score,
-      coreSkillsWeighted: coreSkillsScore.score * weights.coreSkillsWeight,
-      toolsWeighted: toolsScore.score * weights.toolsWeight,
+      requiredSkillsWeight: weights.coreSkillsWeight,
+      desiredSkillsWeight: 1 - weights.coreSkillsWeight,
+      requiredToolsWeight: weights.toolsWeight,
+      desiredToolsWeight: Math.max(0, 1 - weights.toolsWeight),
       rawScore,
       totalPenalty,
       finalScore: overallScore
@@ -96,7 +96,12 @@ function calculateFitScore(extractedSkills, userProfile, options = {}) {
     coreSkillsDetails: coreSkillsScore,
     toolsDetails: toolsScore,
     penalties: penalties.items,
-    weightsUsed: weights,
+    weightsUsed: {
+      coreSkillsWeight: weights.coreSkillsWeight,
+      toolsWeight: weights.toolsWeight,
+      requiredMultiplier: config.multipliers.required,
+      desiredMultiplier: config.multipliers.desired
+    },
     metadata: {
       calculatedAt: Date.now(),
       version: '2.0'
@@ -116,7 +121,7 @@ function calculateFitScore(extractedSkills, userProfile, options = {}) {
  * @param {Object} config - Scoring config
  * @returns {Object} Bucket score
  */
-function calculateBucketScore(requiredItems, desiredItems, userItems, config) {
+function calculateBucketScore(requiredItems, desiredItems, userItems, multipliers) {
   const result = {
     score: 0,
     requiredMatched: 0,
@@ -158,7 +163,7 @@ function calculateBucketScore(requiredItems, desiredItems, userItems, config) {
       item: reqItem.raw || reqItem.canonical,
       requirement: 'required',
       matched,
-      multiplier: config.REQUIRED_MULTIPLIER
+      multiplier: multipliers.required
     });
   }
 
@@ -182,20 +187,20 @@ function calculateBucketScore(requiredItems, desiredItems, userItems, config) {
       item: desItem.raw || desItem.canonical,
       requirement: 'desired',
       matched,
-      multiplier: config.DESIRED_MULTIPLIER
+      multiplier: multipliers.desired
     });
   }
 
   // Calculate score using weighted formula
   const numerator =
-    (result.requiredMatched * config.REQUIRED_MULTIPLIER) +
-    (result.desiredMatched * config.DESIRED_MULTIPLIER);
+    (result.requiredMatched * multipliers.required) +
+    (result.desiredMatched * multipliers.desired);
 
   const denominator =
-    (result.requiredTotal * config.REQUIRED_MULTIPLIER) +
-    (result.desiredTotal * config.DESIRED_MULTIPLIER);
+    (result.requiredTotal * multipliers.required) +
+    (result.desiredTotal * multipliers.desired);
 
-  result.score = denominator > 0 ? numerator / denominator : 0;
+  result.score = denominator > 0 ? numerator / denominator : 1.0;
 
   return result;
 }
@@ -221,7 +226,7 @@ function calculatePenalties(extractedSkills, userProfile, coreSkillsScore, tools
 
   // Penalty for missing required core skills
   for (const missingSkill of coreSkillsScore.requiredMissing) {
-    const penalty = config.PENALTY_MISSING_REQUIRED_SKILL || -0.10;
+    const penalty = config.penalties.missingRequiredSkill ?? -0.10;
     penalties.items.push({
       item: missingSkill.raw || missingSkill.canonical,
       type: 'CORE_SKILL',
@@ -234,10 +239,11 @@ function calculatePenalties(extractedSkills, userProfile, coreSkillsScore, tools
 
   // Penalty for missing required tools (check for "expert" language)
   for (const missingTool of toolsScore.requiredMissing) {
-    const hasExpertLanguage = missingTool.languageSignal === 'expert_required';
+    const hasExpertLanguage = typeof missingTool.languageSignal === 'string' &&
+      missingTool.languageSignal.toLowerCase().includes('expert');
     const penalty = hasExpertLanguage
-      ? (config.PENALTY_MISSING_REQUIRED_TOOL_EXPERT || -0.15)
-      : (config.PENALTY_MISSING_REQUIRED_TOOL_STANDARD || -0.12);
+      ? (config.penalties.missingRequiredToolExpertLanguage ?? -0.15)
+      : (config.penalties.missingRequiredTool ?? -0.12);
 
     penalties.items.push({
       item: missingTool.raw || missingTool.canonical,
@@ -253,7 +259,7 @@ function calculatePenalties(extractedSkills, userProfile, coreSkillsScore, tools
 
   // Penalty for missing desired tools
   for (const missingTool of toolsScore.desiredMissing) {
-    const penalty = config.PENALTY_MISSING_DESIRED_TOOL || -0.05;
+    const penalty = config.penalties.missingDesiredTool ?? -0.05;
     penalties.items.push({
       item: missingTool.raw || missingTool.canonical,
       type: 'TOOL',
@@ -265,12 +271,38 @@ function calculatePenalties(extractedSkills, userProfile, coreSkillsScore, tools
   }
 
   // Cap total penalty
-  if (penalties.totalPenalty < config.MAX_TOTAL_PENALTY) {
-    penalties.totalPenalty = config.MAX_TOTAL_PENALTY;
+  if (penalties.totalPenalty < config.penalties.maxPenalty) {
+    penalties.totalPenalty = config.penalties.maxPenalty;
     penalties.capped = true;
   }
 
   return penalties;
+}
+
+// ============================================================================
+// CONFIG NORMALIZATION
+// ============================================================================
+
+function getFitScoreConfig() {
+  const config = window.SkillConstants?.FIT_SCORE_CONFIG || {};
+
+  return {
+    weights: {
+      coreSkills: config.weights?.coreSkills ?? 0.70,
+      tools: config.weights?.tools ?? 0.30
+    },
+    multipliers: {
+      required: config.multipliers?.required ?? 2.0,
+      desired: config.multipliers?.desired ?? 1.0
+    },
+    penalties: {
+      missingRequiredSkill: config.penalties?.missingRequiredSkill ?? -0.10,
+      missingRequiredToolExpertLanguage: config.penalties?.missingRequiredToolExpertLanguage ?? -0.15,
+      missingRequiredTool: config.penalties?.missingRequiredTool ?? -0.12,
+      missingDesiredTool: config.penalties?.missingDesiredTool ?? -0.05,
+      maxPenalty: config.penalties?.maxPenalty ?? -0.50
+    }
+  };
 }
 
 // ============================================================================

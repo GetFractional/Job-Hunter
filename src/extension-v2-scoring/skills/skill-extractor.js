@@ -392,6 +392,8 @@ async function extractAndClassifySkills(jobDescriptionText, options = {}) {
 
   const forcedCoreSkills = window.SkillConstants?.FORCED_CORE_SKILLS || new Set();
   const softSkillsPatterns = window.SkillConstants?.SOFT_SKILLS_PATTERNS || [];
+  const scoreConfig = window.SkillConstants?.FIT_SCORE_CONFIG || {};
+  const multipliers = scoreConfig.multipliers || { required: 2.0, desired: 1.0 };
 
   // Initialize v2 result structure
   const result = {
@@ -409,6 +411,7 @@ async function extractAndClassifySkills(jobDescriptionText, options = {}) {
     },
     metadata: {
       timestamp: Date.now(),
+      extractedAt: new Date().toISOString(),
       jobUrl: options.jobUrl || window.location?.href || '',
       executionTime: 0,
       version: '2.0'
@@ -428,12 +431,16 @@ async function extractAndClassifySkills(jobDescriptionText, options = {}) {
 
   // Step 1: Parse sections (required vs desired)
   const { requiredSection, desiredSection, fullText } = parseSections(jobDescriptionText);
+  const requiredSourceLabel = requiredSection && requiredSection !== fullText
+    ? 'Requirements section'
+    : 'Full text';
+  const desiredSourceLabel = desiredSection ? 'Desired section' : 'Full text';
 
   // Step 2: Detect requirement levels
   let requiredMultipliers = {};
   let desiredMultipliers = {};
 
-  if (requirementDetector) {
+  if (requirementDetector && typeof requirementDetector.analyzeSection === 'function') {
     const reqAnalysis = requirementDetector.analyzeSection(requiredSection || fullText);
     requiredMultipliers = reqAnalysis.multipliers || {};
 
@@ -441,7 +448,34 @@ async function extractAndClassifySkills(jobDescriptionText, options = {}) {
       const desAnalysis = requirementDetector.analyzeSection(desiredSection);
       desiredMultipliers = desAnalysis.multipliers || {};
     }
+  } else if (requirementDetector) {
+    console.warn('[SkillExtractor] RequirementDetector missing analyzeSection; skipping multiplier analysis');
   }
+
+  const getLanguageSignal = (phrase, sectionText) => {
+    if (!requirementDetector?.detectLanguageSignals || !sectionText || !phrase) {
+      return null;
+    }
+
+    const lowerPhrase = phrase.toLowerCase();
+    const lowerSection = sectionText.toLowerCase();
+    const index = lowerSection.indexOf(lowerPhrase);
+
+    if (index === -1) {
+      return null;
+    }
+
+    const contextStart = Math.max(0, index - 120);
+    const contextEnd = Math.min(sectionText.length, index + lowerPhrase.length + 120);
+    const context = sectionText.substring(contextStart, contextEnd);
+    const signals = requirementDetector.detectLanguageSignals(context, phrase);
+
+    if (signals.expertRequired) return 'expert required';
+    if (signals.mustHave) return 'required';
+    if (signals.yearsRequired) return `${signals.yearsCount} years required`;
+    if (signals.preferred) return 'preferred';
+    return null;
+  };
 
   // Step 3: Extract phrases from each section
   const rawRequiredPhrases = extractPhrases(requiredSection || fullText);
@@ -464,19 +498,31 @@ async function extractAndClassifySkills(jobDescriptionText, options = {}) {
 
     // Add to result buckets with requirement flag
     requiredClassified.coreSkills.forEach(skill => {
+      const languageSignal = getLanguageSignal(skill.raw, requiredSection || fullText);
       result.requiredCoreSkills.push({
         ...skill,
+        sourceLocation: `${requiredSourceLabel}${skill.sourceLocation ? ` (${skill.sourceLocation})` : ''}`,
+        bucket: 'CORE_SKILL',
+        requirementStrength: 'required',
         requirement: 'required',
-        multiplier: requiredMultipliers[skill.raw] || 2.0,
+        multiplier: requiredMultipliers[skill.raw] || multipliers.required,
+        languageSignal,
+        matchedAgainstProfile: false,
         userHasSkill: false // Will be updated by matcher
       });
     });
 
     requiredClassified.tools.forEach(tool => {
+      const languageSignal = getLanguageSignal(tool.raw, requiredSection || fullText);
       result.requiredTools.push({
         ...tool,
+        sourceLocation: `${requiredSourceLabel}${tool.sourceLocation ? ` (${tool.sourceLocation})` : ''}`,
+        bucket: 'TOOL',
+        requirementStrength: 'required',
         requirement: 'required',
-        multiplier: requiredMultipliers[tool.raw] || 2.0,
+        multiplier: requiredMultipliers[tool.raw] || multipliers.required,
+        languageSignal,
+        matchedAgainstProfile: false,
         userHasSkill: false
       });
     });
@@ -484,7 +530,18 @@ async function extractAndClassifySkills(jobDescriptionText, options = {}) {
     requiredClassified.candidates.forEach(candidate => {
       result.candidates.push({
         ...candidate,
-        requirement: 'required'
+        sourceLocation: `${requiredSourceLabel}${candidate.sourceLocation ? ` (${candidate.sourceLocation})` : ''}`,
+        bucket: 'CANDIDATE',
+        requirementStrength: 'required',
+        requirement: 'required',
+        reason: candidate.evidence || 'Candidate item needs review',
+        suggestedAction: candidate.inferredType === 'TOOL'
+          ? 'Review & Add as Tool'
+          : candidate.inferredType === 'CORE_SKILL'
+            ? 'Review & Add as Skill'
+            : 'Review & Classify',
+        matchedAgainstProfile: false,
+        userHasSkill: false
       });
     });
 
@@ -496,19 +553,31 @@ async function extractAndClassifySkills(jobDescriptionText, options = {}) {
     const desiredClassified = classifier.classifyBatch(rawDesiredPhrases, classificationOptions);
 
     desiredClassified.coreSkills.forEach(skill => {
+      const languageSignal = getLanguageSignal(skill.raw, desiredSection);
       result.desiredCoreSkills.push({
         ...skill,
+        sourceLocation: `${desiredSourceLabel}${skill.sourceLocation ? ` (${skill.sourceLocation})` : ''}`,
+        bucket: 'CORE_SKILL',
+        requirementStrength: 'desired',
         requirement: 'desired',
-        multiplier: desiredMultipliers[skill.raw] || 1.0,
+        multiplier: desiredMultipliers[skill.raw] || multipliers.desired,
+        languageSignal,
+        matchedAgainstProfile: false,
         userHasSkill: false
       });
     });
 
     desiredClassified.tools.forEach(tool => {
+      const languageSignal = getLanguageSignal(tool.raw, desiredSection);
       result.desiredTools.push({
         ...tool,
+        sourceLocation: `${desiredSourceLabel}${tool.sourceLocation ? ` (${tool.sourceLocation})` : ''}`,
+        bucket: 'TOOL',
+        requirementStrength: 'desired',
         requirement: 'desired',
-        multiplier: desiredMultipliers[tool.raw] || 1.0,
+        multiplier: desiredMultipliers[tool.raw] || multipliers.desired,
+        languageSignal,
+        matchedAgainstProfile: false,
         userHasSkill: false
       });
     });
@@ -516,13 +585,60 @@ async function extractAndClassifySkills(jobDescriptionText, options = {}) {
     desiredClassified.candidates.forEach(candidate => {
       result.candidates.push({
         ...candidate,
-        requirement: 'desired'
+        sourceLocation: `${desiredSourceLabel}${candidate.sourceLocation ? ` (${candidate.sourceLocation})` : ''}`,
+        bucket: 'CANDIDATE',
+        requirementStrength: 'desired',
+        requirement: 'desired',
+        reason: candidate.evidence || 'Candidate item needs review',
+        suggestedAction: candidate.inferredType === 'TOOL'
+          ? 'Review & Add as Tool'
+          : candidate.inferredType === 'CORE_SKILL'
+            ? 'Review & Add as Skill'
+            : 'Review & Classify',
+        matchedAgainstProfile: false,
+        userHasSkill: false
       });
     });
 
     desiredClassified.rejected.forEach(item => {
       result.rejected.push(item);
     });
+
+    // Fallback: If no tools were classified, scan for tool mentions directly
+    if (result.requiredTools.length === 0 && result.desiredTools.length === 0) {
+      const requiredToolsFallback = findToolMentions(requiredSection || fullText, toolsDictionary);
+      const desiredToolsFallback = desiredSection ? findToolMentions(desiredSection, toolsDictionary) : [];
+
+      requiredToolsFallback.forEach((tool) => {
+        const languageSignal = getLanguageSignal(tool.raw, requiredSection || fullText);
+        result.requiredTools.push({
+          ...tool,
+          sourceLocation: `${requiredSourceLabel}${tool.sourceLocation ? ` (${tool.sourceLocation})` : ''}`,
+          bucket: 'TOOL',
+          requirementStrength: 'required',
+          requirement: 'required',
+          multiplier: requiredMultipliers[tool.raw] || multipliers.required,
+          languageSignal,
+          matchedAgainstProfile: false,
+          userHasSkill: false
+        });
+      });
+
+      desiredToolsFallback.forEach((tool) => {
+        const languageSignal = getLanguageSignal(tool.raw, desiredSection);
+        result.desiredTools.push({
+          ...tool,
+          sourceLocation: `${desiredSourceLabel}${tool.sourceLocation ? ` (${tool.sourceLocation})` : ''}`,
+          bucket: 'TOOL',
+          requirementStrength: 'desired',
+          requirement: 'desired',
+          multiplier: desiredMultipliers[tool.raw] || multipliers.desired,
+          languageSignal,
+          matchedAgainstProfile: false,
+          userHasSkill: false
+        });
+      });
+    }
   } else {
     // Fallback: Use old extraction method
     console.warn('[SkillExtractor] SkillClassifier not available, using legacy extraction');
@@ -536,7 +652,10 @@ async function extractAndClassifySkills(jobDescriptionText, options = {}) {
         confidence: skill.confidence,
         evidence: 'Legacy extraction',
         sourceLocation: 'required',
+        bucket: 'CORE_SKILL',
         requirement: 'required',
+        requirementStrength: 'required',
+        matchedAgainstProfile: false,
         userHasSkill: false
       });
     });
@@ -548,7 +667,10 @@ async function extractAndClassifySkills(jobDescriptionText, options = {}) {
         confidence: skill.confidence,
         evidence: 'Legacy extraction',
         sourceLocation: 'desired',
+        bucket: 'CORE_SKILL',
         requirement: 'desired',
+        requirementStrength: 'desired',
+        matchedAgainstProfile: false,
         userHasSkill: false
       });
     });
@@ -584,7 +706,11 @@ async function extractAndClassifySkills(jobDescriptionText, options = {}) {
         confidence: c.confidence,
         evidence: c.evidence,
         sourceLocation: c.sourceLocation,
-        context: { jobUrl: result.metadata.jobUrl }
+        context: { jobUrl: result.metadata.jobUrl },
+        jobUrl: result.metadata.jobUrl,
+        extractedAt: result.metadata.extractedAt,
+        reason: c.reason,
+        suggestedAction: c.suggestedAction
       })
     );
     await candidateManager.storeCandidates(candidateItems);
@@ -1025,6 +1151,63 @@ function toCanonicalKey(phrase) {
     .trim()
     .replace(/[^\w\s]/g, '')
     .replace(/\s+/g, '_');
+}
+
+/**
+ * Find tool mentions in text using the tools dictionary.
+ * @param {string} text - Text to scan
+ * @param {Array} toolsDictionary - Tools dictionary entries
+ * @returns {Array} Tool items
+ */
+function findToolMentions(text, toolsDictionary) {
+  if (!text || !Array.isArray(toolsDictionary) || toolsDictionary.length === 0) {
+    return [];
+  }
+
+  const matches = [];
+  const seen = new Set();
+  const lowerText = text.toLowerCase();
+
+  const addMatch = (tool) => {
+    const canonical = tool.canonical || toCanonicalKey(tool.name || '');
+    if (!canonical || seen.has(canonical)) return;
+    seen.add(canonical);
+    matches.push({
+      raw: tool.name || tool.canonical || canonical,
+      canonical,
+      confidence: 0.75,
+      evidence: 'Tool mention scan',
+      sourceLocation: 'text_scan'
+    });
+  };
+
+  const hasTerm = (term) => {
+    if (!term) return false;
+    const normalized = term.toLowerCase().trim();
+    if (normalized.length < 3) return false;
+    if (normalized.includes(' ')) {
+      return lowerText.includes(normalized);
+    }
+    const wordRegex = new RegExp(`\\b${normalized.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\b`, 'i');
+    return wordRegex.test(text);
+  };
+
+  toolsDictionary.forEach((tool) => {
+    if (hasTerm(tool.name) || hasTerm(tool.canonical?.replace(/_/g, ' '))) {
+      addMatch(tool);
+      return;
+    }
+    if (Array.isArray(tool.aliases)) {
+      for (const alias of tool.aliases) {
+        if (hasTerm(alias)) {
+          addMatch(tool);
+          break;
+        }
+      }
+    }
+  });
+
+  return matches;
 }
 
 // ============================================================================

@@ -552,22 +552,31 @@ function markUserMatches(extractedSkills, userProfile) {
   // Create copy and mark matches
   const marked = JSON.parse(JSON.stringify(extractedSkills));
 
+  const markItem = (item, matched) => {
+    item.userHasSkill = matched;
+    item.matchedAgainstProfile = matched;
+  };
+
   // Mark core skills
   (marked.requiredCoreSkills || []).forEach(skill => {
-    skill.userHasSkill = userCoreCanonicals.has(skill.canonical) || allUserCanonicals.has(skill.canonical);
+    const matched = userCoreCanonicals.has(skill.canonical) || allUserCanonicals.has(skill.canonical);
+    markItem(skill, matched);
   });
 
   (marked.desiredCoreSkills || []).forEach(skill => {
-    skill.userHasSkill = userCoreCanonicals.has(skill.canonical) || allUserCanonicals.has(skill.canonical);
+    const matched = userCoreCanonicals.has(skill.canonical) || allUserCanonicals.has(skill.canonical);
+    markItem(skill, matched);
   });
 
   // Mark tools
   (marked.requiredTools || []).forEach(tool => {
-    tool.userHasSkill = userToolCanonicals.has(tool.canonical) || allUserCanonicals.has(tool.canonical);
+    const matched = userToolCanonicals.has(tool.canonical) || allUserCanonicals.has(tool.canonical);
+    markItem(tool, matched);
   });
 
   (marked.desiredTools || []).forEach(tool => {
-    tool.userHasSkill = userToolCanonicals.has(tool.canonical) || allUserCanonicals.has(tool.canonical);
+    const matched = userToolCanonicals.has(tool.canonical) || allUserCanonicals.has(tool.canonical);
+    markItem(tool, matched);
   });
 
   return marked;
